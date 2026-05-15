@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "ExamPilot - 智能解题引擎",
+  "version": "1.0.0",
+  "description": "基于视觉AI的智能解题系统：一键截图识别网页题目，大模型实时推理，精准获取答案与解析",
+  "permissions": ["offscreen", "storage", "activeTab", "scripting"],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "ExamPilot - 智能解题引擎"
+  },
+  "host_permissions": [],
+  "background": {
+    "service_worker": "background/index.js"
+  }
+}
