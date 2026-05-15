@@ -1,5 +1,5 @@
 // 加载配置、上传模块和 AI 查询模块（MV3 不支持 ES Module，用 importScripts 合并）
-importScripts('../config.js', 'query-ai.js');
+importScripts('query-ai.js');
 
 // 点击扩展图标时注入内容脚本（activeTab 策略，不再需要 <all_urls> 权限）
 chrome.action.onClicked.addListener(function (tab) {

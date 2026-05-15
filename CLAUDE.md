@@ -40,14 +40,12 @@ Content Script                          Background SW
 
 | File | Role |
 |------|------|
-| `background/index.js` | Service Worker entry. `importScripts()` loads config + modules. Routes 'captureAndAnalyze' messages |
+| `background/index.js` | Service Worker entry. `importScripts()` loads modules. Routes 'captureAndAnalyze' messages |
 | `background/query-ai.js` | Calls vision LLM API with image URL, returns AI answer. Dispatches to `callChatCompletions()` or `callResponsesAPI()` based on `config.apiMode` |
 | `content/index.js` | Content script entry (esbuild entry point). Creates host `<div>`, calls `mountPanel()`, handles double-click toggle |
 | `content/ui.js` | Preact+htm panel component with Shadow DOM isolation. Functional component with hooks (`useState`, `useEffect`). All CSS in `<style>` inside the template. Config management CRUD via `chrome.runtime.sendMessage` |
 | `content/bundle/content-bundle.js` | esbuild output (IIFE). What `manifest.json` points to |
 | `package.json` | Build scripts (`npm run build`) and dependencies (preact, htm, esbuild) |
-| `config.js` | Config values (gitignored). `API_CONFIG_LIST[]` — copy from `config-local.js` |
-| `config-local.js` | Safe-to-commit template with placeholder values. Edit when config shape changes |
 | `manifest.json` | MV3 config. `permissions: ["storage", "activeTab", "scripting"]` |
 
 ## Key Patterns & Gotchas
@@ -59,7 +57,7 @@ Content Script                          Background SW
 - **AI answer HTML rendering** — AI returns HTML with `<b>`, `<br>` etc. Rendered via Preact's dangerouslySetInnerHTML directive in the component template. Same risk profile as original `innerHTML` — output from trusted AI API.
 - **Error propagation** — All errors (API call failure) propagate back to content script via `sendResponse({success:false, error})` for UI display.
 - **Responses API output structure** — `/v1/responses` `output` array can have mixed types (e.g. `reasoning` + `message`). Must find entry with `item.type === 'message'` to read `content[0].text`. Don't assume `output[0]` is the answer.
-- **Config management** — Configs stored in `chrome.storage.local` (survives SW restart). `API_CONFIG_LIST` in `config.js` only seeds first install. Users add/edit/delete configs via the ⚙️ button in the panel footer. `addConfig` auto-selects the new config (`selected: true`). Deleting the selected config shifts selection to the first remaining.
+- **Config management** — Configs stored in `chrome.storage.local` (survives SW restart). Users add/edit/delete configs via the ⚙️ button in the panel footer. `addConfig` auto-selects the new config (`selected: true`). Deleting the selected config shifts selection to the first remaining.
 - **Config message actions** — Content↔background CRUD: `getConfigs` (list all), `getConfig` (single by id, auto-defaults `apiMode` for old data), `setActiveConfig` (sets `selected: true` on one, false on others), `addConfig` (pushes new item with `selected: true`), `editConfig` (updates name/url/model/apiKey/apiMode), `deleteConfig` (removes, shifts selection if deleted was selected).
 - **Config view inline handlers** — Config list is rendered as Preact VDOM, so click handlers use inline Preact event bindings (`onClick=${handler}`) with `stopPropagation()` on edit/delete buttons. No delegation needed.
 - **Preact + htm** — `import htm from 'htm'` + `const html = htm.bind(h)` provides tagged-template syntax instead of JSX. No JSX transform needed in esbuild. `useState`, `useEffect` from `'preact/hooks'`.

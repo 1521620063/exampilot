@@ -41,11 +41,7 @@ cd exampilot-extension
 npm install
 npm run build
 
-# 3. 配置基础设置
-cp config-local.js config.js
-# AI 大模型配置可在安装后通过面板 ⚙️ 按钮管理，无需提前编辑
-
-# 4. 加载到 Chrome
+# 3. 加载到 Chrome
 #    打开 chrome://extensions → 开启开发者模式 → 加载已解压的扩展 → 选择本项目目录
 ```
 
@@ -68,8 +64,6 @@ cp config-local.js config.js
 exampilot-extension/
 ├── manifest.json            # Manifest V3 扩展清单
 ├── package.json             # 构建脚本与依赖
-├── config.js                # 用户配置（已 gitignore）
-├── config-local.js          # 配置模板
 ├── background/
 │   ├── index.js             # 服务入口：消息路由与流程编排
 │   └── query-ai.js          # AI API 调用模块（OpenAI 兼容接口）
@@ -87,15 +81,7 @@ exampilot-extension/
 
 ## 配置说明
 
-AI 配置通过面板右下角的 **⚙️ 设置** 按钮管理，支持添加多个视觉大模型配置并随时切换。参考 [`config-local.js`](config-local.js) 模板：
-
-| 配置项 | 说明 |
-|--------|------|
-| `API_CONFIG_LIST` | AI 配置列表，每项包含 `name`、`url`、`model`、`apiKey`、`apiMode`（`'chat-completions'` 标准 OpenAI 兼容 / `'responses-api'` OpenAI Responses API）、`selected`（启动时写入存储，后续在 UI 中管理） |
-
-在 UI 中可添加多个配置（如 OpenAI、DeepSeek、DashScope 等），通过点击切换当前使用的配置。新增配置自动设为当前使用（`selected: true`）。
-
-> ⚠️ `config.js` 已加入 `.gitignore`，请勿将密钥提交到版本控制。`API_CONFIG_LIST` 仅用于首次安装时初始化，日常增删改请在 UI 中操作。
+AI 配置通过面板右下角的 **⚙️ 设置** 按钮管理，支持添加多个视觉大模型配置并随时切换。每项包含 `name`、`url`、`model`、`apiKey`、`apiMode`（`'chat-completions'` 标准 OpenAI 兼容 / `'responses-api'` OpenAI Responses API）。新增配置自动设为当前使用（`selected: true`）。
 
 ## 技术栈
 
