@@ -28,11 +28,7 @@
 <ul>
   <li><strong>收集方式</strong>：当您在网页上双击或点击"开始识别"按钮时，Chrome 会截取当前浏览器视口（viewport）的截图。</li>
   <li><strong>使用目的</strong>：截图被发送到您自行配置的 AI 大模型 API，用于识别图片中的题目并生成解答。</li>
-  <li><strong>传输方式</strong>：截图可通过以下两种方式发送至 AI API：</li>
-  <ul>
-    <li><strong>Base64 直传（默认）</strong>：截图以 base64 编码直接嵌入 API 请求，不经过任何中间服务器。</li>
-    <li><strong>OSS 中转</strong>：截图先上传到您自行配置的阿里云 OSS 存储桶，再将公开访问 URL 传递给 AI API。此模式需您自行提供 OSS 凭据。</li>
-  </ul>
+  <li><strong>传输方式</strong>：截图以 base64 编码直接嵌入 API 请求，不经过任何中间服务器。</li>
   <li><strong>存储与保留</strong>：截图不会持久存储在您的设备或本扩展的开发者服务器上。AI API 处理完成后，截图仅存在于 API 提供方的系统中，其保留政策请参阅相应 API 提供方的隐私政策。</li>
 </ul>
 
@@ -58,7 +54,6 @@
 <p>本扩展的开发者不会收集、存储或分享您的任何个人数据。数据仅按以下方式与您指定的第三方服务交互：</p>
 <ul>
   <li><strong>AI API 服务商</strong>：截图内容被发送到您自行配置并授权的 AI 服务 API。API 服务商对数据的处理受其自身隐私政策的约束。</li>
-  <li><strong>阿里云 OSS（仅在您启用 OSS 模式时）</strong>：截图临时存储于您自行配置的 OSS 存储桶中。数据受阿里云隐私政策的约束。</li>
 </ul>
 <p>本扩展不会将您的数据出售、出租或共享给任何其他第三方。</p>
 
@@ -68,7 +63,7 @@
   <li>API 密钥等敏感信息仅存储在浏览器的本地存储中</li>
   <li>所有 API 请求均使用 HTTPS 加密传输</li>
   <li>不使用任何远程代码或分析 SDK</li>
-  <li>极小权限设计：仅请求运行所必需的权限（offscreen、storage、activeTab）</li>
+  <li>极小权限设计：仅请求运行所必需的权限（storage、activeTab）</li>
 </ul>
 
 <h2>第三方链接</h2>
@@ -99,7 +94,7 @@
 <p class="en"><strong>3. No Data Collection.</strong> This extension does <strong>not</strong> collect personal information, browsing history, bookmarks, passwords, cookies, device identifiers, location data, usage analytics, or any tracking data.</p>
 
 <h3 class="en">Data Sharing</h3>
-<p class="en">The developer does not collect, store, or share any personal data. The only data sharing is with third-party services you explicitly configure: (a) the AI API provider you specify receives the screenshot content for processing, and (b) if OSS mode is enabled, screenshots temporarily pass through your own Aliyun OSS bucket. No data is sold, rented, or shared with any other third party.</p>
+<p class="en">The developer does not collect, store, or share any personal data. The only data sharing is with third-party services you explicitly configure: the AI API provider you specify receives the screenshot content for processing. No data is sold, rented, or shared with any other third party.</p>
 
 <h3 class="en">Contact</h3>
 <p class="en">GitHub Issues: <a href="https://github.com/tadpole-chen/exampilot/issues" target="_blank">https://github.com/tadpole-chen/exampilot/issues</a></p>

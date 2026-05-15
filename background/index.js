@@ -1,5 +1,5 @@
 // 加载配置、上传模块和 AI 查询模块（MV3 不支持 ES Module，用 importScripts 合并）
-importScripts('../config.js', 'upload.js', 'query-ai.js');
+importScripts('../config.js', 'query-ai.js');
 
 // 点击扩展图标时注入内容脚本（activeTab 策略，不再需要 <all_urls> 权限）
 chrome.action.onClicked.addListener(function (tab) {
@@ -62,7 +62,7 @@ async function getActiveConfig() {
 ensureConfigInitialized();
 
 /**
- * 截图 → 上传 OSS → AI 识别的完整流程
+ * 截图 → AI 识别的完整流程
  * @param {number} windowId - 浏览器窗口 ID，用于 captureVisibleTab
  * @param {number} tabId - 标签页 ID，用于向 content script 发送状态
  * @returns {Promise<string>} AI 返回的答案文本
@@ -72,18 +72,9 @@ async function captureAndAnalyze(windowId, tabId) {
   await sendStatus(tabId, '截图中...');
   const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 90 });
 
-  let imageUrl = dataUrl;
-  if (UPLOAD_MODE === 'oss') {
-    // 2. 上传截图到阿里云 OSS，获取公开可访问的图片 URL
-    sendStatus(tabId, '上传图片中...');
-    imageUrl = await uploadToOSS(dataUrl);
-  } else {
-    sendStatus(tabId, '处理图片中...');
-  }
-
-  // 3. 调用视觉大模型进行识别
+  // 2. 调用视觉大模型进行识别
   sendStatus(tabId, 'AI识别中...');
-  const answer = await queryAI(imageUrl);
+  const answer = await queryAI(dataUrl);
 
   sendStatus(tabId, '识别完成');
   return answer;
