@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ExamPilot - 智能解题引擎</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #f5f7fa; color: #333; min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
+  .container { max-width: 720px; padding: 60px 24px; text-align: center; }
+  .logo { width: 96px; height: 96px; border-radius: 22px; margin-bottom: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+  h1 { font-size: 32px; margin-bottom: 12px; }
+  .subtitle { font-size: 16px; color: #666; margin-bottom: 40px; line-height: 1.6; }
+  .features { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 40px; text-align: left; }
+  .feature { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .feature h3 { font-size: 15px; margin-bottom: 6px; }
+  .feature p { font-size: 13px; color: #666; line-height: 1.5; }
+  .badge { display: inline-block; background: #1a73e8; color: #fff; padding: 12px 28px; border-radius: 8px; font-size: 15px; text-decoration: none; margin-bottom: 40px; }
+  .badge:hover { background: #1557b0; }
+  .links { font-size: 13px; color: #888; }
+  .links a { color: #1a73e8; text-decoration: none; margin: 0 10px; }
+  .links a:hover { text-decoration: underline; }
+  footer { margin-top: 40px; font-size: 12px; color: #aaa; }
+  @media (max-width: 500px) { .features { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <img class="logo" src="../icons/icon128.png" alt="ExamPilot">
+  <h1>ExamPilot</h1>
+  <p class="subtitle">基于视觉 AI 的智能解题引擎<br>一键截图，大模型实时推理，精准获取答案与解析</p>
+
+  <div class="features">
+    <div class="feature">
+      <h3>📸 一键截图</h3>
+      <p>双击或点击按钮即可截取当前页面，自动识别题目区域</p>
+    </div>
+    <div class="feature">
+      <h3>🧠 AI 智能分析</h3>
+      <p>接入主流视觉大模型，支持 OpenAI 兼容 API 与 Responses API</p>
+    </div>
+    <div class="feature">
+      <h3>🔧 灵活配置</h3>
+      <p>支持多套 API 配置切换，可选 base64 直传或 OSS 中转</p>
+    </div>
+    <div class="feature">
+      <h3>🔒 隐私优先</h3>
+      <p>数据仅与您自行配置的 API 交互，无追踪、无分析</p>
+    </div>
+  </div>
+
+  <a class="badge" href="https://chromewebstore.google.com" target="_blank">安装 Chrome 扩展</a>
+
+  <div class="links">
+    <a href="privacy.html">隐私政策</a>
+    <a href="https://github.com/tadpole-chen/exampilot" target="_blank">GitHub</a>
+  </div>
+
+  <footer>&copy; 2026 ExamPilot</footer>
+</div>
+</body>
+</html>
