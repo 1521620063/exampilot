@@ -25,7 +25,7 @@ ExamPilot 是一款 Chrome 浏览器扩展，能够在任意网页中**即时截
 | 阶段 | 技术实现 | 说明 |
 |------|---------|------|
 | **截图** | `chrome.tabs.captureVisibleTab` | 捕获当前浏览器视口，无损截图 |
-| **推理** | 视觉大模型（OpenAI 兼容接口） | 理解题目内容并推理作答（模型可配置） |
+| **推理** | 视觉大模型（OpenAI 兼容 / Anthropic 直接 API） | 理解题目内容并推理作答（模型可配置） |
 | **展示** | 浮动交互面板 | 页面右下角实时展示识别进度与结果 |
 
 ## 快速开始
@@ -67,7 +67,7 @@ exampilot-extension/
 ├── package.json             # 构建脚本与依赖
 ├── background/
 │   ├── index.js             # 服务入口：消息路由与流程编排
-│   └── query-ai.js          # AI API 调用模块（OpenAI 兼容接口）
+│   └── query-ai.js          # AI API 调用模块（OpenAI 兼容 / Responses API / Anthropic）
 ├── content/
 │   ├── index.js             # 内容脚本入口（ESM，esbuild 构建入口）
 │   ├── ui.js                # Preact+htm 浮动面板组件（Shadow DOM）
@@ -82,7 +82,13 @@ exampilot-extension/
 
 ## 配置说明
 
-AI 配置通过面板右下角的 **⚙️ 设置** 按钮管理，支持添加多个视觉大模型配置并随时切换。每项包含 `name`、`url`、`model`、`apiKey`、`apiMode`（`'chat-completions'` 标准 OpenAI 兼容 / `'responses-api'` OpenAI Responses API）。新增配置自动设为当前使用（`selected: true`）。
+AI 配置通过面板右下角的 **⚙️ 设置** 按钮管理，支持添加多个视觉大模型配置并随时切换。每项包含 `name`、`url`、`model`、`apiKey`、`apiMode`。支持三种接口模式：
+
+- **Chat Completions** — 标准 OpenAI 兼容接口 (`/v1/chat/completions`)
+- **Responses API** — OpenAI Responses API (`/v1/responses`)
+- **Anthropic Claude** — Anthropic 直接 API (`/v1/messages`)，需额外配置 `anthropicVersion` 和 `maxTokens`
+
+新增配置自动设为当前使用（`selected: true`）。
 
 ### 自定义提示词
 
@@ -96,7 +102,7 @@ AI 配置通过面板右下角的 **⚙️ 设置** 按钮管理，支持添加�
 | UI 框架 | Preact + htm（VDOM 渲染，Shadow DOM 样式隔离） |
 | 构建工具 | esbuild（ESM → IIFE 打包） |
 | 图像传输 | base64 直传 AI |
-| 视觉推理 | 视觉大模型（OpenAI 兼容接口，模型可配置） |
+| 视觉推理 | 视觉大模型（OpenAI 兼容 / Anthropic 直接 API，模型可配置） |
 | 扩展能力 | Service Worker · Content Script |
 
 ## 🤖 关于 AI
