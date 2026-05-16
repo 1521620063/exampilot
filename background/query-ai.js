@@ -4,6 +4,7 @@
  * 支持多种 API 模式（通过 config.apiMode 切换）：
  *   - chat-completions: OpenAI 兼容的 /v1/chat/completions 接口
  *   - responses-api: OpenAI Responses API (/v1/responses)
+ *   - anthropic: Anthropic Messages API (/v1/messages)
  *
  * @param {string} imageUrl - 图片 URL（HTTP 地址或 data:image/... base64 均可）
  * @param {string} prompt - 系统提示词（来自用户配置）
@@ -101,7 +102,7 @@ async function callResponsesAPI(config, imageUrl, prompt) {
  */
 async function callAnthropicAPI(config, imageUrl, prompt) {
   // captureVisibleTab 返回 data:image/jpeg;base64,... 格式，需去掉前缀
-  var base64Data = imageUrl.replace(/^data:image\/jpeg;base64,/, '');
+  const base64Data = imageUrl.replace(/^data:image\/jpeg;base64,/, '');
 
   const resp = await fetch(config.url, {
     method: 'POST',
@@ -124,11 +125,11 @@ async function callAnthropicAPI(config, imageUrl, prompt) {
   });
 
   if (!resp.ok) {
-    throw new Error('API调用失败 (' + resp.status + ')');
+    throw new Error(`API调用失败 (${resp.status})`);
   }
 
-  var data = await resp.json();
-  var content = data?.content?.[0]?.text;
+  const data = await resp.json();
+  const content = data?.content?.[0]?.text;
   if (!content) {
     throw new Error('AI返回内容为空');
   }
