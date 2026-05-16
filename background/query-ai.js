@@ -16,6 +16,9 @@ async function queryAI(imageUrl, prompt) {
   if (mode === 'responses-api') {
     return callResponsesAPI(config, imageUrl, prompt);
   }
+  if (mode === 'anthropic') {
+    return callAnthropicAPI(config, imageUrl, prompt);
+  }
   return callChatCompletions(config, imageUrl, prompt);
 }
 
@@ -86,6 +89,46 @@ async function callResponsesAPI(config, imageUrl, prompt) {
   // 需要找到 type: 'message' 的输出项来读取回答内容
   const messageOutput = data?.output?.find(function (item) { return item.type === 'message'; });
   const content = messageOutput?.content?.[0]?.text;
+  if (!content) {
+    throw new Error('AI返回内容为空');
+  }
+  return content;
+}
+
+/**
+ * Anthropic Messages API 调用
+ * POST /v1/messages
+ */
+async function callAnthropicAPI(config, imageUrl, prompt) {
+  // captureVisibleTab 返回 data:image/jpeg;base64,... 格式，需去掉前缀
+  var base64Data = imageUrl.replace(/^data:image\/jpeg;base64,/, '');
+
+  const resp = await fetch(config.url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': config.apiKey,
+      'anthropic-version': config.anthropicVersion || '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: config.model,
+      max_tokens: config.maxTokens || 4096,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64Data } },
+          { type: 'text', text: prompt }
+        ]
+      }]
+    })
+  });
+
+  if (!resp.ok) {
+    throw new Error('API调用失败 (' + resp.status + ')');
+  }
+
+  var data = await resp.json();
+  var content = data?.content?.[0]?.text;
   if (!content) {
     throw new Error('AI返回内容为空');
   }
