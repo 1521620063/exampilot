@@ -55,6 +55,8 @@ npm run build
 | 点击 **清除** | 清空当前识别结果 |
 | 点击 **⚙️ 设置** | 管理 AI 配置：添加/编辑/删除/切换视觉大模型 |
 | 在 ⚙️ 中编辑提示词 | 自定义发送给 AI 的指令，支持多行文本，自动保存 |
+| 在 ⚙️ 中配置自定义请求头/请求体 | 为每个 AI 配置添加任意的 HTTP 请求头和请求体字段，满足不同 API 的个性化需求 |
+| 在 ⚙️ 中展开请求预览 | 在发送前预览实际 API 请求的完整 JSON 结构，便于调试 |
 | 按 **← 返回** | 从配置管理返回主面板 |
 
 识别过程中，状态栏会依次显示 `截图 → AI 识别中 → 完成`，进度透明可追溯。
@@ -65,9 +67,10 @@ npm run build
 exampilot-extension/
 ├── manifest.json            # Manifest V3 扩展清单
 ├── package.json             # 构建脚本与依赖
+├── AGENTS.md                # Codex 指令（与 CLAUDE.md 同步）
 ├── background/
 │   ├── index.js             # 服务入口：消息路由与流程编排
-│   └── query-ai.js          # AI API 调用模块（OpenAI 兼容 / Responses API / Anthropic）
+│   └── query-ai.js          # AI API 调用模块（Chat Completions / Responses API / Anthropic）
 ├── content/
 │   ├── index.js             # 内容脚本入口（ESM，esbuild 构建入口）
 │   ├── ui.js                # Preact+htm 浮动面板组件（Shadow DOM）
@@ -86,9 +89,23 @@ AI 配置通过面板右下角的 **⚙️ 设置** 按钮管理，支持添加�
 
 - **Chat Completions** — 标准 OpenAI 兼容接口 (`/v1/chat/completions`)
 - **Responses API** — OpenAI Responses API (`/v1/responses`)
-- **Anthropic Claude** — Anthropic 直接 API (`/v1/messages`)，需额外配置 `anthropicVersion` 和 `maxTokens`
+- **Anthropic Claude** — Anthropic 直接 API (`/v1/messages`)
 
 新增配置自动设为当前使用（`selected: true`）。
+
+### 自定义请求头与请求体
+
+每个 AI 配置支持添加**自定义 HTTP 请求头（Headers）** 和 **自定义请求体字段（Body Fields）**，满足不同 API 的特殊需求：
+
+- **请求头示例**：设置 `anthropic-version: 2023-06-01` 等供应商特定参数
+- **请求体示例**：添加 `max_tokens: 4096`、`temperature: 0.7` 等推理参数
+- 数值型字段值自动转换为数字类型发送
+- 切换 API 模式时，Anthropic 模式自动填充 `anthropic-version` 请求头和 `max_tokens` 请求体字段
+- 配置列表项会显示自定义字段数量，一目了然
+
+### 请求预览
+
+在发送截图请求前，可展开 **请求预览** 面板查看即将发出的完整 API 请求结构（含合并后的请求头、请求体和图片数据），方便调试和确认配置正确性。
 
 ### 自定义提示词
 
@@ -105,7 +122,7 @@ AI 配置通过面板右下角的 **⚙️ 设置** 按钮管理，支持添加�
 | 视觉推理 | 视觉大模型（OpenAI 兼容 / Anthropic 直接 API，模型可配置） |
 | 扩展能力 | Service Worker · Content Script |
 
-## 🤖 关于 AI
+## 关于 AI
 
 本项目由 **Claude（Anthropic）** 从第一行代码开始生成。
 
