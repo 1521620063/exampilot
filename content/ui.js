@@ -35,8 +35,12 @@ export function mountPanel(host) {
     var _m = useState('chat-completions'), formMode = _m[0], setFormMode = _m[1];
     var _n = useState(''), customPrompt = _n[0], setCustomPrompt = _n[1];
     var _o = useState(false), promptSaving = _o[0], setPromptSaving = _o[1];
-    var _p = useState('2023-06-01'), formAnthropicVersion = _p[0], setFormAnthropicVersion = _p[1];
-    var _q = useState(4096), formMaxTokens = _q[0], setFormMaxTokens = _q[1];
+    // Custom fields state — replaces formAnthropicVersion/formMaxTokens
+    var _p = useState([]), formHeaders = _p[0], setFormHeaders = _p[1];
+    var _q = useState([]), formBodyFields = _q[0], setFormBodyFields = _q[1];
+    var _r = useState(false), showHeadersSection = _r[0], setShowHeadersSection = _r[1];
+    var _s = useState(false), showBodySection = _s[0], setShowBodySection = _s[1];
+    var _t = useState(false), showPreview = _t[0], setShowPreview = _t[1];
 
     // ---- Listen for status messages from background ----
     useEffect(function () {
@@ -112,8 +116,11 @@ export function mountPanel(host) {
       setFormModel('');
       setFormKey('');
       setFormMode('chat-completions');
-      setFormAnthropicVersion('2023-06-01');
-      setFormMaxTokens(4096);
+      setFormHeaders([]);
+      setFormBodyFields([]);
+      setShowHeadersSection(false);
+      setShowBodySection(false);
+      setShowPreview(false);
       setShowForm(true);
     }
 
@@ -126,8 +133,11 @@ export function mountPanel(host) {
           setFormModel(res.config.model || '');
           setFormKey(res.config.apiKey || '');
           setFormMode(res.config.apiMode || 'chat-completions');
-          setFormAnthropicVersion(res.config.anthropicVersion || '2023-06-01');
-          setFormMaxTokens(res.config.maxTokens || 4096);
+          setFormHeaders(res.config.customHeaders || []);
+          setFormBodyFields(res.config.customBodyFields || []);
+          setShowHeadersSection(false);
+          setShowBodySection(false);
+          setShowPreview(false);
           setShowForm(true);
         }
       });
@@ -143,8 +153,8 @@ export function mountPanel(host) {
 
       var action = editingId ? 'editConfig' : 'addConfig';
       var payload = editingId
-        ? { action: action, configId: editingId, config: { name: formName, url: formUrl, model: formModel, apiKey: formKey, apiMode: formMode, anthropicVersion: formAnthropicVersion, maxTokens: formMaxTokens } }
-        : { action: action, config: { name: formName, url: formUrl, model: formModel, apiKey: formKey, apiMode: formMode, anthropicVersion: formAnthropicVersion, maxTokens: formMaxTokens } };
+        ? { action: action, configId: editingId, config: { name: formName, url: formUrl, model: formModel, apiKey: formKey, apiMode: formMode, customHeaders: formHeaders, customBodyFields: formBodyFields } }
+        : { action: action, config: { name: formName, url: formUrl, model: formModel, apiKey: formKey, apiMode: formMode, customHeaders: formHeaders, customBodyFields: formBodyFields } };
 
       chrome.runtime.sendMessage(payload).then(function (res) {
         if (res.success) {
@@ -506,12 +516,6 @@ export function mountPanel(host) {
                     <option value="responses-api">Responses API（OpenAI）</option>
                     <option value="anthropic">Anthropic Claude（直接 API）</option>
                   </select>
-                  ${formMode === 'anthropic' ? html`
-                    <label>API 版本 (anthropic-version)</label>
-                    <input value=${formAnthropicVersion} onInput=${function (e) { setFormAnthropicVersion(e.target.value); }} placeholder="2023-06-01" />
-                    <label>最大 Token 数 (max_tokens)</label>
-                    <input value=${formMaxTokens} onInput=${function (e) { setFormMaxTokens(parseInt(e.target.value, 10) || 4096); }} type="number" placeholder="4096" />
-                  ` : ''}
                   <label>模型名称</label>
                   <input value=${formModel} onInput=${function (e) { setFormModel(e.target.value); }} placeholder="gpt-4o" />
                   <label>API Key</label>
