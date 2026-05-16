@@ -510,7 +510,7 @@ export function mountPanel(host) {
                     <label>API 版本 (anthropic-version)</label>
                     <input value=${formAnthropicVersion} onInput=${function (e) { setFormAnthropicVersion(e.target.value); }} placeholder="2023-06-01" />
                     <label>最大 Token 数 (max_tokens)</label>
-                    <input value=${formMaxTokens} onInput=${function (e) { setFormMaxTokens(e.target.value); }} type="number" placeholder="4096" />
+                    <input value=${formMaxTokens} onInput=${function (e) { setFormMaxTokens(parseInt(e.target.value, 10) || 4096); }} type="number" placeholder="4096" />
                   ` : ''}
                   <label>模型名称</label>
                   <input value=${formModel} onInput=${function (e) { setFormModel(e.target.value); }} placeholder="gpt-4o" />
