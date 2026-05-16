@@ -28,26 +28,38 @@ async function queryAI(imageUrl, prompt) {
  * POST /v1/chat/completions
  */
 async function callChatCompletions(config, imageUrl, prompt) {
+  var headers = {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + config.apiKey
+  };
+  // Merge custom headers
+  (config.customHeaders || []).forEach(function (h) {
+    if (h.key) headers[h.key] = h.value;
+  });
+
+  var body = {
+    model: config.model,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image_url', image_url: { url: imageUrl } },
+        { type: 'text', text: prompt }
+      ]
+    }]
+  };
+  // Merge custom body fields
+  (config.customBodyFields || []).forEach(function (f) {
+    if (f.key) body[f.key] = f.value;
+  });
+
   const resp = await fetch(config.url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey}`
-    },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image_url', image_url: { url: imageUrl } },
-          { type: 'text', text: prompt }
-        ]
-      }]
-    })
+    headers: headers,
+    body: JSON.stringify(body)
   });
 
   if (!resp.ok) {
-    throw new Error(`API调用失败 (${resp.status})`);
+    throw new Error('API调用失败 (' + resp.status + ')');
   }
 
   const data = await resp.json();
@@ -63,31 +75,39 @@ async function callChatCompletions(config, imageUrl, prompt) {
  * POST /v1/responses
  */
 async function callResponsesAPI(config, imageUrl, prompt) {
+  var headers = {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + config.apiKey
+  };
+  (config.customHeaders || []).forEach(function (h) {
+    if (h.key) headers[h.key] = h.value;
+  });
+
+  var body = {
+    model: config.model,
+    input: [{
+      role: 'user',
+      content: [
+        { type: 'input_image', image_url: imageUrl },
+        { type: 'input_text', text: prompt }
+      ]
+    }]
+  };
+  (config.customBodyFields || []).forEach(function (f) {
+    if (f.key) body[f.key] = f.value;
+  });
+
   const resp = await fetch(config.url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey}`
-    },
-    body: JSON.stringify({
-      model: config.model,
-      input: [{
-        role: 'user',
-        content: [
-          { type: 'input_image', image_url: imageUrl },
-          { type: 'input_text', text: prompt }
-        ]
-      }]
-    })
+    headers: headers,
+    body: JSON.stringify(body)
   });
 
   if (!resp.ok) {
-    throw new Error(`API调用失败 (${resp.status})`);
+    throw new Error('API调用失败 (' + resp.status + ')');
   }
 
   const data = await resp.json();
-  // Responses API 返回结构：output 数组可能包含 reasoning、message 等多种类型
-  // 需要找到 type: 'message' 的输出项来读取回答内容
   const messageOutput = data?.output?.find(function (item) { return item.type === 'message'; });
   const content = messageOutput?.content?.[0]?.text;
   if (!content) {
@@ -101,35 +121,41 @@ async function callResponsesAPI(config, imageUrl, prompt) {
  * POST /v1/messages
  */
 async function callAnthropicAPI(config, imageUrl, prompt) {
-  // captureVisibleTab 返回 data:image/jpeg;base64,... 格式，需去掉前缀
   const base64Data = imageUrl.replace(/^data:image\/jpeg;base64,/, '');
+
+  var headers = {
+    'Content-Type': 'application/json',
+    'x-api-key': config.apiKey
+  };
+  (config.customHeaders || []).forEach(function (h) {
+    if (h.key) headers[h.key] = h.value;
+  });
+
+  var body = {
+    model: config.model,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64Data } },
+        { type: 'text', text: prompt }
+      ]
+    }]
+  };
+  (config.customBodyFields || []).forEach(function (f) {
+    if (f.key) body[f.key] = f.value;
+  });
 
   const resp = await fetch(config.url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': config.apiKey,
-      'anthropic-version': config.anthropicVersion || '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: config.model,
-      max_tokens: config.maxTokens || 4096,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64Data } },
-          { type: 'text', text: prompt }
-        ]
-      }]
-    })
+    headers: headers,
+    body: JSON.stringify(body)
   });
 
   if (!resp.ok) {
-    throw new Error(`API调用失败 (${resp.status})`);
+    throw new Error('API调用失败 (' + resp.status + ')');
   }
 
   const data = await resp.json();
-  // content 数组可能包含 thinking、text 等类型，需找到 type: 'text' 的条目
   const textBlock = data?.content?.find(function (item) { return item.type === 'text'; });
   const content = textBlock?.text;
   if (!content) {
