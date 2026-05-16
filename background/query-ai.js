@@ -47,9 +47,12 @@ async function callChatCompletions(config, imageUrl, prompt) {
       ]
     }]
   };
-  // Merge custom body fields
+  // Merge custom body fields (auto-convert numeric strings to numbers)
   (config.customBodyFields || []).forEach(function (f) {
-    if (f.key) body[f.key] = f.value;
+    if (f.key) {
+      var num = Number(f.value);
+      body[f.key] = isNaN(num) || f.value === '' ? f.value : num;
+    }
   });
 
   const resp = await fetch(config.url, {
@@ -94,7 +97,10 @@ async function callResponsesAPI(config, imageUrl, prompt) {
     }]
   };
   (config.customBodyFields || []).forEach(function (f) {
-    if (f.key) body[f.key] = f.value;
+    if (f.key) {
+      var num = Number(f.value);
+      body[f.key] = isNaN(num) || f.value === '' ? f.value : num;
+    }
   });
 
   const resp = await fetch(config.url, {
@@ -142,7 +148,10 @@ async function callAnthropicAPI(config, imageUrl, prompt) {
     }]
   };
   (config.customBodyFields || []).forEach(function (f) {
-    if (f.key) body[f.key] = f.value;
+    if (f.key) {
+      var num = Number(f.value);
+      body[f.key] = isNaN(num) || f.value === '' ? f.value : num;
+    }
   });
 
   const resp = await fetch(config.url, {
