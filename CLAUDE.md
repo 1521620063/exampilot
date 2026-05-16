@@ -4,16 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # ExamPilot Extension
 
-Chrome Extension (Manifest V3) that captures viewport screenshots and analyzes via vision LLM API (OpenAI-compatible). Images are sent as base64 directly to the API. Requires `npm run build` — UI built with Preact + htm (tagged-template VDOM), bundled via esbuild. No test or lint tooling is configured.
+Chrome Extension (Manifest V3) that captures viewport screenshots and analyzes via vision LLM API (OpenAI-compatible). Images are sent as base64 directly to the API. UI built with Preact + htm (tagged-template VDOM), bundled via esbuild. No test or lint tooling is configured.
+
+Build output goes to `dist/chrome/`. **Load `dist/chrome/`** (not project root) as the unpacked extension.
 
 ## Commands
 
 | Action | How |
-|--------|-----|
+|--------|------|
 | Install dependencies | `npm install` |
-| Build (esbuild) | `npm run build` |
-| Watch mode | `npm run build:watch` |
-| Load extension | Chrome → Extensions (`chrome://extensions`) → "Load unpacked" → select project root |
+| Build | `npm run build` |
+| Build (no minify, for debugging) | `npm run build:package` |
+| Load extension | Chrome → Extensions (`chrome://extensions`) → "Load unpacked" → select `dist/chrome/` |
 | Reload after changes | `npm run build` then `chrome://extensions` → refresh icon on extension card |
 | Debug background SW | Extension card → "Service Worker" link → opens DevTools console |
 | Inspect content script | DevTools on any page → Console → select "exampilot-extension" context |
@@ -44,10 +46,11 @@ Content Script                          Background SW
 | `background/query-ai.js` | Calls vision LLM API with image URL, returns AI answer. Dispatches to `callChatCompletions()`, `callResponsesAPI()`, or `callAnthropicAPI()` based on `config.apiMode` |
 | `content/index.js` | Content script entry (esbuild entry point). Creates host `<div>`, calls `mountPanel()`, handles double-click toggle |
 | `content/ui.js` | Preact+htm panel component with Shadow DOM isolation. All CSS in `<style>` inside the template. Config management CRUD via `chrome.runtime.sendMessage` |
+| `scripts/build.mjs` | esbuild build script. Cleans `dist/`, bundles content script + background files, copies manifest.json + icons to `dist/chrome/` |
 | `content/bundle/content-bundle.js` | esbuild output (IIFE). What `manifest.json` points to |
-| `package.json` | Build scripts (`npm run build`) and dependencies (preact, htm, esbuild) |
+| `package.json` | Build scripts and dependencies (preact, htm, esbuild) |
 | `manifest.json` | MV3 config. `permissions: ["storage", "activeTab", "scripting"]`, `host_permissions: ["<all_urls>"]` |
-| `AGENTS.md` | Parallel instructions file for Codex (not Claude Code). Keep in sync when updating CLAUDE.md |
+| `AGENTS.md` | Instructions file for Codex (not Claude Code). Keep in sync when updating CLAUDE.md |
 
 ## Key Patterns & Gotchas
 - **CSS isolation via Shadow DOM** — Panel is inside `host.attachShadow({mode:'open'})`. CSS uses `:host` pseudo-class for container + scoped class selectors inside shadow root. All styles in `<style>` tag inside the component template.
@@ -59,6 +62,7 @@ Content Script                          Background SW
 - **Error propagation** — All errors (API call failure, missing config) propagate back to content script via `sendResponse({success:false, error})` for UI display.
 - **Responses API output structure** — `/v1/responses` `output` array can have mixed types (e.g. `reasoning` + `message`). Must find entry with `item.type === 'message'` to read `content[0].text`. Don't assume `output[0]` is the answer.
 - **Anthropic Messages API content structure** — `/v1/messages` response `content` array can have mixed types (e.g. `thinking` + `text`). Must find entry with `item.type === 'text'` to read `.text`. Don't assume `content[0]` is the answer.
+- **Anthropic image format differs** — Anthropic API expects raw base64 (no `data:image/...` prefix). The `callAnthropicAPI()` strips the JPEG prefix via `.replace(/^data:image\/jpeg;base64,/, '')` and sends `{type: 'image', source: {type: 'base64', media_type: 'image/jpeg', data: <raw>}}`. Other API modes pass the data URL as-is.
 - **CORS in MV3 service worker** — `fetch()` from service worker is subject to CORS. Custom proxy endpoints need `host_permissions` in `manifest.json`.
 - **Config management** — Configs stored in `chrome.storage.local` (survives SW restart). `addConfig` auto-selects the new config (`selected: true`). Deleting the selected config shifts selection to the first remaining. Config list item shows custom headers/body field counts.
 - **Config message actions** — Content↔background CRUD: `getConfigs`, `getConfig` (auto-defaults `apiMode`/`customHeaders`/`customBodyFields` for old data), `setActiveConfig`, `addConfig` (pushes with `selected: true`), `editConfig`, `deleteConfig` (shifts selection if deleted was selected).
@@ -73,3 +77,5 @@ Content Script                          Background SW
 - **Custom body field numeric auto-conversion** — In `query-ai.js`, custom body field values that parse as valid numbers are auto-converted to numeric types in the JSON body. Affects all three API modes.
 - **Anthropic config auto-fill** — When `apiMode` switches to `anthropic` on a new config (no existing custom headers/body fields), the UI auto-populates `anthropic-version: 2023-06-01` header and `max_tokens: 4096` body field.
 - **Git remote** — Gitee, not GitHub.
+- **Extension load path** — Build output goes to `dist/chrome/`. When testing, **load `dist/chrome/`** (not project root) as unpacked extension in `chrome://extensions`. The manifest at project root references `content/bundle/content-bundle.js` which only exists inside `dist/chrome/` after build.
+- **Build output structure** — After `npm run build`, all files in `dist/chrome/`: `background/index.js` (bundled from background/index.js + query-ai.js), `content/bundle/content-bundle.js` (bundled from content/index.js + ui.js), `manifest.json`, `icons/`.

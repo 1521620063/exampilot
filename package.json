@@ -2,8 +2,8 @@
   "name": "exampilot-extension",
   "private": true,
   "scripts": {
-    "build": "esbuild content/index.js --bundle --outfile=content/bundle/content-bundle.js",
-    "build:watch": "esbuild content/index.js --bundle --outfile=content/bundle/content-bundle.js --watch"
+    "build": "node scripts/build.mjs",
+    "build:package": "NO_MINIFY=true node scripts/build.mjs"
   },
   "dependencies": {
     "preact": "^10.26.0",

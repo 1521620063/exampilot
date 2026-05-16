@@ -42,8 +42,10 @@ npm install
 npm run build
 
 # 3. 加载到 Chrome
-#    打开 chrome://extensions → 开启开发者模式 → 加载已解压的扩展 → 选择本项目目录
+#    打开 chrome://extensions → 开启开发者模式 → 加载已解压的扩展 → 选择 dist/chrome 目录
 ```
+
+> 构建产物输出至 `dist/chrome/`。开发调试使用 `npm run build`（压缩），需要保留源码映射可使用 `npm run build:package`（不压缩）。
 
 ### 使用方式
 
