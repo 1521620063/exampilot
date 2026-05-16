@@ -6,33 +6,16 @@
  *   - responses-api: OpenAI Responses API (/v1/responses)
  *
  * @param {string} imageUrl - 图片 URL（HTTP 地址或 data:image/... base64 均可）
+ * @param {string} prompt - 系统提示词（来自用户配置）
  * @returns {Promise<string>} 模型返回的格式化解题内容（含 HTML 标记）
  */
-async function queryAI(imageUrl) {
-  // 获取当前选中的 AI 配置
+async function queryAI(imageUrl, prompt) {
   const config = await getActiveConfig();
   const mode = config.apiMode || 'chat-completions';
-
-  // 系统提示词：要求模型识别题目、给出答案，并强制规定输出格式
-  const prompt = `解析图片中的内容。
-
-如果图片中有题目：
-请识别题目并解答。
-
-严格按照下面格式输出：
-
-题目："xxx"
-
-<br/>
-
-<b>答案："xxx"</b>
-
-不要输出多余内容。`;
 
   if (mode === 'responses-api') {
     return callResponsesAPI(config, imageUrl, prompt);
   }
-  // 默认：Chat Completions 模式
   return callChatCompletions(config, imageUrl, prompt);
 }
 

@@ -33,6 +33,8 @@ export function mountPanel(host) {
     var _k = useState(''), formModel = _k[0], setFormModel = _k[1];
     var _l = useState(''), formKey = _l[0], setFormKey = _l[1];
     var _m = useState('chat-completions'), formMode = _m[0], setFormMode = _m[1];
+    var _n = useState(''), customPrompt = _n[0], setCustomPrompt = _n[1];
+    var _o = useState(false), promptSaving = _o[0], setPromptSaving = _o[1];
 
     // ---- Listen for status messages from background ----
     useEffect(function () {
@@ -75,6 +77,21 @@ export function mountPanel(host) {
     function loadConfigs() {
       chrome.runtime.sendMessage({ action: 'getConfigs' }).then(function (res) {
         if (res.success) setConfigList(res.configList || []);
+      });
+    }
+
+    function loadPrompt() {
+      chrome.runtime.sendMessage({ action: 'getPrompt' }).then(function (res) {
+        if (res.success) setCustomPrompt(res.prompt || '');
+      });
+    }
+
+    function savePrompt() {
+      setPromptSaving(true);
+      chrome.runtime.sendMessage({ action: 'setPrompt', prompt: customPrompt }).then(function () {
+        setPromptSaving(false);
+      }).catch(function () {
+        setPromptSaving(false);
       });
     }
 
@@ -163,6 +180,7 @@ export function mountPanel(host) {
 
     function openConfigView() {
       loadConfigs();
+      loadPrompt();
       setViewState('config');
     }
 
@@ -491,6 +509,18 @@ export function mountPanel(host) {
                   </div>
                 </div>
               `}
+              <div style="border-top: 1px solid #f0f1f3; margin-top: 10px; padding-top: 10px;">
+                <div style="font-size: 12px; font-weight: 600; color: #667085; letter-spacing: 0.3px; margin-bottom: 6px;">📝 提示词设置</div>
+                <textarea
+                  value=${customPrompt}
+                  onInput=${function (e) { setCustomPrompt(e.target.value); }}
+                  style="width: 100%; padding: 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 12px; outline: none; resize: vertical; min-height: 100px; box-sizing: border-box; font-family: inherit; line-height: 1.5;"
+                  placeholder="输入自定义提示词..."
+                ></textarea>
+                <div class="exmp-config-form-actions exmp-flex exmp-gap-6" style="margin-top: 6px;">
+                  <button class="exmp-config-save-btn" disabled=${promptSaving} onClick=${savePrompt}>${promptSaving ? '保存中...' : '保存提示词'}</button>
+                </div>
+              </div>
             </div>
           ` : html`
             <div class="exmp-content">

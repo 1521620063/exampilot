@@ -34,6 +34,15 @@ async function ensureConfigInitialized() {
   }
 }
 
+/** 首次启动时初始化默认提示词 */
+async function ensurePromptInitialized() {
+  const { customPrompt } = await chrome.storage.local.get('customPrompt');
+  if (customPrompt !== undefined) return;
+  await chrome.storage.local.set({
+    customPrompt: '解析图片中的内容。\n\n如果图片中有题目：\n请识别题目并解答。\n\n严格按照下面格式输出：\n\n题目："xxx"\n\n<br/>\n\n<b>答案："xxx"</b>\n\n不要输出多余内容。'
+  });
+}
+
 /** 确保至少有一个 selected，否则选中第一个 */
 function autoSelectFallback(list) {
   if (list.length > 0 && !list.some(function (c) { return c.selected; })) {
@@ -60,6 +69,7 @@ async function getActiveConfig() {
 
 // 启动时初始化 / 迁移配置
 ensureConfigInitialized();
+ensurePromptInitialized();
 
 /**
  * 截图 → AI 识别的完整流程
@@ -74,7 +84,8 @@ async function captureAndAnalyze(windowId, tabId) {
 
   // 2. 调用视觉大模型进行识别
   sendStatus(tabId, 'AI识别中...');
-  const answer = await queryAI(dataUrl);
+  const { customPrompt } = await chrome.storage.local.get('customPrompt');
+  const answer = await queryAI(dataUrl, customPrompt);
 
   sendStatus(tabId, '识别完成');
   return answer;
@@ -174,6 +185,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ success: false, config: null });
       }
     })();
+    return true;
+  }
+
+  if (request.action === 'getPrompt') {
+    chrome.storage.local.get('customPrompt').then(function (data) {
+      sendResponse({ success: true, prompt: data.customPrompt || '' });
+    });
+    return true;
+  }
+
+  if (request.action === 'setPrompt') {
+    chrome.storage.local.set({ customPrompt: request.prompt }).then(function () {
+      sendResponse({ success: true });
+    });
     return true;
   }
 
