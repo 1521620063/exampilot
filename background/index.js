@@ -56,9 +56,15 @@ async function getActiveConfig() {
   if (configList && configList.length > 0) {
     var selected = configList.find(function (c) { return c.selected; });
     if (selected) {
-      // 确保旧数据有默认 apiMode
+      // 确保旧数据有默认值
       if (!selected.apiMode) {
         selected.apiMode = 'chat-completions';
+      }
+      if (!selected.anthropicVersion) {
+        selected.anthropicVersion = '2023-06-01';
+      }
+      if (!selected.maxTokens) {
+        selected.maxTokens = 4096;
       }
       return selected;
     }
@@ -139,6 +145,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         model: request.config.model,
         apiKey: request.config.apiKey,
         apiMode: request.config.apiMode || 'chat-completions',
+        anthropicVersion: request.config.anthropicVersion || '2023-06-01',
+        maxTokens: request.config.maxTokens || 4096,
         selected: true,
         id: 'cfg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)
       });
@@ -179,7 +187,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       var found = configList.find(function (c) { return c.id === request.configId; });
       if (found) {
         // 为旧数据提供默认值
-        var result = Object.assign({}, found, { apiMode: found.apiMode || 'chat-completions' });
+        var result = Object.assign({}, found, {
+          apiMode: found.apiMode || 'chat-completions',
+          anthropicVersion: found.anthropicVersion || '2023-06-01',
+          maxTokens: found.maxTokens || 4096
+        });
         sendResponse({ success: true, config: result });
       } else {
         sendResponse({ success: false, config: null });
@@ -215,6 +227,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       target.model = request.config.model;
       target.apiKey = request.config.apiKey;
       target.apiMode = request.config.apiMode || 'chat-completions';
+      target.anthropicVersion = request.config.anthropicVersion || '2023-06-01';
+      target.maxTokens = request.config.maxTokens || 4096;
       await chrome.storage.local.set({ configList });
       sendResponse({ success: true });
     })();
