@@ -129,7 +129,9 @@ async function callAnthropicAPI(config, imageUrl, prompt) {
   }
 
   const data = await resp.json();
-  const content = data?.content?.[0]?.text;
+  // content 数组可能包含 thinking、text 等类型，需找到 type: 'text' 的条目
+  const textBlock = data?.content?.find(function (item) { return item.type === 'text'; });
+  const content = textBlock?.text;
   if (!content) {
     throw new Error('AI返回内容为空');
   }
