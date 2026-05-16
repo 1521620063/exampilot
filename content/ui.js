@@ -511,7 +511,15 @@ export function mountPanel(host) {
                   <label>接口地址 (URL)</label>
                   <input value=${formUrl} onInput=${function (e) { setFormUrl(e.target.value); }} placeholder="https://api.openai.com/v1/chat/completions" />
                   <label>接口模式</label>
-                  <select value=${formMode} onChange=${function (e) { setFormMode(e.target.value); }}>
+                  <select value=${formMode} onChange=${function (e) {
+                    var newMode = e.target.value;
+                    setFormMode(newMode);
+                    // Auto-fill Anthropic defaults for new configs
+                    if (newMode === 'anthropic' && editingId === null && formHeaders.length === 0 && formBodyFields.length === 0) {
+                      setFormHeaders([{ key: 'anthropic-version', value: '2023-06-01' }]);
+                      setFormBodyFields([{ key: 'max_tokens', value: '4096' }]);
+                    }
+                  }}>
                     <option value="chat-completions">Chat Completions（标准 OpenAI 兼容）</option>
                     <option value="responses-api">Responses API（OpenAI）</option>
                     <option value="anthropic">Anthropic Claude（直接 API）</option>
@@ -520,6 +528,119 @@ export function mountPanel(host) {
                   <input value=${formModel} onInput=${function (e) { setFormModel(e.target.value); }} placeholder="gpt-4o" />
                   <label>API Key</label>
                   <input value=${formKey} onInput=${function (e) { setFormKey(e.target.value); }} type="password" placeholder="sk-..." />
+                  <!-- Custom Headers section -->
+                  <div style="margin-top: 8px; border-top: 1px solid #f0f1f3; padding-top: 8px;">
+                    <div style="font-size: 11px; font-weight: 600; color: #667085; cursor: pointer; display: flex; align-items: center; justify-content: space-between;" onClick=${function () { setShowHeadersSection(!showHeadersSection); }}>
+                      <span>自定义 Headers (${formHeaders.length})</span>
+                      <span style="font-size: 10px; color: #98a2b3;">${showHeadersSection ? '收起 ▲' : '展开 ▼'}</span>
+                    </div>
+                    ${showHeadersSection ? html`
+                      ${formHeaders.map(function (h, idx) {
+                        return html`
+                          <div style="display: flex; gap: 4px; margin-top: 6px; align-items: center;">
+                            <input value=${h.key} onInput=${function (e) {
+                              var arr = formHeaders.slice();
+                              arr[idx] = { key: e.target.value, value: arr[idx].value };
+                              setFormHeaders(arr);
+                            }} placeholder="Header 名称" style="flex: 1; padding: 5px 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 11px; outline: none; box-sizing: border-box;" />
+                            <input value=${h.value} onInput=${function (e) {
+                              var arr = formHeaders.slice();
+                              arr[idx] = { key: arr[idx].key, value: e.target.value };
+                              setFormHeaders(arr);
+                            }} placeholder="Header 值" style="flex: 1.5; padding: 5px 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 11px; outline: none; box-sizing: border-box;" />
+                            <button style="background: none; border: none; color: #e74c3c; cursor: pointer; font-size: 14px; padding: 2px 6px; line-height: 1;" onClick=${function () {
+                              var arr = formHeaders.slice();
+                              arr.splice(idx, 1);
+                              setFormHeaders(arr);
+                            }}>✕</button>
+                          </div>
+                        `;
+                      })}
+                      <button style="display: block; width: 100%; margin-top: 6px; padding: 5px; border: 1px dashed #d0d5dd; background: transparent; border-radius: 6px; font-size: 11px; color: #667085; cursor: pointer;" onClick=${function () {
+                        setFormHeaders(formHeaders.concat([{ key: '', value: '' }]));
+                      }}>+ 添加 Header</button>
+                    ` : ''}
+                  </div>
+                  <!-- Custom Body section -->
+                  <div style="margin-top: 8px; border-top: 1px solid #f0f1f3; padding-top: 8px;">
+                    <div style="font-size: 11px; font-weight: 600; color: #667085; cursor: pointer; display: flex; align-items: center; justify-content: space-between;" onClick=${function () { setShowBodySection(!showBodySection); }}>
+                      <span>自定义 Body 字段 (${formBodyFields.length})</span>
+                      <span style="font-size: 10px; color: #98a2b3;">${showBodySection ? '收起 ▲' : '展开 ▼'}</span>
+                    </div>
+                    ${showBodySection ? html`
+                      ${formBodyFields.map(function (f, idx) {
+                        return html`
+                          <div style="display: flex; gap: 4px; margin-top: 6px; align-items: center;">
+                            <input value=${f.key} onInput=${function (e) {
+                              var arr = formBodyFields.slice();
+                              arr[idx] = { key: e.target.value, value: arr[idx].value };
+                              setFormBodyFields(arr);
+                            }} placeholder="字段名" style="flex: 1; padding: 5px 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 11px; outline: none; box-sizing: border-box;" />
+                            <input value=${f.value} onInput=${function (e) {
+                              var arr = formBodyFields.slice();
+                              arr[idx] = { key: arr[idx].key, value: e.target.value };
+                              setFormBodyFields(arr);
+                            }} placeholder="字段值" style="flex: 1.5; padding: 5px 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 11px; outline: none; box-sizing: border-box;" />
+                            <button style="background: none; border: none; color: #e74c3c; cursor: pointer; font-size: 14px; padding: 2px 6px; line-height: 1;" onClick=${function () {
+                              var arr = formBodyFields.slice();
+                              arr.splice(idx, 1);
+                              setFormBodyFields(arr);
+                            }}>✕</button>
+                          </div>
+                        `;
+                      })}
+                      <button style="display: block; width: 100%; margin-top: 6px; padding: 5px; border: 1px dashed #d0d5dd; background: transparent; border-radius: 6px; font-size: 11px; color: #667085; cursor: pointer;" onClick=${function () {
+                        setFormBodyFields(formBodyFields.concat([{ key: '', value: '' }]));
+                      }}>+ 添加 Body 字段</button>
+                    ` : ''}
+                  </div>
+                  <!-- Request Preview section -->
+                  <div style="margin-top: 8px; border-top: 1px solid #f0f1f3; padding-top: 8px;">
+                    <div style="font-size: 11px; font-weight: 600; color: #667085; cursor: pointer; display: flex; align-items: center; justify-content: space-between;" onClick=${function () { setShowPreview(!showPreview); }}>
+                      <span>📋 请求预览</span>
+                      <span style="font-size: 10px; color: #98a2b3;">${showPreview ? '收起 ▲' : '展开 ▼'}</span>
+                    </div>
+                    ${showPreview ? html`
+                      <div style="margin-top: 6px;">
+                        <div style="font-size: 10px; font-weight: 600; color: #667085; margin-bottom: 4px;">Headers 预览:</div>
+                        <pre style="background: #f5f7fa; border-radius: 6px; padding: 8px; font-size: 10px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin: 0;">
+${function () {
+  var previewHeaders = {
+    'Content-Type': 'application/json'
+  };
+  if (formMode === 'anthropic') {
+    previewHeaders['x-api-key'] = formKey ? formKey.slice(0, 8) + '...' : '(未设置)';
+  } else {
+    previewHeaders['Authorization'] = formKey ? 'Bearer ' + formKey.slice(0, 8) + '...' : '(未设置)';
+  }
+  formHeaders.forEach(function (h) {
+    if (h.key) previewHeaders[h.key] = h.value || '(空)';
+  });
+  return JSON.stringify(previewHeaders, null, 2);
+}()}
+                        </pre>
+                      </div>
+                      <div style="margin-top: 6px;">
+                        <div style="font-size: 10px; font-weight: 600; color: #667085; margin-bottom: 4px;">Body 预览:</div>
+                        <pre style="background: #f5f7fa; border-radius: 6px; padding: 8px; font-size: 10px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin: 0;">
+${function () {
+  var previewBody = { model: formModel || '(未设置)' };
+  if (formMode === 'responses-api') {
+    previewBody.input = [{ role: 'user', content: [{ type: 'input_image', image_url: '<base64_image>' }, { type: 'input_text', text: '<prompt>' }] }];
+  } else if (formMode === 'anthropic') {
+    previewBody.messages = [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: '<base64_image>' } }, { type: 'text', text: '<prompt>' }] }];
+  } else {
+    previewBody.messages = [{ role: 'user', content: [{ type: 'image_url', image_url: { url: '<base64_image>' } }, { type: 'text', text: '<prompt>' }] }];
+  }
+  formBodyFields.forEach(function (f) {
+    if (f.key) previewBody[f.key] = f.value || '(空)';
+  });
+  return JSON.stringify(previewBody, null, 2);
+}()}
+                        </pre>
+                      </div>
+                    ` : ''}
+                  </div>
                   <div class="exmp-config-form-actions exmp-flex exmp-gap-6">
                     <button class="exmp-config-save-btn" onClick=${saveForm}>${editingId ? '更新' : '保存'}</button>
                     <button class="exmp-config-cancel-btn" onClick=${cancelForm}>取消</button>
