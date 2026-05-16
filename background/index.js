@@ -60,11 +60,11 @@ async function getActiveConfig() {
       if (!selected.apiMode) {
         selected.apiMode = 'chat-completions';
       }
-      if (!selected.anthropicVersion) {
-        selected.anthropicVersion = '2023-06-01';
+      if (!selected.customHeaders) {
+        selected.customHeaders = [];
       }
-      if (!selected.maxTokens) {
-        selected.maxTokens = 4096;
+      if (!selected.customBodyFields) {
+        selected.customBodyFields = [];
       }
       return selected;
     }
@@ -145,8 +145,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         model: request.config.model,
         apiKey: request.config.apiKey,
         apiMode: request.config.apiMode || 'chat-completions',
-        anthropicVersion: request.config.anthropicVersion || '2023-06-01',
-        maxTokens: request.config.maxTokens || 4096,
+        customHeaders: request.config.customHeaders || [],
+        customBodyFields: request.config.customBodyFields || [],
         selected: true,
         id: 'cfg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)
       });
@@ -189,8 +189,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // 为旧数据提供默认值
         var result = Object.assign({}, found, {
           apiMode: found.apiMode || 'chat-completions',
-          anthropicVersion: found.anthropicVersion || '2023-06-01',
-          maxTokens: found.maxTokens || 4096
+          customHeaders: found.customHeaders || [],
+          customBodyFields: found.customBodyFields || []
         });
         sendResponse({ success: true, config: result });
       } else {
@@ -227,8 +227,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       target.model = request.config.model;
       target.apiKey = request.config.apiKey;
       target.apiMode = request.config.apiMode || 'chat-completions';
-      target.anthropicVersion = request.config.anthropicVersion || '2023-06-01';
-      target.maxTokens = request.config.maxTokens || 4096;
+      target.customHeaders = request.config.customHeaders || [];
+      target.customBodyFields = request.config.customBodyFields || [];
       await chrome.storage.local.set({ configList });
       sendResponse({ success: true });
     })();
