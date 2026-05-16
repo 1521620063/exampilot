@@ -498,7 +498,7 @@ export function mountPanel(host) {
                       <button class="exmp-config-delete-btn" onClick=${function (e) { e.stopPropagation(); deleteConfig(cfg.id); }}>✕</button>
                     </div>
                     <div class="exmp-config-item-name">${cfg.selected ? '● ' : '○ '}${cfg.name || '未命名'}</div>
-                    <div class="exmp-config-item-detail">模型: ${cfg.model} · 模式: ${modeLabel} · ${urlShort}</div>
+                    <div class="exmp-config-item-detail">模型: ${cfg.model} · 模式: ${modeLabel} · 📋 ${(cfg.customHeaders||[]).length} headers · ${(cfg.customBodyFields||[]).length} body · ${urlShort}</div>
                   </div>
                 `;
               })}
