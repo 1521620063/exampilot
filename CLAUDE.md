@@ -53,6 +53,7 @@ Content Script                          Background SW
 | `AGENTS.md` | Instructions file for Codex (not Claude Code). Keep in sync when updating CLAUDE.md |
 
 ## Key Patterns & Gotchas
+- **Programmatic content script injection** — Content script is NOT declared in manifest.json via `content_scripts`. It's injected on-demand via `chrome.action.onClicked.addListener` → `chrome.scripting.executeScript`. Panel only appears after user clicks the extension icon. Content script world does NOT exist on page load.
 - **CSS isolation via Shadow DOM** — Panel is inside `host.attachShadow({mode:'open'})`. CSS uses `:host` pseudo-class for container + scoped class selectors inside shadow root. All styles in `<style>` tag inside the component template.
 - **CSS utility classes** — Use predefined `exmp-*` utility classes for layout/spacing: `exmp-flex`, `exmp-flex-col`, `exmp-items-center`, `exmp-justify-between`, `exmp-gap-6`, `exmp-w-full`, `exmp-p-8-14`, `exmp-p-6-14`, `exmp-text-11`, `exmp-text-12`, `exmp-text-13`, `exmp-rounded-8`. Defined at top of the `<style>` block. Only write dedicated CSS for unique patterns.
 - **Screenshot panel-hiding** — The panel must be hidden before `captureVisibleTab()`. `sendStatus('截图中...')` must be `await`ed to give the content script time to hide the panel before the screenshot is taken. Other status messages don't need await. The content script's status listener auto-reveals the panel on the next non-screenshot status message.
@@ -69,6 +70,7 @@ Content Script                          Background SW
 - **Config view inline handlers** — Config list uses inline Preact event bindings (`onClick=${handler}`) with `stopPropagation()` on edit/delete buttons. No delegation needed.
 - **Preact + htm** — `import htm from 'htm'` + `const html = htm.bind(h)` provides tagged-template syntax instead of JSX. No JSX transform needed. `useState`, `useEffect` from `'preact/hooks'`.
 - **Hooks without destructuring** — Codebase uses `var` (not `const/let`) and avoids destructuring. Pattern: `var _a = useState(initial), value = _a[0], setValue = _a[1]`. Don't use `const [value, setValue] = useState()`.
+- **Three panel view states** — `viewState` controls which UI is shown: `mini` (collapsed ⚡ button, 44×44px circle), `main` (answers view with answer area + status bar + footer controls), `config` (settings view with config list/form, custom headers/body, prompt editor).
 - **Bundle size reference** — `npm run build` produces ~40KB (Preact+htm). Content script loads this single bundle.
 - **No customElements.define** — Chrome content script isolated worlds have `customElements === null`. Panel is a functional component mounted into shadow root, not a custom element. Mounted via Preact's `render()`.
 - **Storage migration pattern** — `ensureConfigInitialized()` checks `configList[0].selected === undefined` to detect old-format data and migrates in-place. `ensurePromptInitialized()` follows the same detect-and-initialize pattern for `customPrompt`. Future storage changes should follow the same pattern.
@@ -77,5 +79,8 @@ Content Script                          Background SW
 - **Custom body field numeric auto-conversion** — In `query-ai.js`, custom body field values that parse as valid numbers are auto-converted to numeric types in the JSON body. Affects all three API modes.
 - **Anthropic config auto-fill** — When `apiMode` switches to `anthropic` on a new config (no existing custom headers/body fields), the UI auto-populates `anthropic-version: 2023-06-01` header and `max_tokens: 4096` body field.
 - **Git remote** — Gitee, not GitHub.
+- **`build:package` strips host_permissions** — `npm run build:package` (NO_MINIFY=true) deletes `host_permissions` from manifest.json for Chrome Web Store compliance. Development builds (`npm run build`) retain it.
+- **Config ID format** — Generated in background as `'cfg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)` in `addConfig` handler.
+- **`docs/` folder** — Contains `index.html` (landing/marketing page) and `privacy.html` (privacy policy). Not part of extension build output. Load `dist/chrome/` as unpacked extension, not `docs/`.
 - **Extension load path** — Build output goes to `dist/chrome/`. When testing, **load `dist/chrome/`** (not project root) as unpacked extension in `chrome://extensions`. The manifest at project root references `content/bundle/content-bundle.js` which only exists inside `dist/chrome/` after build.
 - **Build output structure** — After `npm run build`, all files in `dist/chrome/`: `background/index.js` (bundled from background/index.js + query-ai.js), `content/bundle/content-bundle.js` (bundled from content/index.js + ui.js), `manifest.json`, `icons/`.

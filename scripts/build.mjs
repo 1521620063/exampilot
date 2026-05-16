@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { copyFileSync, mkdirSync, rmSync, readdirSync, statSync } from 'fs';
+import { copyFileSync, mkdirSync, rmSync, readdirSync, statSync, readFileSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -42,5 +42,13 @@ function copyEntry(srcRoot, destRoot, name) {
 
 copyEntry(root, dist, 'manifest.json');
 copyEntry(root, dist, 'icons');
+
+// 上架版（NO_MINIFY）移除 host_permissions，避免审核障碍
+if (noMinify) {
+  const manifestPath = join(dist, 'manifest.json');
+  const content = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+  delete content.host_permissions;
+  writeFileSync(manifestPath, JSON.stringify(content, null, 2) + '\n', 'utf-8');
+}
 
 console.log('\n✅ 打包完成: /dist/chrome');

@@ -45,7 +45,9 @@ npm run build
 #    打开 chrome://extensions → 开启开发者模式 → 加载已解压的扩展 → 选择 dist/chrome 目录
 ```
 
-> 构建产物输出至 `dist/chrome/`。开发调试使用 `npm run build`（压缩），需要保留源码映射可使用 `npm run build:package`（不压缩）。
+> 构建产物输出至 `dist/chrome/`。
+> - `npm run build` — 生产构建（压缩），保留 `host_permissions` 供开发调试
+> - `npm run build:package` — 上架构建（不压缩），自动移除 `host_permissions` 以通过 Chrome 应用商店审核
 
 ### 使用方式
 
@@ -69,20 +71,23 @@ npm run build
 exampilot-extension/
 ├── manifest.json            # Manifest V3 扩展清单
 ├── package.json             # 构建脚本与依赖
-├── AGENTS.md                # Codex 指令（与 CLAUDE.md 同步）
+├── scripts/
+│   └── build.mjs            # esbuild 打包脚本
 ├── background/
-│   ├── index.js             # 服务入口：消息路由与流程编排
+│   ├── index.js             # SW 入口：消息路由与流程编排
 │   └── query-ai.js          # AI API 调用模块（Chat Completions / Responses API / Anthropic）
 ├── content/
 │   ├── index.js             # 内容脚本入口（ESM，esbuild 构建入口）
 │   ├── ui.js                # Preact+htm 浮动面板组件（Shadow DOM）
 │   └── bundle/
 │       └── content-bundle.js # 构建产物（IIFE，content script 加载）
-├── icons/
-│   └── icon128.png
+├── icons/                   # 扩展图标（16/48/128）
+├── docs/                    # 营销落地页与隐私政策
 ├── node_modules/            # 依赖（已 gitignore）
+├── AGENTS.md                # Codex 指令（与 CLAUDE.md 同步）
 ├── CLAUDE.md
-└── README.md
+├── README.md
+└── LICENSE
 ```
 
 ## 配置说明
