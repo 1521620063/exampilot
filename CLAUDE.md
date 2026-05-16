@@ -65,4 +65,6 @@ Content Script                          Background SW
 - **Bundle size reference** — `npm run build` produces ~40KB (Preact+htm) or ~30KB (lit-html only, see `refactor/lit-ui` branch). Content script loads this single bundle.
 - **No customElements.define** — Chrome content script isolated worlds have `customElements === null`. Panel is a functional component mounted into shadow root, not a custom element. Mounted via Preact's `render(html`<${Panel} />`, shadowRoot)`.
 - **Storage migration pattern** — `ensureConfigInitialized()` checks `configList[0].selected === undefined` to detect old-format data and migrates in-place. Future storage changes should follow the same detect-and-migrate pattern.
+- **Custom prompt storage** — `customPrompt` is a separate string key in `chrome.storage.local` (not in configList array). Initialized by `ensurePromptInitialized()`. Message handlers: `getPrompt` (read), `setPrompt` (write). UI is a textarea in the ⚙️ config view below the config list/form.
+- **UI loading state catch safety** — Any function that sets a UI-locking state (e.g., `setPromptSaving(true)` on a save button) MUST have a `.catch()` that resets the state, or the UI element can get permanently stuck if the Promise rejects.
 - **Git remote** — Gitee, not GitHub.
