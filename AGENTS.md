@@ -12,6 +12,7 @@ Chrome Extension (Manifest V3) that captures viewport screenshots and analyzes v
 |--------|-----|
 | Install dependencies | `npm install` |
 | Build (esbuild) | `npm run build` |
+| Package build | `npm run build:package` |
 | Test | `npm test` |
 | Load extension | Chrome → Extensions (`chrome://extensions`) → "Load unpacked" → select `dist/chrome` |
 | Reload after changes | `npm run build` then `chrome://extensions` → refresh icon on extension card |
@@ -20,7 +21,7 @@ Chrome Extension (Manifest V3) that captures viewport screenshots and analyzes v
 
 ## Architecture
 
-**Data flow:** User clicks "开始识别" → content script sends `{action:'captureAndAnalyze'}` → background service worker captures screenshot → sends image as base64 to vision LLM API → returns answer to content script.
+**Data flow:** User clicks "全屏"/"区域" → content script checks optional API host permission → if missing, shows an in-page extension iframe permission dialog → content script sends `{action:'captureAndAnalyze'}` → background service worker captures screenshot → sends image as base64 to vision LLM API → returns answer to content script.
 
 ```
 Content Script                          Background SW
@@ -32,10 +33,12 @@ Content Script                          Background SW
 ```
 
 **Message flow:**
+- Content → background: `chrome.runtime.sendMessage({ action: 'checkApiHostPermission', url })` before saving configs or starting capture
 - Content → background: `chrome.runtime.sendMessage({ action: 'captureAndAnalyze' })` for full viewport screenshots
 - Content → background: `chrome.runtime.sendMessage({ action: 'captureAndAnalyzeWithRect', rect })` for selected regions
 - Content → background: `chrome.runtime.sendMessage({ action: 'cancelCapture' })` for explicit cancellation
 - Background → content: `chrome.tabs.sendMessage(tabId, { action: 'status', message })` for real-time progress
+- Permission iframe → content: `window.parent.postMessage({ source: 'exampilot-permission', granted, origin }, '*')` after optional host permission flow
 - Errors: always propagate via `sendResponse({ success: false, error })` for content script UI display
 
 ## Key Files
@@ -45,16 +48,21 @@ Content Script                          Background SW
 | `background/index.js` | Service Worker entry. `importScripts()` loads modules. Routes 'captureAndAnalyze' messages |
 | `background/query-ai.js` | Calls vision LLM API with image URL, returns AI answer. Dispatches to `callChatCompletions()`, `callResponsesAPI()`, or `callAnthropicAPI()` based on `config.apiMode` |
 | `content/index.js` | Content script entry (esbuild entry point). Creates host `<div>`, calls `mountPanel()`, handles double-click toggle |
-| `content/ui.js` | Preact+htm panel component with Shadow DOM isolation. Functional component with hooks (`useState`, `useEffect`). All CSS in `<style>` inside the template. Config management CRUD via `chrome.runtime.sendMessage` |
+| `content/ui.js` | Preact+htm panel component with Shadow DOM isolation. Functional component with hooks (`useState`, `useEffect`). Config management CRUD plus in-page API host permission iframe |
+| `permission/host-permission.html` | Extension page embedded in the current tab as an iframe for optional host permission grants |
+| `permission/host-permission.js` | Calls `chrome.permissions.request()` from the iframe button click and reports back via `postMessage` |
 | `content/bundle/content-bundle.js` | esbuild output (IIFE). What `manifest.json` points to |
 | `package.json` | Build scripts (`npm run build`) and dependencies (preact, htm, esbuild) |
-| `manifest.json` | MV3 config. `permissions: ["storage", "activeTab", "scripting"]`; development builds keep `host_permissions: ["<all_urls>"]` |
+| `manifest.json` | MV3 config. `permissions: ["storage", "activeTab", "scripting"]`; `optional_host_permissions: ["https://*/*"]`; `web_accessible_resources` exposes `permission/*` for the iframe grant page |
 
 ## Key Patterns & Gotchas
-- **CSS isolation via Shadow DOM** — Panel is inside `host.attachShadow({mode:'open'})`. CSS uses `:host` pseudo-class for container + scoped class selectors inside shadow root. No more `all: initial` + `:where()` reset needed (shadow DOM provides native isolation). All styles in `<style>` tag inside the component template.
+- **CSS isolation via Shadow DOM** — Panel is inside `host.attachShadow({mode:'open'})`. CSS uses `:host` pseudo-class for container + scoped class selectors inside shadow root. The host uses `all: initial` plus explicit base typography to avoid inheriting page styles. All styles in `<style>` tag inside the component template.
 - **CSS utility classes** — To reduce repetitive CSS, use the predefined `exmp-*` utility classes in HTML templates: `exmp-flex`, `exmp-flex-col`, `exmp-items-center`, `exmp-justify-between`, `exmp-gap-6`, `exmp-w-full`, `exmp-p-8-14`, `exmp-p-6-14`, `exmp-text-11`, `exmp-text-12`, `exmp-text-13`, `exmp-rounded-8`. Defined at top of the `<style>` block inside the component template. Only write dedicated CSS when a pattern is truly unique — for layout, spacing, and alignment, prefer compositing utility classes.
 - **Screenshot panel-hiding** — The panel must be hidden before `captureVisibleTab()`. `sendStatus('截图中...')` must be `await`ed to give the content script time to hide the panel before the screenshot is taken. Other status messages don't need await.
 - **Explicit cancellation** — The content script sends `cancelCapture`; the background aborts `currentAbortController`.
+- **Optional API host permissions** — Do not reintroduce `host_permissions: ["<all_urls>"]`. The extension uses `optional_host_permissions: ["https://*/*"]` and checks the configured API URL as `https://hostname/*` before saving configs or starting capture.
+- **Permission request user gesture** — `chrome.permissions.request()` must only run in `permission/host-permission.js` from the iframe button click. Do not call it from background service worker message handlers or after async screenshot work, or Chrome will throw `This function must be called during a user gesture`.
+- **In-page permission iframe** — Missing API host permission is handled by `content/ui.js` creating `#exmp-permission-overlay` on `document.body` and embedding `permission/host-permission.html?embed=1&origin=...`. The iframe reports success/failure via `window.parent.postMessage`.
 - **`importScripts()`** — MV3 service worker uses `importScripts()` (not ES modules) for loading. Files are concatenated in global scope.
 - **`importScripts` function timing** — Functions defined in `background/index.js` after `importScripts()` (e.g., `getActiveConfig`) are available to imported scripts (e.g., `query-ai.js`) at **call time**, not definition time. `queryAI()` calls `getActiveConfig()` at runtime, by which point it exists globally.
 - **AI answer HTML rendering** — AI returns limited HTML with `<b>`, `<br>` etc. Sanitize output before rendering with dangerouslySetInnerHTML, because the API endpoint is user-configurable.
@@ -65,7 +73,8 @@ Content Script                          Background SW
 - **Config view inline handlers** — Config list is rendered as Preact VDOM, so click handlers use inline Preact event bindings (`onClick=${handler}`) with `stopPropagation()` on edit/delete buttons. No delegation needed.
 - **Preact + htm** — `import htm from 'htm'` + `const html = htm.bind(h)` provides tagged-template syntax instead of JSX. No JSX transform needed in esbuild. `useState`, `useEffect` from `'preact/hooks'`.
 - **Hooks without destructuring** — Codebase uses `var` (not `const/let`) and avoids destructuring. Hooks pattern: `var _a = useState(initial), value = _a[0], setValue = _a[1]`. Don't use `const [value, setValue] = useState()`.
-- **Bundle size reference** — `npm run build` produces ~40KB (Preact+htm) or ~30KB (lit-html only, see `refactor/lit-ui` branch). Content script loads this single bundle.
+- **Bundle size reference** — `npm run build` currently produces a ~45KB minified content bundle; `npm run build:package` produces a larger unminified bundle for package/debug review. Content script loads this single bundle.
 - **No customElements.define** — Chrome content script isolated worlds have `customElements === null`. Panel is a functional component mounted into shadow root, not a custom element. Mounted via Preact's `render(html`<${Panel} />`, shadowRoot)`.
 - **Storage migration pattern** — `ensureConfigInitialized()` checks `configList[0].selected === undefined` to detect old-format data and migrates in-place. Future storage changes should follow the same detect-and-migrate pattern.
+- **Build output structure** — `scripts/build.mjs` copies `manifest.json`, `icons/`, and `permission/` into `dist/chrome/`, and bundles content/background files. Load `dist/chrome/` in Chrome, not the project root.
 - **Git remote** — GitHub.

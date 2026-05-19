@@ -42,6 +42,7 @@ function copyEntry(srcRoot, destRoot, name) {
 
 copyEntry(root, dist, 'manifest.json');
 copyEntry(root, dist, 'icons');
+copyEntry(root, dist, 'permission');
 
 // 上架版（NO_MINIFY）移除 host_permissions，避免审核障碍
 if (noMinify) {

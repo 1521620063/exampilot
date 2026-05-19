@@ -90,11 +90,13 @@ export function mountPanel(host) {
     var _r = useState(false), showHeadersSection = _r[0], setShowHeadersSection = _r[1];
     var _s = useState(false), showBodySection = _s[0], setShowBodySection = _s[1];
     var _t = useState(false), showPreview = _t[0], setShowPreview = _t[1];
+    var _u = useState(''), formError = _u[0], setFormError = _u[1];
+    var _v = useState(false), configSaving = _v[0], setConfigSaving = _v[1];
     var hiddenByUserRef = useRef(false);
     var currentRequestSeqRef = useRef(0);
 
     // 区域选择相关状态
-    var _u = useState(false), selectingRegion = _u[0], setSelectingRegion = _u[1];
+    var _w = useState(false), selectingRegion = _w[0], setSelectingRegion = _w[1];
     var overlayElRef = useRef(null);
 
     // ---- 共享响应处理（消除全屏识别和区域识别的重复逻辑）----
@@ -282,6 +284,7 @@ export function mountPanel(host) {
       setShowHeadersSection(false);
       setShowBodySection(false);
       setShowPreview(false);
+      setFormError('');
       setShowForm(true);
     }
 
@@ -299,6 +302,7 @@ export function mountPanel(host) {
           setShowHeadersSection(false);
           setShowBodySection(false);
           setShowPreview(false);
+          setFormError('');
           setShowForm(true);
         }
       });
@@ -307,21 +311,173 @@ export function mountPanel(host) {
     function cancelForm() {
       setShowForm(false);
       setEditingId(null);
+      setFormError('');
+    }
+
+    function checkApiHostPermission(url) {
+      return chrome.runtime.sendMessage({ action: 'checkApiHostPermission', url: url });
+    }
+
+    function showApiHostPermissionFrame(origin) {
+      return new Promise(function (resolve) {
+        var old = document.getElementById('exmp-permission-overlay');
+        if (old && old.parentNode) {
+          old.parentNode.removeChild(old);
+        }
+
+        var overlay = document.createElement('div');
+        overlay.id = 'exmp-permission-overlay';
+        overlay.style.cssText = [
+          'position: fixed',
+          'inset: 0',
+          'z-index: 2147483647',
+          'display: flex',
+          'align-items: center',
+          'justify-content: center',
+          'background: rgba(16, 24, 40, 0.42)'
+        ].join(';');
+
+        var frameWrap = document.createElement('div');
+        frameWrap.style.cssText = [
+          'width: min(420px, calc(100vw - 28px))',
+          'height: 330px',
+          'border-radius: 10px',
+          'box-shadow: 0 18px 44px rgba(16, 24, 40, 0.28)',
+          'overflow: hidden',
+          'background: #fff',
+          'position: relative'
+        ].join(';');
+
+        var closeBtn = document.createElement('button');
+        closeBtn.textContent = '×';
+        closeBtn.setAttribute('aria-label', '关闭授权');
+        closeBtn.style.cssText = [
+          'position: absolute',
+          'top: 8px',
+          'right: 10px',
+          'z-index: 2',
+          'width: 28px',
+          'height: 28px',
+          'border: none',
+          'border-radius: 14px',
+          'background: rgba(242, 244, 247, 0.9)',
+          'color: #667085',
+          'font-size: 18px',
+          'line-height: 28px',
+          'cursor: pointer'
+        ].join(';');
+
+        var iframe = document.createElement('iframe');
+        iframe.src = chrome.runtime.getURL('permission/host-permission.html?embed=1&origin=' + encodeURIComponent(origin));
+        iframe.style.cssText = 'width: 100%; height: 100%; border: 0; display: block;';
+        iframe.setAttribute('title', 'ExamPilot API 域名授权');
+
+        function cleanup(result) {
+          window.removeEventListener('message', handleMessage);
+          if (overlay.parentNode) {
+            overlay.parentNode.removeChild(overlay);
+          }
+          resolve(result);
+        }
+
+        function handleMessage(event) {
+          if (event.source !== iframe.contentWindow) return;
+          var data = event.data || {};
+          if (data.source !== 'exampilot-permission') return;
+          cleanup(!!data.granted);
+        }
+
+        closeBtn.addEventListener('click', function () {
+          cleanup(false);
+        });
+        overlay.addEventListener('click', function (event) {
+          if (event.target === overlay) {
+            cleanup(false);
+          }
+        });
+        window.addEventListener('message', handleMessage);
+
+        frameWrap.appendChild(closeBtn);
+        frameWrap.appendChild(iframe);
+        overlay.appendChild(frameWrap);
+        document.body.appendChild(overlay);
+      });
+    }
+
+    function ensureActiveConfigPermissionBeforeCapture() {
+      return chrome.runtime.sendMessage({ action: 'getConfigs' }).then(function (res) {
+        if (!res.success) {
+          throw new Error(res.error || '读取配置失败');
+        }
+        var list = res.configList || [];
+        var selected = list.find(function (cfg) { return cfg.selected; });
+        if (!selected) {
+          throw new Error('请先点击 ⚙️ 选择 AI 配置');
+        }
+        return checkApiHostPermission(selected.url).then(function (perm) {
+          if (!perm.success) {
+            throw new Error(perm.error || '授权检查失败');
+          }
+          if (perm.granted) {
+            return true;
+          }
+          var message = '需要先授权访问 ' + perm.origin + '。请在当前页面完成授权后再次点击识别。';
+          setStatusText('需要授权接口域名');
+          setShowSpinner(false);
+          setAnswers(function (prev) { return prev.concat([{ type: 'error', content: '❌ ' + message }]); });
+          return showApiHostPermissionFrame(perm.origin).then(function (granted) {
+            if (granted) {
+              setStatusText('授权成功');
+            }
+            return false;
+          });
+        });
+      });
+    }
+
+    function saveConfigPayload(payload) {
+      return chrome.runtime.sendMessage(payload).then(function (res) {
+        if (res.success) {
+          cancelForm();
+          loadConfigs();
+        } else {
+          setFormError(res.error || '保存失败');
+        }
+      });
     }
 
     function saveForm() {
       if (!formName || !formUrl || !formModel || !formKey) return;
+      setFormError('');
+      setConfigSaving(true);
 
       var action = editingId ? 'editConfig' : 'addConfig';
       var payload = editingId
         ? { action: action, configId: editingId, config: { name: formName, url: formUrl, model: formModel, apiKey: formKey, apiMode: formMode, customHeaders: formHeaders, customBodyFields: formBodyFields } }
         : { action: action, config: { name: formName, url: formUrl, model: formModel, apiKey: formKey, apiMode: formMode, customHeaders: formHeaders, customBodyFields: formBodyFields } };
 
-      chrome.runtime.sendMessage(payload).then(function (res) {
-        if (res.success) {
-          cancelForm();
-          loadConfigs();
+      checkApiHostPermission(formUrl).then(function (res) {
+        if (!res.success) {
+          throw new Error(res.error || '授权检查失败');
         }
+        if (!res.granted) {
+          setFormError('需要先授权访问 ' + res.origin + '。请在当前页面完成授权。');
+          return showApiHostPermissionFrame(res.origin).then(function (granted) {
+            if (!granted) {
+              return { success: true, pendingPermission: true };
+            }
+            return saveConfigPayload(payload).then(function () {
+              return { success: true, pendingPermission: true };
+            });
+          });
+        }
+        return saveConfigPayload(payload);
+      }).then(function (res) {
+        if (!res || res.pendingPermission) return;
+      }).catch(function (error) {
+        setFormError(error.message || String(error));
+      }).then(function () {
+        setConfigSaving(false);
       });
     }
 
@@ -334,7 +490,11 @@ export function mountPanel(host) {
       setStatusText('准备中...');
       setShowSpinner(true);
 
-      chrome.runtime.sendMessage({ action: 'captureAndAnalyze' }).then(function (response) {
+      ensureActiveConfigPermissionBeforeCapture().then(function (ok) {
+        if (!ok) return null;
+        return chrome.runtime.sendMessage({ action: 'captureAndAnalyze' });
+      }).then(function (response) {
+        if (!response) return;
         handleCaptureResponse(response, mySeq);
       }).catch(function (error) {
         handleCaptureError(error, mySeq);
@@ -345,10 +505,26 @@ export function mountPanel(host) {
 
     // 区域识别：隐藏面板，进入区域选择模式
     function handleRegionCapture() {
-      setSelectingRegion(true);
-      setStatusText('请拖拽选择识别区域...');
-      host.style.display = 'none';
-      hiddenByUserRef.current = true;
+      currentRequestSeqRef.current++;
+      var mySeq = currentRequestSeqRef.current;
+      setCapturing(true);
+      setStatusText('准备中...');
+      setShowSpinner(true);
+
+      ensureActiveConfigPermissionBeforeCapture().then(function (ok) {
+        if (mySeq !== currentRequestSeqRef.current) return;
+        if (!ok) return;
+        setCapturing(false);
+        setShowSpinner(false);
+        setSelectingRegion(true);
+        setStatusText('请拖拽选择识别区域...');
+        host.style.display = 'none';
+        hiddenByUserRef.current = true;
+      }).catch(function (error) {
+        handleCaptureError(error, mySeq);
+      }).then(function () {
+        handleCaptureFinally(mySeq);
+      });
     }
 
     function cancelCapture() {
@@ -453,13 +629,18 @@ export function mountPanel(host) {
       currentRequestSeqRef.current++;
       var mySeq = currentRequestSeqRef.current;
       setCapturing(true);
-      setStatusText('截图中...');
+      setStatusText('准备中...');
       setShowSpinner(true);
 
-      chrome.runtime.sendMessage({
-        action: 'captureAndAnalyzeWithRect',
-        rect: rect
+      ensureActiveConfigPermissionBeforeCapture().then(function (ok) {
+        if (!ok) return null;
+        setStatusText('截图中...');
+        return chrome.runtime.sendMessage({
+          action: 'captureAndAnalyzeWithRect',
+          rect: rect
+        });
       }).then(function (response) {
+        if (!response) return;
         handleCaptureResponse(response, mySeq);
       }).catch(function (error) {
         handleCaptureError(error, mySeq);
@@ -757,6 +938,16 @@ export function mountPanel(host) {
           cursor: pointer;
         }
         .exmp-config-cancel-btn:hover { background: #f2f4f7; }
+        .exmp-config-error {
+          margin-top: 8px;
+          padding: 7px 8px;
+          border: 1px solid #f9c9c3;
+          border-radius: 6px;
+          background: #fff5f4;
+          color: #b42318;
+          font-size: 11px;
+          line-height: 1.4;
+        }
         .exmp-config-empty {
           text-align: center;
           color: #98a2b3;
@@ -926,8 +1117,9 @@ ${function () {
                       </div>
                     ` : ''}
                   </div>
+                  ${formError ? html`<div class="exmp-config-error">${formError}</div>` : ''}
                   <div class="exmp-config-form-actions exmp-flex exmp-gap-6">
-                    <button class="exmp-config-save-btn" onClick=${saveForm}>${editingId ? '更新' : '保存'}</button>
+                    <button class="exmp-config-save-btn" disabled=${configSaving} onClick=${saveForm}>${configSaving ? '授权中...' : (editingId ? '更新' : '保存')}</button>
                     <button class="exmp-config-cancel-btn" onClick=${cancelForm}>取消</button>
                   </div>
                 </div>

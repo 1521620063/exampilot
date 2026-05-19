@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # ExamPilot Extension
 
-Chrome Extension (Manifest V3) that captures viewport screenshots and analyzes via vision LLM API (OpenAI-compatible). Images are sent as base64 directly to the API. UI built with Preact + htm (tagged-template VDOM), bundled via esbuild. No test or lint tooling is configured.
+Chrome Extension (Manifest V3) that captures viewport screenshots and analyzes via vision LLM API (OpenAI-compatible). Images are sent as base64 directly to the API. UI built with Preact + htm (tagged-template VDOM), bundled via esbuild. Tests use Node's built-in `node --test` runner.
 
 Build output goes to `dist/chrome/`. **Load `dist/chrome/`** (not project root) as the unpacked extension.
 
@@ -14,7 +14,8 @@ Build output goes to `dist/chrome/`. **Load `dist/chrome/`** (not project root) 
 |--------|------|
 | Install dependencies | `npm install` |
 | Build | `npm run build` |
-| Build (no minify, for debugging) | `npm run build:package` |
+| Package build (no minify, Chrome Web Store friendly) | `npm run build:package` |
+| Test | `npm test` |
 | Load extension | Chrome → Extensions (`chrome://extensions`) → "Load unpacked" → select `dist/chrome/` |
 | Reload after changes | `npm run build` then `chrome://extensions` → refresh icon on extension card |
 | Debug background SW | Extension card → "Service Worker" link → opens DevTools console |
@@ -22,7 +23,7 @@ Build output goes to `dist/chrome/`. **Load `dist/chrome/`** (not project root) 
 
 ## Architecture
 
-**Data flow:** User clicks "开始识别" → content script sends `{action:'captureAndAnalyze'}` → background service worker captures screenshot → sends image as base64 to vision LLM API → returns answer to content script.
+**Data flow:** User clicks "全屏"/"区域" → content script checks the active API host permission → if missing, shows an in-page extension iframe permission dialog → content script sends `{action:'captureAndAnalyze'}` → background service worker captures screenshot → sends image as base64 to vision LLM API → returns answer to content script.
 
 ```
 Content Script                          Background SW
@@ -34,9 +35,12 @@ Content Script                          Background SW
 ```
 
 **Message flow:**
+- Content → background: `chrome.runtime.sendMessage({ action: 'checkApiHostPermission', url })` before saving configs or starting capture
 - Content → background: `chrome.runtime.sendMessage({ action: 'captureAndAnalyze' })` (full viewport screenshot)
 - Content → background: `chrome.runtime.sendMessage({ action: 'captureAndAnalyzeWithRect', rect: {x,y,width,height,dpr} })` (region selection — background crops via `cropImage()` using OffscreenCanvas + createImageBitmap)
+- Content → background: `chrome.runtime.sendMessage({ action: 'cancelCapture' })` for explicit cancellation
 - Background → content: `chrome.tabs.sendMessage(tabId, { action: 'status', message })` for real-time progress
+- Permission iframe → content: `window.parent.postMessage({ source: 'exampilot-permission', granted, origin }, '*')` after optional host permission flow
 - Errors: always propagate via `sendResponse({ success: false, error })` for content script UI display
 
 ## Key Files
@@ -46,12 +50,14 @@ Content Script                          Background SW
 | `background/index.js` | Service Worker entry. `importScripts()` loads modules. Routes 'captureAndAnalyze' messages. Config CRUD handlers. Startup initialization (`ensureConfigInitialized`, `ensurePromptInitialized`) |
 | `background/query-ai.js` | Calls vision LLM API with image URL, returns AI answer. Dispatches to `callChatCompletions()`, `callResponsesAPI()`, or `callAnthropicAPI()` based on `config.apiMode` |
 | `content/index.js` | Content script entry (esbuild entry point). Creates host `<div>`, calls `mountPanel()`, handles double-click toggle |
-| `content/ui.js` | Preact+htm panel component with Shadow DOM isolation. All CSS in `<style>` inside the template. Config management CRUD via `chrome.runtime.sendMessage` |
-| `scripts/build.mjs` | esbuild build script. Cleans `dist/`, bundles content script + background files, copies manifest.json + icons to `dist/chrome/` |
+| `content/ui.js` | Preact+htm panel component with Shadow DOM isolation. All CSS in `<style>` inside the template. Config management CRUD and in-page API host permission iframe |
+| `permission/host-permission.html` | Extension page embedded in the current tab as an iframe to request optional API host permissions from a real user click |
+| `permission/host-permission.js` | Handles `chrome.permissions.request()` inside the iframe button click and reports results via `postMessage` |
+| `scripts/build.mjs` | esbuild build script. Cleans `dist/`, bundles content script + background files, copies manifest.json, icons, and `permission/` to `dist/chrome/` |
 | `content/bundle/content-bundle.js` | esbuild output (IIFE). What `manifest.json` points to |
 | `package.json` | Build scripts and dependencies (preact, htm, esbuild) |
-| `manifest.json` | MV3 config. `permissions: ["storage", "activeTab", "scripting"]`, `host_permissions: ["<all_urls>"]` |
-| `AGENTS.md` | Instructions file for Codex (not Claude Code). Keep in sync when updating CLAUDE.md. Currently has stale info (`build:watch` doesn't exist, loads project root instead of `dist/chrome/`). |
+| `manifest.json` | MV3 config. `permissions: ["storage", "activeTab", "scripting"]`, `optional_host_permissions: ["https://*/*"]`, and `web_accessible_resources` for `permission/*` |
+| `AGENTS.md` | Instructions file for Codex (not Claude Code). Keep in sync when updating CLAUDE.md. |
 | `.gitignore` | Ignores `config.js` (possible local config file), `node_modules/`, `dist/`, `.claude` |
 
 ## Key Patterns & Gotchas
@@ -69,14 +75,17 @@ Content Script                          Background SW
 - **Responses API output structure** — `/v1/responses` `output` array can have mixed types (e.g. `reasoning` + `message`). Must find entry with `item.type === 'message'` to read `content[0].text`. Don't assume `output[0]` is the answer.
 - **Anthropic Messages API content structure** — `/v1/messages` response `content` array can have mixed types (e.g. `thinking` + `text`). Must find entry with `item.type === 'text'` to read `.text`. Don't assume `content[0]` is the answer.
 - **Anthropic image format differs** — Anthropic API expects raw base64 (no `data:image/...` prefix). The `callAnthropicAPI()` strips the JPEG prefix via `.replace(/^data:image\/jpeg;base64,/, '')` and sends `{type: 'image', source: {type: 'base64', media_type: 'image/jpeg', data: <raw>}}`. Other API modes pass the data URL as-is.
-- **CORS in MV3 service worker** — `fetch()` from service worker is subject to CORS. Custom proxy endpoints need `host_permissions` in `manifest.json`.
+- **Optional API host permissions** — The extension does not use `host_permissions: ["<all_urls>"]`. `manifest.json` declares `optional_host_permissions: ["https://*/*"]` so Chrome Web Store builds avoid broad install-time host access. Before saving a config or starting capture, the content script asks background to `checkApiHostPermission(url)`. Background maps the configured API URL to `https://hostname/*` and checks `chrome.permissions.contains()`.
+- **Permission request must be user-gesture driven** — `chrome.permissions.request()` cannot run from background service worker message handlers or after async screenshot work; Chrome will throw `This function must be called during a user gesture`. The only place that calls it is `permission/host-permission.js`, inside the iframe's button click handler.
+- **In-page permission iframe** — If an API host is missing permission, `content/ui.js` creates `#exmp-permission-overlay` on `document.body` and embeds `chrome.runtime.getURL('permission/host-permission.html?embed=1&origin=...')`. `permission/*` is exposed via `web_accessible_resources`. The iframe posts `{source:'exampilot-permission', granted, origin}` back to the page, and the content script removes the overlay.
+- **CORS in MV3 service worker** — `fetch()` from service worker is still subject to Chrome extension host permissions. Third-party APIs that do not send permissive CORS headers require the optional host permission to be granted before `queryAI()` fetches them. `queryAI()` calls `assertApiHostPermission(config.url)` as a final guard.
 - **Config management** — Configs stored in `chrome.storage.local` (survives SW restart). `addConfig` auto-selects the new config (`selected: true`). Deleting the selected config shifts selection to the first remaining. Config list item shows custom headers/body field counts.
 - **Config message actions** — Content↔background CRUD: `getConfigs`, `getConfig` (auto-defaults `apiMode`/`customHeaders`/`customBodyFields` for old data), `setActiveConfig`, `addConfig` (pushes with `selected: true`), `editConfig`, `deleteConfig` (shifts selection if deleted was selected).
 - **Config view inline handlers** — Config list uses inline Preact event bindings (`onClick=${handler}`) with `stopPropagation()` on edit/delete buttons. No delegation needed.
 - **Preact + htm** — `import htm from 'htm'` + `const html = htm.bind(h)` provides tagged-template syntax instead of JSX. No JSX transform needed. `useState`, `useEffect` from `'preact/hooks'`.
 - **Hooks without destructuring** — Codebase uses `var` (not `const/let`) and avoids destructuring. Pattern: `var _a = useState(initial), value = _a[0], setValue = _a[1]`. Don't use `const [value, setValue] = useState()`.
 - **Three panel view states** — `viewState` controls which UI is shown: `mini` (collapsed ⚡ button, 44×44px circle), `main` (answers view with answer area + status bar + footer controls), `config` (settings view with config list/form, custom headers/body, prompt editor).
-- **Bundle size reference** — `npm run build` produces ~40KB (Preact+htm). Content script loads this single bundle.
+- **Bundle size reference** — `npm run build` currently produces a ~45KB minified content bundle; `npm run build:package` produces a larger unminified bundle for package/debug review. Content script loads this single bundle.
 - **No customElements.define** — Chrome content script isolated worlds have `customElements === null`. Panel is a functional component mounted into shadow root, not a custom element. Mounted via Preact's `render()`.
 - **Storage migration pattern** — `ensureConfigInitialized()` checks `configList[0].selected === undefined` to detect old-format data and migrates in-place. `ensurePromptInitialized()` follows the same detect-and-initialize pattern for `customPrompt`. Future storage changes should follow the same pattern.
 - **Custom prompt storage** — `customPrompt` is a separate string key in `chrome.storage.local` (not in configList). Initialized by `ensurePromptInitialized()`. Message handlers: `getPrompt` (read), `setPrompt` (write). UI is a textarea in the config view.
@@ -84,11 +93,11 @@ Content Script                          Background SW
 - **Custom body field numeric auto-conversion** — In `query-ai.js`, custom body field values that parse as valid numbers are auto-converted to numeric types in the JSON body. Affects all three API modes.
 - **Anthropic config auto-fill** — When `apiMode` switches to `anthropic` on a new config (no existing custom headers/body fields), the UI auto-populates `anthropic-version: 2023-06-01` header and `max_tokens: 4096` body field.
 - **Git remote** — GitHub.
-- **`build:package` strips host_permissions** — `npm run build:package` (NO_MINIFY=true) deletes `host_permissions` from manifest.json for Chrome Web Store compliance. Development builds (`npm run build`) retain it.
+- **`build:package` and permissions** — `npm run build:package` sets `NO_MINIFY=true` and still contains the legacy guard that deletes `host_permissions` if present, but current `manifest.json` uses `optional_host_permissions` instead. Both `npm run build` and `npm run build:package` copy `permission/` into `dist/chrome/`.
 - **Config ID format** — Generated in background as `'cfg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)` in `addConfig` handler.
 - **`docs/` folder** — Contains `index.html` (landing/marketing page) and `privacy.html` (privacy policy). Not part of extension build output. Load `dist/chrome/` as unpacked extension, not `docs/`.
 - **Extension load path** — Build output goes to `dist/chrome/`. When testing, **load `dist/chrome/`** (not project root) as unpacked extension in `chrome://extensions`. The manifest at project root references `content/bundle/content-bundle.js` which only exists inside `dist/chrome/` after build.
-- **Build output structure** — After `npm run build`, all files in `dist/chrome/`: `background/index.js` (bundled from background/index.js + query-ai.js), `content/bundle/content-bundle.js` (bundled from content/index.js + ui.js), `manifest.json`, `icons/`.
+- **Build output structure** — After `npm run build`, all files in `dist/chrome/`: `background/index.js`, `background/query-ai.js`, `content/bundle/content-bundle.js`, `permission/host-permission.html`, `permission/host-permission.js`, `manifest.json`, `icons/`.
 - **AbortController request cancellation** — `captureAndAnalyze()` stores a global `currentAbortController`. On each new call, `currentAbortController.abort()` cancels the previous in-flight fetch. The content script can also send `cancelCapture` to abort the active request. The `AbortError` is caught and rethrown as `'已取消'`. Pattern: save reference → abort old → create new → pass `signal` → cleanup in `finally` if own signal is still current.
 - **Content script request sequence guard** — `handleStartCapture` increments `currentRequestSeq` each call. `then`/`catch` callbacks check `mySeq !== currentRequestSeq` to discard stale responses from prior requests. The `setCapturing(false)` reset is also guarded by the same check.
 - **`apiFetch` CORS error wrapper** — `apiFetch()` in `query-ai.js` catches `TypeError` from `fetch()` and rethrows with a Chinese-language message about checking CORS / URL correctness. MV3 service worker `fetch()` is subject to CORS — unlike MV2 background pages.

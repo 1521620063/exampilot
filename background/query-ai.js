@@ -12,6 +12,7 @@
  */
 async function queryAI(imageUrl, prompt, signal) {
   const config = await getActiveConfig();
+  await assertApiHostPermission(config.url);
   const mode = config.apiMode || 'chat-completions';
 
   if (mode === 'responses-api') {

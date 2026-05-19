@@ -24,7 +24,8 @@ ExamPilot 是一款 Chrome 浏览器扩展，能够在任意网页中**即时截
 
 | 阶段 | 技术实现 | 说明 |
 |------|---------|------|
-| **📸 截图** | `chrome.tabs.captureVisibleTab` → 可选 `cropImage()` | 捕获当前浏览器视口，支持全屏截图或拖拽选择指定区域（物理像素坐标 × devicePixelRatio）
+| **📸 截图** | `chrome.tabs.captureVisibleTab` → 可选 `cropImage()` | 捕获当前浏览器视口，支持全屏截图或拖拽选择指定区域（物理像素坐标 × devicePixelRatio） |
+| **🔐 授权** | `optional_host_permissions` + 当前页授权弹层 | 首次使用某个 API 域名时按需授权，避免安装时申请 `<all_urls>` |
 | **🧠 推理** | 视觉大模型（OpenAI 兼容 / Anthropic 直接 API） | 理解题目内容并推理作答（模型可配置） |
 | **🖥️ 展示** | 浮动交互面板 | 页面右下角实时展示识别进度与结果 |
 
@@ -46,8 +47,9 @@ npm run build
 ```
 
 > 构建产物输出至 `dist/chrome/`。
-> - `npm run build` — 生产构建（压缩），保留 `host_permissions` 供开发调试
-> - `npm run build:package` — 上架构建（不压缩），自动移除 `host_permissions` 以通过 Chrome 应用商店审核
+> - `npm run build` — 压缩构建，适合本地开发加载
+> - `npm run build:package` — 不压缩构建，适合上架前检查与打包
+> - 当前版本使用 `optional_host_permissions` 动态授权 API 域名，不再写死 `host_permissions: ["<all_urls>"]`
 
 ### 🎮 使用方式
 
@@ -64,6 +66,7 @@ npm run build
 | ✏️ 在 ⚙️ 中编辑提示词 | 自定义发送给 AI 的指令，支持多行文本，自动保存 |
 | 🔧 在 ⚙️ 中配置自定义请求头/请求体 | 为每个 AI 配置添加任意的 HTTP 请求头和请求体字段，满足不同 API 的个性化需求 |
 | 👁️ 在 ⚙️ 中展开请求预览 | 在发送前预览实际 API 请求的完整 JSON 结构，便于调试 |
+| 🔐 首次使用某个 API 域名 | 当前页面会弹出授权框，点击授权后即可调用该厂商接口 |
 | ◀️ 按 **← 返回** | 从配置管理返回主面板 |
 
 识别过程中，状态栏会依次显示 `截图 → AI 识别中 → 完成`，进度透明可追溯。
@@ -84,11 +87,15 @@ exampilot-extension/
 │   ├── ui.js                # Preact+htm 浮动面板组件（Shadow DOM）
 │   └── bundle/
 │       └── content-bundle.js # 构建产物（IIFE）
+├── permission/
+│   ├── host-permission.html # 当前页 iframe 授权页
+│   └── host-permission.js   # 点击按钮申请 optional host permission
 ├── icons/                   # 扩展图标（16/48/128）
 ├── docs/                    # 营销落地页与隐私政策
 ├── dist/chrome/             # 构建输出目录（已 gitignore，加载扩展时选择此目录）
 │   ├── background/index.js
 │   ├── content/bundle/content-bundle.js
+│   ├── permission/
 │   ├── manifest.json
 │   └── icons/
 ├── .claude/                 # Claude Code 配置与记忆
@@ -107,6 +114,18 @@ AI 配置通过面板右下角的 **⚙️ 设置** 按钮管理，支持添加�
 - **Anthropic Claude** — Anthropic 直接 API (`/v1/messages`)
 
 新增配置自动设为当前使用（`selected: true`）。
+
+### 🔐 API 域名授权
+
+为了更容易通过 Chrome 应用商店审核，扩展不会在安装时申请 `host_permissions: ["<all_urls>"]`。当前采用按需授权方案：
+
+- `manifest.json` 声明 `optional_host_permissions: ["https://*/*"]`
+- 添加配置或点击识别时，扩展会检查当前 API URL 对应的域名权限，例如 `https://ark.cn-beijing.volces.com/*`
+- 如果尚未授权，当前网页会出现一个 ExamPilot 授权弹层，不会新开标签页
+- 在弹层中点击“授权访问该域名”后，扩展后台即可直接调用该接口，避免部分厂商接口因 CORS 被浏览器拦截
+- 如果用户取消授权，配置仍不会绕过权限限制，识别前会继续提示需要授权
+
+> 注意：`chrome.permissions.request()` 必须由用户点击触发，所以授权按钮位于扩展自己的 iframe 页面中。不要把授权申请放到后台异步请求或截图流程里。
 
 ### 🔧 自定义请求头与请求体
 
@@ -135,7 +154,7 @@ AI 配置通过面板右下角的 **⚙️ 设置** 按钮管理，支持添加�
 | 🔨 构建工具 | esbuild（ESM → IIFE 打包） |
 | 📡 图像传输 | base64 直传 AI |
 | 🧠 视觉推理 | 视觉大模型（OpenAI 兼容 / Anthropic 直接 API，模型可配置） |
-| ⚡ 扩展能力 | Service Worker · Content Script |
+| ⚡ 扩展能力 | Service Worker · Content Script · Optional Host Permissions |
 
 ## 🤖 关于 AI
 

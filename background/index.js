@@ -53,6 +53,44 @@ function autoSelectFallback(list) {
   }
 }
 
+/**
+ * 将用户填写的 API 地址转换为 Chrome host permission match pattern。
+ * Chrome match pattern 不包含端口，授权粒度按 HTTPS 主机名控制。
+ */
+function apiUrlToPermissionPattern(rawUrl) {
+  var url;
+  try {
+    url = new URL(rawUrl);
+  } catch (_) {
+    throw new Error('接口地址无效，请填写完整的 HTTPS URL');
+  }
+  if (url.protocol !== 'https:') {
+    throw new Error('接口地址必须使用 HTTPS，避免截图和 API Key 明文传输');
+  }
+  return url.protocol + '//' + url.hostname + '/*';
+}
+
+/**
+ * 检查当前扩展是否已获得目标 API 域名的可选 host permission。
+ */
+async function checkApiHostPermission(rawUrl) {
+  var origin = apiUrlToPermissionPattern(rawUrl);
+  var permission = { origins: [origin] };
+  var granted = await chrome.permissions.contains(permission);
+  return { origin: origin, granted: granted };
+}
+
+/**
+ * 网络请求前只做检查，不在异步流程里申请权限。
+ */
+async function assertApiHostPermission(rawUrl) {
+  var status = await checkApiHostPermission(rawUrl);
+  if (!status.granted) {
+    throw new Error('请先授权访问 ' + status.origin + ' 后再调用该接口');
+  }
+  return status.origin;
+}
+
 /** 获取当前选中的 AI 配置（供 query-ai.js 调用） */
 async function getActiveConfig() {
   const { configList } = await chrome.storage.local.get('configList');
@@ -206,6 +244,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   // ====== 配置管理操作 ======
+
+  if (request.action === 'checkApiHostPermission') {
+    (async () => {
+      var status = await checkApiHostPermission(request.url);
+      sendResponse({ success: true, origin: status.origin, granted: status.granted });
+    })().catch(function (error) {
+      sendResponse({ success: false, error: error.message || String(error) });
+    });
+    return true;
+  }
 
   if (request.action === 'getConfigs') {
     chrome.storage.local.get('configList').then(data => {
