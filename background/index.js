@@ -1,6 +1,9 @@
 // 加载配置、上传模块和 AI 查询模块（MV3 不支持 ES Module，用 importScripts 合并）
 importScripts('query-ai.js');
 
+// 用于取消进行中的 AI 识别请求
+var currentAbortController = null;
+
 // 点击扩展图标时注入内容脚本（activeTab 策略，不再需要 <all_urls> 权限）
 chrome.action.onClicked.addListener(function (tab) {
   chrome.scripting.executeScript({
@@ -84,17 +87,35 @@ ensurePromptInitialized();
  * @returns {Promise<string>} AI 返回的答案文本
  */
 async function captureAndAnalyze(windowId, tabId) {
-  // 1. 截图：必须先 await sendStatus，等 content script 隐藏面板后再截图
-  await sendStatus(tabId, '截图中...');
-  const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 90 });
+  // 取消上一次进行中的请求（模型接口卡住时，用户重新点击可触发取消）
+  if (currentAbortController) {
+    currentAbortController.abort();
+  }
+  currentAbortController = new AbortController();
+  var signal = currentAbortController.signal;
 
-  // 2. 调用视觉大模型进行识别
-  sendStatus(tabId, 'AI识别中...');
-  const { customPrompt } = await chrome.storage.local.get('customPrompt');
-  const answer = await queryAI(dataUrl, customPrompt);
+  try {
+    // 1. 截图：必须先 await sendStatus，等 content script 隐藏面板后再截图
+    await sendStatus(tabId, '截图中...');
+    const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 90 });
 
-  sendStatus(tabId, '识别完成');
-  return answer;
+    // 2. 调用视觉大模型进行识别
+    sendStatus(tabId, 'AI识别中...');
+    const { customPrompt } = await chrome.storage.local.get('customPrompt');
+    const answer = await queryAI(dataUrl, customPrompt, signal);
+
+    sendStatus(tabId, '识别完成');
+    return answer;
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('已取消');
+    }
+    throw error;
+  } finally {
+    if (currentAbortController && currentAbortController.signal === signal) {
+      currentAbortController = null;
+    }
+  }
 }
 
 /**

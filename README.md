@@ -75,15 +75,20 @@ exampilot-extension/
 │   └── build.mjs            # esbuild 打包脚本
 ├── background/
 │   ├── index.js             # SW 入口：消息路由与流程编排
-│   └── query-ai.js          # AI API 调用模块（Chat Completions / Responses API / Anthropic）
+│   └── query-ai.js          # AI API 调用模块
 ├── content/
-│   ├── index.js             # 内容脚本入口（ESM，esbuild 构建入口）
+│   ├── index.js             # 内容脚本入口（esbuild 构建入口）
 │   ├── ui.js                # Preact+htm 浮动面板组件（Shadow DOM）
 │   └── bundle/
-│       └── content-bundle.js # 构建产物（IIFE，content script 加载）
+│       └── content-bundle.js # 构建产物（IIFE）
 ├── icons/                   # 扩展图标（16/48/128）
 ├── docs/                    # 营销落地页与隐私政策
-├── node_modules/            # 依赖（已 gitignore）
+├── dist/chrome/             # 构建输出目录（已 gitignore，加载扩展时选择此目录）
+│   ├── background/index.js
+│   ├── content/bundle/content-bundle.js
+│   ├── manifest.json
+│   └── icons/
+├── .claude/                 # Claude Code 配置与记忆
 ├── AGENTS.md                # Codex 指令（与 CLAUDE.md 同步）
 ├── CLAUDE.md
 ├── README.md

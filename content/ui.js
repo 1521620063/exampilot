@@ -165,12 +165,17 @@ export function mountPanel(host) {
     }
 
     // ---- Capture handler ----
+    var currentRequestSeq = 0;
+
     function handleStartCapture() {
+      currentRequestSeq++;
+      var mySeq = currentRequestSeq;
       setCapturing(true);
       setStatusText('准备中...');
       setShowSpinner(true);
 
       chrome.runtime.sendMessage({ action: 'captureAndAnalyze' }).then(function (response) {
+        if (mySeq !== currentRequestSeq) return;
         if (!response.success) {
           setStatusText('处理失败');
           setShowSpinner(false);
@@ -181,11 +186,14 @@ export function mountPanel(host) {
           setAnswers(function (prev) { return prev.concat([{ type: 'answer', content: response.result }]); });
         }
       }).catch(function (error) {
+        if (mySeq !== currentRequestSeq) return;
         setStatusText('处理失败');
         setShowSpinner(false);
         setAnswers(function (prev) { return prev.concat([{ type: 'error', content: '❌ ' + (error.message || String(error)) }]); });
       }).then(function () {
-        setCapturing(false);
+        if (mySeq === currentRequestSeq) {
+          setCapturing(false);
+        }
       });
     }
 
@@ -681,7 +689,7 @@ ${function () {
               ${viewState === 'config' ? html`
                 <button class="exmp-btn exmp-btn-back" onClick=${function () { setViewState('main'); }}>← 返回</button>
               ` : html`
-                <button class="exmp-btn exmp-btn-start" disabled=${capturing} onClick=${handleStartCapture}>开始识别</button>
+                <button class="exmp-btn exmp-btn-start" onClick=${handleStartCapture}>开始识别</button>
                 <button class="exmp-btn exmp-btn-clear" onClick=${handleClear}>清除</button>
                 <button class="exmp-btn exmp-btn-settings" onClick=${openConfigView}>⚙️</button>
                 <button class="exmp-btn exmp-btn-mini" onClick=${function () { setViewState('mini'); }}>—</button>

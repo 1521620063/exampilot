@@ -10,24 +10,70 @@
  * @param {string} prompt - 系统提示词（来自用户配置）
  * @returns {Promise<string>} 模型返回的格式化解题内容（含 HTML 标记）
  */
-async function queryAI(imageUrl, prompt) {
+async function queryAI(imageUrl, prompt, signal) {
   const config = await getActiveConfig();
   const mode = config.apiMode || 'chat-completions';
 
   if (mode === 'responses-api') {
-    return callResponsesAPI(config, imageUrl, prompt);
+    return callResponsesAPI(config, imageUrl, prompt, signal);
   }
   if (mode === 'anthropic') {
-    return callAnthropicAPI(config, imageUrl, prompt);
+    return callAnthropicAPI(config, imageUrl, prompt, signal);
   }
-  return callChatCompletions(config, imageUrl, prompt);
+  return callChatCompletions(config, imageUrl, prompt, signal);
+}
+
+/**
+ * 包装 fetch 调用，捕获网络/跨域错误并输出更清晰的提示
+ */
+async function apiFetch(url, options) {
+  try {
+    return await fetch(url, options);
+  } catch (err) {
+    if (err.name === 'TypeError' || err.name === 'TypeError') {
+      throw new Error('网络请求失败，请检查接口地址是否正确以及是否存在跨域限制 (CORS)。详情: ' + (err.message || err));
+    }
+    throw err;
+  }
+}
+
+/**
+ * 从 API 错误响应体中提取详细错误信息
+ * 支持 OpenAI、Anthropic 等多种格式
+ */
+async function buildApiError(resp, prefix) {
+  var detail = '';
+  try {
+    var errBody = await resp.clone().json();
+    // OpenAI 兼容格式: { error: { message: '...' } }
+    if (errBody.error) {
+      if (typeof errBody.error === 'string') {
+        detail = errBody.error;
+      } else {
+        detail = errBody.error.message || errBody.error.code || JSON.stringify(errBody.error);
+      }
+    } else if (errBody.message) {
+      // Anthropic / 通用格式: { message: '...', type: '...' }
+      detail = errBody.message;
+    } else {
+      detail = JSON.stringify(errBody).slice(0, 300);
+    }
+  } catch (_) {
+    try {
+      detail = (await resp.clone().text()).slice(0, 200);
+    } catch (_) {}
+  }
+  if (detail && detail.length > 0) {
+    return new Error(prefix + ' (' + resp.status + '): ' + detail);
+  }
+  return new Error(prefix + ' (' + resp.status + ')');
 }
 
 /**
  * OpenAI 兼容的 Chat Completions 调用
  * POST /v1/chat/completions
  */
-async function callChatCompletions(config, imageUrl, prompt) {
+async function callChatCompletions(config, imageUrl, prompt, signal) {
   var headers = {
     'Content-Type': 'application/json',
     'Authorization': 'Bearer ' + config.apiKey
@@ -55,14 +101,15 @@ async function callChatCompletions(config, imageUrl, prompt) {
     }
   });
 
-  const resp = await fetch(config.url, {
+  const resp = await apiFetch(config.url, {
     method: 'POST',
     headers: headers,
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal: signal
   });
 
   if (!resp.ok) {
-    throw new Error('API调用失败 (' + resp.status + ')');
+    throw await buildApiError(resp, 'API调用失败');
   }
 
   const data = await resp.json();
@@ -77,7 +124,7 @@ async function callChatCompletions(config, imageUrl, prompt) {
  * OpenAI Responses API 调用
  * POST /v1/responses
  */
-async function callResponsesAPI(config, imageUrl, prompt) {
+async function callResponsesAPI(config, imageUrl, prompt, signal) {
   var headers = {
     'Content-Type': 'application/json',
     'Authorization': 'Bearer ' + config.apiKey
@@ -103,14 +150,15 @@ async function callResponsesAPI(config, imageUrl, prompt) {
     }
   });
 
-  const resp = await fetch(config.url, {
+  const resp = await apiFetch(config.url, {
     method: 'POST',
     headers: headers,
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal: signal
   });
 
   if (!resp.ok) {
-    throw new Error('API调用失败 (' + resp.status + ')');
+    throw await buildApiError(resp, 'API调用失败');
   }
 
   const data = await resp.json();
@@ -126,7 +174,7 @@ async function callResponsesAPI(config, imageUrl, prompt) {
  * Anthropic Messages API 调用
  * POST /v1/messages
  */
-async function callAnthropicAPI(config, imageUrl, prompt) {
+async function callAnthropicAPI(config, imageUrl, prompt, signal) {
   const base64Data = imageUrl.replace(/^data:image\/jpeg;base64,/, '');
 
   var headers = {
@@ -154,14 +202,15 @@ async function callAnthropicAPI(config, imageUrl, prompt) {
     }
   });
 
-  const resp = await fetch(config.url, {
+  const resp = await apiFetch(config.url, {
     method: 'POST',
     headers: headers,
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal: signal
   });
 
   if (!resp.ok) {
-    throw new Error('API调用失败 (' + resp.status + ')');
+    throw await buildApiError(resp, 'API调用失败');
   }
 
   const data = await resp.json();
