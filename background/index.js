@@ -81,12 +81,53 @@ ensureConfigInitialized();
 ensurePromptInitialized();
 
 /**
+ * 从全屏截图中裁剪指定区域
+ * @param {string} dataUrl - 全屏截图 data URL
+ * @param {{x: number, y: number, width: number, height: number, dpr: number}} rect - 裁剪区域（CSS 像素 + devicePixelRatio）
+ * @returns {Promise<string>} 裁剪后的 data URL（JPEG）
+ */
+async function cropImage(dataUrl, rect) {
+  var resp = await fetch(dataUrl);
+  var blob = await resp.blob();
+  var img = await createImageBitmap(blob);
+
+  // CSS 像素坐标乘以 devicePixelRatio 转换为物理像素
+  var dpr = rect.dpr || 1;
+  var sx = Math.round(rect.x * dpr);
+  var sy = Math.round(rect.y * dpr);
+  var sw = Math.round(rect.width * dpr);
+  var sh = Math.round(rect.height * dpr);
+
+  // 边界裁剪，防止超出图片范围
+  if (sx < 0) { sw += sx; sx = 0; }
+  if (sy < 0) { sh += sy; sy = 0; }
+  if (sx + sw > img.width) { sw = img.width - sx; }
+  if (sy + sh > img.height) { sh = img.height - sy; }
+  if (sw <= 0 || sh <= 0) {
+    throw new Error('选区超出图片范围');
+  }
+
+  var canvas = new OffscreenCanvas(sw, sh);
+  var ctx = canvas.getContext('2d');
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+
+  var croppedBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.9 });
+  return new Promise(function (resolve, reject) {
+    var reader = new FileReader();
+    reader.onloadend = function () { resolve(reader.result); };
+    reader.onerror = reject;
+    reader.readAsDataURL(croppedBlob);
+  });
+}
+
+/**
  * 截图 → AI 识别的完整流程
  * @param {number} windowId - 浏览器窗口 ID，用于 captureVisibleTab
  * @param {number} tabId - 标签页 ID，用于向 content script 发送状态
+ * @param {{x:number,y:number,width:number,height:number,dpr:number}} [rect] - 可选裁剪区域
  * @returns {Promise<string>} AI 返回的答案文本
  */
-async function captureAndAnalyze(windowId, tabId) {
+async function captureAndAnalyze(windowId, tabId, rect) {
   // 取消上一次进行中的请求（模型接口卡住时，用户重新点击可触发取消）
   if (currentAbortController) {
     currentAbortController.abort();
@@ -97,7 +138,13 @@ async function captureAndAnalyze(windowId, tabId) {
   try {
     // 1. 截图：必须先 await sendStatus，等 content script 隐藏面板后再截图
     await sendStatus(tabId, '截图中...');
-    const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 90 });
+    var dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 90 });
+
+    // 1.5 如果指定了裁剪区域，裁剪图片
+    if (rect) {
+      sendStatus(tabId, '裁剪中...');
+      dataUrl = await cropImage(dataUrl, rect);
+    }
 
     // 2. 调用视觉大模型进行识别
     sendStatus(tabId, 'AI识别中...');
@@ -134,6 +181,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ success: false, error: error.message || String(error) });
       });
     return true; // 异步响应：保持 sendResponse 可用直到被调用
+  }
+
+  // 区域识别请求：带裁剪坐标
+  if (request.action === 'captureAndAnalyzeWithRect') {
+    captureAndAnalyze(sender.tab.windowId, sender.tab.id, request.rect)
+      .then(function (result) { sendResponse({ success: true, result: result }); })
+      .catch(function (error) {
+        sendResponse({ success: false, error: error.message || String(error) });
+      });
+    return true;
   }
 
   // ====== 配置管理操作 ======

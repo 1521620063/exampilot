@@ -43,6 +43,37 @@ export function mountPanel(host) {
     var _t = useState(false), showPreview = _t[0], setShowPreview = _t[1];
     var hiddenByUser = false;
 
+    // 区域选择相关状态
+    var _u = useState(false), selectingRegion = _u[0], setSelectingRegion = _u[1];
+    var overlayEl = null; // 模块级变量，引用 document.body 上的遮罩 DOM
+
+    // ---- 共享响应处理（消除全屏识别和区域识别的重复逻辑）----
+    function handleCaptureResponse(response, mySeq) {
+      if (mySeq !== currentRequestSeq) return;
+      if (!response.success) {
+        setStatusText('处理失败');
+        setShowSpinner(false);
+        setAnswers(function (prev) { return prev.concat([{ type: 'error', content: '❌ ' + (response.error || '未知错误') }]); });
+      } else {
+        setStatusText('识别完成');
+        setShowSpinner(false);
+        setAnswers(function (prev) { return prev.concat([{ type: 'answer', content: response.result }]); });
+      }
+    }
+
+    function handleCaptureError(error, mySeq) {
+      if (mySeq !== currentRequestSeq) return;
+      setStatusText('处理失败');
+      setShowSpinner(false);
+      setAnswers(function (prev) { return prev.concat([{ type: 'error', content: '❌ ' + (error.message || String(error)) }]); });
+    }
+
+    function handleCaptureFinally(mySeq) {
+      if (mySeq === currentRequestSeq) {
+        setCapturing(false);
+      }
+    }
+
     // ---- Listen for status messages from background ----
     useEffect(function () {
       function handler(request) {
@@ -81,6 +112,81 @@ export function mountPanel(host) {
       host.addEventListener('toggle-panel', handler);
       return function () { host.removeEventListener('toggle-panel', handler); };
     }, []);
+
+    // ---- 区域选择模式下按 ESC 取消 ----
+    useEffect(function () {
+      function handleKeyDown(e) {
+        if (e.key === 'Escape' && selectingRegion) {
+          cancelRegionSelection();
+        }
+      }
+      if (selectingRegion) {
+        document.addEventListener('keydown', handleKeyDown, true);
+      }
+      return function () {
+        document.removeEventListener('keydown', handleKeyDown, true);
+      };
+    }, [selectingRegion]);
+
+    // ---- 区域选择遮罩层生命周期（挂载到 document.body，不能放 Shadow DOM 内） ----
+    useEffect(function () {
+      if (!selectingRegion) return;
+
+      var overlay = document.createElement('div');
+      overlay.className = 'exmp-selection-overlay';
+
+      // 遮罩层样式（内嵌 <style>，因为 document.body 在 Shadow DOM 外）
+      var style = document.createElement('style');
+      style.textContent = `
+        .exmp-selection-overlay {
+          position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+          background: transparent; z-index: 2147483646; cursor: crosshair;
+        }
+        .exmp-selection-box {
+          position: fixed; border: 1px dashed rgba(79,110,247,0.8); border-radius: 2px;
+          background: rgba(79,110,247,0.02); pointer-events: none; display: none;
+          z-index: 2147483647;
+        }
+        .exmp-selection-corner {
+          position: absolute; width: 7px; height: 7px;
+          background: #fff; border: 1.5px solid rgba(79,110,247,0.8); border-radius: 1.5px;
+        }
+        .exmp-selection-corner-tl { top: -3px; left: -3px; }
+        .exmp-selection-corner-tr { top: -3px; right: -3px; }
+        .exmp-selection-corner-bl { bottom: -3px; left: -3px; }
+        .exmp-selection-corner-br { bottom: -3px; right: -3px; }
+      `;
+      overlay.appendChild(style);
+
+      overlay.addEventListener('mousedown', handleSelectionMouseDown);
+      overlay.addEventListener('mousemove', handleSelectionMouseMove);
+      overlay.addEventListener('mouseup', handleSelectionMouseUp);
+
+      // 选区矩形框 + 四角手柄
+      var box = document.createElement('div');
+      box.className = 'exmp-selection-box';
+
+      var cornerClasses = ['exmp-selection-corner exmp-selection-corner-tl',
+                           'exmp-selection-corner exmp-selection-corner-tr',
+                           'exmp-selection-corner exmp-selection-corner-bl',
+                           'exmp-selection-corner exmp-selection-corner-br'];
+      for (var ci = 0; ci < cornerClasses.length; ci++) {
+        var corner = document.createElement('div');
+        corner.className = cornerClasses[ci];
+        box.appendChild(corner);
+      }
+
+      overlay.appendChild(box);
+      overlayEl = overlay;
+      document.body.appendChild(overlay);
+
+      return function () {
+        if (overlayEl && overlayEl.parentNode) {
+          overlayEl.parentNode.removeChild(overlayEl);
+        }
+        overlayEl = null;
+      };
+    }, [selectingRegion]);
 
     // ---- Config CRUD helpers ----
     function loadConfigs() {
@@ -167,10 +273,11 @@ export function mountPanel(host) {
       });
     }
 
-    // ---- Capture handler ----
+    // ---- Capture handlers ----
     var currentRequestSeq = 0;
 
-    function handleStartCapture() {
+    // 全屏识别：逻辑与原有 handleStartCapture 一致
+    function handleFullscreenCapture() {
       currentRequestSeq++;
       var mySeq = currentRequestSeq;
       setCapturing(true);
@@ -178,25 +285,118 @@ export function mountPanel(host) {
       setShowSpinner(true);
 
       chrome.runtime.sendMessage({ action: 'captureAndAnalyze' }).then(function (response) {
-        if (mySeq !== currentRequestSeq) return;
-        if (!response.success) {
-          setStatusText('处理失败');
-          setShowSpinner(false);
-          setAnswers(function (prev) { return prev.concat([{ type: 'error', content: '❌ ' + (response.error || '未知错误') }]); });
-        } else {
-          setStatusText('识别完成');
-          setShowSpinner(false);
-          setAnswers(function (prev) { return prev.concat([{ type: 'answer', content: response.result }]); });
-        }
+        handleCaptureResponse(response, mySeq);
       }).catch(function (error) {
-        if (mySeq !== currentRequestSeq) return;
-        setStatusText('处理失败');
-        setShowSpinner(false);
-        setAnswers(function (prev) { return prev.concat([{ type: 'error', content: '❌ ' + (error.message || String(error)) }]); });
+        handleCaptureError(error, mySeq);
       }).then(function () {
-        if (mySeq === currentRequestSeq) {
-          setCapturing(false);
+        handleCaptureFinally(mySeq);
+      });
+    }
+
+    // 区域识别：隐藏面板，进入区域选择模式
+    function handleRegionCapture() {
+      setSelectingRegion(true);
+      setStatusText('请拖拽选择识别区域...');
+      host.style.display = 'none';
+      hiddenByUser = true;
+    }
+
+    // 取消区域选择，恢复面板
+    function cancelRegionSelection() {
+      setSelectingRegion(false);
+      setStatusText('');
+      host.style.display = '';
+      hiddenByUser = false;
+      setViewState('main');
+    }
+
+    // 鼠标按下：记录选区起点，显示选区矩形框
+    function handleSelectionMouseDown(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      // 直接操作 overlay 内的矩形框 DOM
+      if (overlayEl) {
+        var box = overlayEl.querySelector('.exmp-selection-box');
+        if (box) {
+          box.style.display = 'block';
+          box.style.left = e.clientX + 'px';
+          box.style.top = e.clientY + 'px';
+          box.style.width = '0px';
+          box.style.height = '0px';
+          // 将起点坐标存储在矩形框的自定义属性上
+          box._startX = e.clientX;
+          box._startY = e.clientY;
         }
+      }
+    }
+
+    // 鼠标移动：更新选区矩形框
+    function handleSelectionMouseMove(e) {
+      if (!overlayEl) return;
+      var box = overlayEl.querySelector('.exmp-selection-box');
+      if (!box || box.style.display === 'none') return;
+      var x1 = Math.min(box._startX, e.clientX);
+      var y1 = Math.min(box._startY, e.clientY);
+      var w = Math.abs(e.clientX - box._startX);
+      var h = Math.abs(e.clientY - box._startY);
+      box.style.left = x1 + 'px';
+      box.style.top = y1 + 'px';
+      box.style.width = w + 'px';
+      box.style.height = h + 'px';
+    }
+
+    // 鼠标松开：确认选区并开始识别
+    function handleSelectionMouseUp(e) {
+      if (!overlayEl) {
+        cancelRegionSelection();
+        return;
+      }
+      var box = overlayEl.querySelector('.exmp-selection-box');
+      if (!box || box.style.display === 'none') {
+        cancelRegionSelection();
+        return;
+      }
+      var rect = {
+        x: parseFloat(box.style.left) || 0,
+        y: parseFloat(box.style.top) || 0,
+        width: parseFloat(box.style.width) || 0,
+        height: parseFloat(box.style.height) || 0,
+        dpr: window.devicePixelRatio || 1
+      };
+
+      // 清理选区状态，遮罩由 useEffect 清理
+      setSelectingRegion(false);
+
+      // 检查最小尺寸
+      var MIN_SIZE = 20;
+      if (rect.width < MIN_SIZE || rect.height < MIN_SIZE) {
+        setStatusText('');
+        host.style.display = '';
+        hiddenByUser = false;
+        setViewState('main');
+        return;
+      }
+
+      // 恢复面板
+      host.style.display = '';
+      hiddenByUser = false;
+
+      // 发起带裁剪坐标的识别请求
+      currentRequestSeq++;
+      var mySeq = currentRequestSeq;
+      setCapturing(true);
+      setStatusText('截图中...');
+      setShowSpinner(true);
+
+      chrome.runtime.sendMessage({
+        action: 'captureAndAnalyzeWithRect',
+        rect: rect
+      }).then(function (response) {
+        handleCaptureResponse(response, mySeq);
+      }).catch(function (error) {
+        handleCaptureError(error, mySeq);
+      }).then(function () {
+        handleCaptureFinally(mySeq);
       });
     }
 
@@ -248,7 +448,7 @@ export function mountPanel(host) {
           box-sizing: border-box !important;
         }
         .exmp-panel {
-          width: 340px;
+          width: 360px;
           max-height: min(520px, 60vh);
           background: #ffffff;
           border-radius: 14px;
@@ -302,6 +502,12 @@ export function mountPanel(host) {
         }
         .exmp-btn-start:hover { background: #3b5de7; }
         .exmp-btn-start:disabled { background: #a8bdfa; cursor: not-allowed; }
+        .exmp-btn-region {
+          background: #22c55e;
+          color: #fff;
+        }
+        .exmp-btn-region:hover { background: #16a34a; }
+        .exmp-btn-region:disabled { background: #86efac; cursor: not-allowed; }
         .exmp-btn-clear {
           background: transparent;
           color: #98a2b3;
@@ -692,7 +898,8 @@ ${function () {
               ${viewState === 'config' ? html`
                 <button class="exmp-btn exmp-btn-back" onClick=${function () { setViewState('main'); }}>← 返回</button>
               ` : html`
-                <button class="exmp-btn exmp-btn-start" onClick=${handleStartCapture}>开始识别</button>
+                <button class="exmp-btn exmp-btn-start" disabled=${capturing} onClick=${handleFullscreenCapture}>全屏</button>
+                <button class="exmp-btn exmp-btn-region" disabled=${capturing} onClick=${handleRegionCapture}>区域</button>
                 <button class="exmp-btn exmp-btn-clear" onClick=${handleClear}>清除</button>
                 <button class="exmp-btn exmp-btn-settings" onClick=${openConfigView}>⚙️</button>
                 <button class="exmp-btn exmp-btn-mini" onClick=${function () { setViewState('mini'); }}>—</button>
