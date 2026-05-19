@@ -193,6 +193,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.action === 'cancelCapture') {
+    if (currentAbortController) {
+      currentAbortController.abort();
+      currentAbortController = null;
+    }
+    if (sender.tab && sender.tab.id) {
+      sendStatus(sender.tab.id, '已取消');
+    }
+    sendResponse({ success: true });
+    return true;
+  }
+
   // ====== 配置管理操作 ======
 
   if (request.action === 'getConfigs') {
@@ -204,11 +216,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   if (request.action === 'setActiveConfig') {
     (async () => {
-      const { configList } = await chrome.storage.local.get('configList');
+      const { configList = [] } = await chrome.storage.local.get('configList');
       configList.forEach(function (c) { c.selected = (c.id === request.configId); });
       await chrome.storage.local.set({ configList });
       sendResponse({ success: true });
-    })();
+    })().catch(function (error) {
+      sendResponse({ success: false, error: error.message || String(error) });
+    });
     return true;
   }
 
@@ -230,13 +244,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       });
       await chrome.storage.local.set({ configList });
       sendResponse({ success: true });
-    })();
+    })().catch(function (error) {
+      sendResponse({ success: false, error: error.message || String(error) });
+    });
     return true;
   }
 
   if (request.action === 'deleteConfig') {
     (async () => {
-      const { configList } = await chrome.storage.local.get('configList');
+      const { configList = [] } = await chrome.storage.local.get('configList');
       var deletedWasSelected = false;
       var idx = -1;
       configList.forEach(function (c, i) {
@@ -255,13 +271,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
       await chrome.storage.local.set({ configList });
       sendResponse({ success: true, configList: configList });
-    })();
+    })().catch(function (error) {
+      sendResponse({ success: false, error: error.message || String(error) });
+    });
     return true;
   }
 
   if (request.action === 'getConfig') {
     (async () => {
-      const { configList } = await chrome.storage.local.get('configList');
+      const { configList = [] } = await chrome.storage.local.get('configList');
       var found = configList.find(function (c) { return c.id === request.configId; });
       if (found) {
         // 为旧数据提供默认值
@@ -274,7 +292,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       } else {
         sendResponse({ success: false, config: null });
       }
-    })();
+    })().catch(function (error) {
+      sendResponse({ success: false, error: error.message || String(error), config: null });
+    });
     return true;
   }
 
@@ -294,7 +314,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   if (request.action === 'editConfig') {
     (async () => {
-      const { configList } = await chrome.storage.local.get('configList');
+      const { configList = [] } = await chrome.storage.local.get('configList');
       var target = configList.find(function (c) { return c.id === request.configId; });
       if (!target) {
         sendResponse({ success: false, error: '配置未找到' });
@@ -309,7 +329,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       target.customBodyFields = request.config.customBodyFields || [];
       await chrome.storage.local.set({ configList });
       sendResponse({ success: true });
-    })();
+    })().catch(function (error) {
+      sendResponse({ success: false, error: error.message || String(error) });
+    });
     return true;
   }
 });

@@ -6,10 +6,59 @@
  */
 
 import { render, h } from 'preact';
-import { useState, useEffect } from 'preact/hooks';
+import { useState, useEffect, useRef } from 'preact/hooks';
 import htm from 'htm';
 
 const html = htm.bind(h);
+
+function sanitizeAnswerHtml(value) {
+  var template = document.createElement('template');
+  template.innerHTML = String(value || '');
+  var allowedTags = {
+    B: true,
+    BR: true,
+    STRONG: true,
+    EM: true,
+    I: true,
+    U: true,
+    P: true,
+    DIV: true,
+    SPAN: true,
+    UL: true,
+    OL: true,
+    LI: true,
+    CODE: true,
+    PRE: true
+  };
+  var blockedTags = { SCRIPT: true, STYLE: true, IFRAME: true, OBJECT: true, EMBED: true };
+
+  function clean(node) {
+    var child = node.firstChild;
+    while (child) {
+      var next = child.nextSibling;
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        if (blockedTags[child.tagName]) {
+          child.remove();
+        } else if (!allowedTags[child.tagName]) {
+          var text = document.createTextNode(child.textContent || '');
+          child.replaceWith(text);
+        } else {
+          var attrs = Array.prototype.slice.call(child.attributes);
+          attrs.forEach(function (attr) {
+            child.removeAttribute(attr.name);
+          });
+          clean(child);
+        }
+      } else if (child.nodeType === Node.COMMENT_NODE) {
+        child.remove();
+      }
+      child = next;
+    }
+  }
+
+  clean(template.content);
+  return template.innerHTML;
+}
 
 /**
  * Mount the ExamPilot panel into a host element with Shadow DOM isolation.
@@ -41,15 +90,16 @@ export function mountPanel(host) {
     var _r = useState(false), showHeadersSection = _r[0], setShowHeadersSection = _r[1];
     var _s = useState(false), showBodySection = _s[0], setShowBodySection = _s[1];
     var _t = useState(false), showPreview = _t[0], setShowPreview = _t[1];
-    var hiddenByUser = false;
+    var hiddenByUserRef = useRef(false);
+    var currentRequestSeqRef = useRef(0);
 
     // 区域选择相关状态
     var _u = useState(false), selectingRegion = _u[0], setSelectingRegion = _u[1];
-    var overlayEl = null; // 模块级变量，引用 document.body 上的遮罩 DOM
+    var overlayElRef = useRef(null);
 
     // ---- 共享响应处理（消除全屏识别和区域识别的重复逻辑）----
     function handleCaptureResponse(response, mySeq) {
-      if (mySeq !== currentRequestSeq) return;
+      if (mySeq !== currentRequestSeqRef.current) return;
       if (!response.success) {
         setStatusText('处理失败');
         setShowSpinner(false);
@@ -62,14 +112,14 @@ export function mountPanel(host) {
     }
 
     function handleCaptureError(error, mySeq) {
-      if (mySeq !== currentRequestSeq) return;
+      if (mySeq !== currentRequestSeqRef.current) return;
       setStatusText('处理失败');
       setShowSpinner(false);
       setAnswers(function (prev) { return prev.concat([{ type: 'error', content: '❌ ' + (error.message || String(error)) }]); });
     }
 
     function handleCaptureFinally(mySeq) {
-      if (mySeq === currentRequestSeq) {
+      if (mySeq === currentRequestSeqRef.current) {
         setCapturing(false);
       }
     }
@@ -81,7 +131,7 @@ export function mountPanel(host) {
           if (request.message === '截图中...') {
             host.style.display = 'none';
           } else {
-            if (host.style.display === 'none' && !hiddenByUser) {
+            if (host.style.display === 'none' && !hiddenByUserRef.current) {
               host.style.display = '';
               setViewState('main');
             }
@@ -102,11 +152,11 @@ export function mountPanel(host) {
       function handler() {
         if (host.style.display === 'none') {
           host.style.display = '';
-          hiddenByUser = false;
+          hiddenByUserRef.current = false;
           setViewState('mini');
         } else {
           host.style.display = 'none';
-          hiddenByUser = true;
+          hiddenByUserRef.current = true;
         }
       }
       host.addEventListener('toggle-panel', handler);
@@ -177,14 +227,16 @@ export function mountPanel(host) {
       }
 
       overlay.appendChild(box);
-      overlayEl = overlay;
+      overlayElRef.current = overlay;
       document.body.appendChild(overlay);
 
       return function () {
-        if (overlayEl && overlayEl.parentNode) {
-          overlayEl.parentNode.removeChild(overlayEl);
+        if (overlay.parentNode) {
+          overlay.parentNode.removeChild(overlay);
         }
-        overlayEl = null;
+        if (overlayElRef.current === overlay) {
+          overlayElRef.current = null;
+        }
       };
     }, [selectingRegion]);
 
@@ -274,12 +326,10 @@ export function mountPanel(host) {
     }
 
     // ---- Capture handlers ----
-    var currentRequestSeq = 0;
-
     // 全屏识别：逻辑与原有 handleStartCapture 一致
     function handleFullscreenCapture() {
-      currentRequestSeq++;
-      var mySeq = currentRequestSeq;
+      currentRequestSeqRef.current++;
+      var mySeq = currentRequestSeqRef.current;
       setCapturing(true);
       setStatusText('准备中...');
       setShowSpinner(true);
@@ -298,16 +348,33 @@ export function mountPanel(host) {
       setSelectingRegion(true);
       setStatusText('请拖拽选择识别区域...');
       host.style.display = 'none';
-      hiddenByUser = true;
+      hiddenByUserRef.current = true;
+    }
+
+    function cancelCapture() {
+      currentRequestSeqRef.current++;
+      setCapturing(false);
+      setShowSpinner(false);
+      setStatusText('已取消');
+      chrome.runtime.sendMessage({ action: 'cancelCapture' }).catch(function () {});
     }
 
     // 取消区域选择，恢复面板
     function cancelRegionSelection() {
       setSelectingRegion(false);
+      removeRegionOverlay();
       setStatusText('');
       host.style.display = '';
-      hiddenByUser = false;
+      hiddenByUserRef.current = false;
       setViewState('main');
+    }
+
+    function removeRegionOverlay() {
+      var overlay = overlayElRef.current;
+      if (overlay && overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
+      }
+      overlayElRef.current = null;
     }
 
     // 鼠标按下：记录选区起点，显示选区矩形框
@@ -315,8 +382,8 @@ export function mountPanel(host) {
       e.preventDefault();
       e.stopPropagation();
       // 直接操作 overlay 内的矩形框 DOM
-      if (overlayEl) {
-        var box = overlayEl.querySelector('.exmp-selection-box');
+      if (overlayElRef.current) {
+        var box = overlayElRef.current.querySelector('.exmp-selection-box');
         if (box) {
           box.style.display = 'block';
           box.style.left = e.clientX + 'px';
@@ -332,8 +399,8 @@ export function mountPanel(host) {
 
     // 鼠标移动：更新选区矩形框
     function handleSelectionMouseMove(e) {
-      if (!overlayEl) return;
-      var box = overlayEl.querySelector('.exmp-selection-box');
+      if (!overlayElRef.current) return;
+      var box = overlayElRef.current.querySelector('.exmp-selection-box');
       if (!box || box.style.display === 'none') return;
       var x1 = Math.min(box._startX, e.clientX);
       var y1 = Math.min(box._startY, e.clientY);
@@ -347,11 +414,11 @@ export function mountPanel(host) {
 
     // 鼠标松开：确认选区并开始识别
     function handleSelectionMouseUp(e) {
-      if (!overlayEl) {
+      if (!overlayElRef.current) {
         cancelRegionSelection();
         return;
       }
-      var box = overlayEl.querySelector('.exmp-selection-box');
+      var box = overlayElRef.current.querySelector('.exmp-selection-box');
       if (!box || box.style.display === 'none') {
         cancelRegionSelection();
         return;
@@ -366,24 +433,25 @@ export function mountPanel(host) {
 
       // 清理选区状态，遮罩由 useEffect 清理
       setSelectingRegion(false);
+      removeRegionOverlay();
 
       // 检查最小尺寸
       var MIN_SIZE = 20;
       if (rect.width < MIN_SIZE || rect.height < MIN_SIZE) {
         setStatusText('');
         host.style.display = '';
-        hiddenByUser = false;
+        hiddenByUserRef.current = false;
         setViewState('main');
         return;
       }
 
       // 恢复面板
       host.style.display = '';
-      hiddenByUser = false;
+      hiddenByUserRef.current = false;
 
       // 发起带裁剪坐标的识别请求
-      currentRequestSeq++;
-      var mySeq = currentRequestSeq;
+      currentRequestSeqRef.current++;
+      var mySeq = currentRequestSeqRef.current;
       setCapturing(true);
       setStatusText('截图中...');
       setShowSpinner(true);
@@ -881,7 +949,7 @@ ${function () {
             <div class="exmp-content">
               ${answers.length === 0 ? '' : answers.map(function (a) {
                 if (a.type === 'answer') {
-                  return html`<div class="exmp-answer" dangerouslySetInnerHTML=${{ __html: a.content }} />`;
+                  return html`<div class="exmp-answer" dangerouslySetInnerHTML=${{ __html: sanitizeAnswerHtml(a.content) }} />`;
                 }
                 return html`<div class="exmp-error">${a.content}</div>`;
               })}
@@ -898,9 +966,13 @@ ${function () {
               ${viewState === 'config' ? html`
                 <button class="exmp-btn exmp-btn-back" onClick=${function () { setViewState('main'); }}>← 返回</button>
               ` : html`
-                <button class="exmp-btn exmp-btn-start" disabled=${capturing} onClick=${handleFullscreenCapture}>全屏</button>
-                <button class="exmp-btn exmp-btn-region" disabled=${capturing} onClick=${handleRegionCapture}>区域</button>
-                <button class="exmp-btn exmp-btn-clear" onClick=${handleClear}>清除</button>
+                ${capturing ? html`
+                  <button class="exmp-btn exmp-btn-clear" onClick=${cancelCapture}>取消</button>
+                ` : html`
+                  <button class="exmp-btn exmp-btn-start" onClick=${handleFullscreenCapture}>全屏</button>
+                  <button class="exmp-btn exmp-btn-region" onClick=${handleRegionCapture}>区域</button>
+                  <button class="exmp-btn exmp-btn-clear" onClick=${handleClear}>清除</button>
+                `}
                 <button class="exmp-btn exmp-btn-settings" onClick=${openConfigView}>⚙️</button>
                 <button class="exmp-btn exmp-btn-mini" onClick=${function () { setViewState('mini'); }}>—</button>
               `}

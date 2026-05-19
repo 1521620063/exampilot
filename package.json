@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "build": "node scripts/build.mjs",
-    "build:package": "NO_MINIFY=true node scripts/build.mjs"
+    "build:package": "NO_MINIFY=true node scripts/build.mjs",
+    "test": "node --test"
   },
   "dependencies": {
     "preact": "^10.26.0",
