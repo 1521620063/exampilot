@@ -41,6 +41,7 @@ export function mountPanel(host) {
     var _r = useState(false), showHeadersSection = _r[0], setShowHeadersSection = _r[1];
     var _s = useState(false), showBodySection = _s[0], setShowBodySection = _s[1];
     var _t = useState(false), showPreview = _t[0], setShowPreview = _t[1];
+    var hiddenByUser = false;
 
     // ---- Listen for status messages from background ----
     useEffect(function () {
@@ -49,7 +50,7 @@ export function mountPanel(host) {
           if (request.message === '截图中...') {
             host.style.display = 'none';
           } else {
-            if (host.style.display === 'none') {
+            if (host.style.display === 'none' && !hiddenByUser) {
               host.style.display = '';
               setViewState('main');
             }
@@ -70,9 +71,11 @@ export function mountPanel(host) {
       function handler() {
         if (host.style.display === 'none') {
           host.style.display = '';
+          hiddenByUser = false;
           setViewState('mini');
         } else {
           host.style.display = 'none';
+          hiddenByUser = true;
         }
       }
       host.addEventListener('toggle-panel', handler);
