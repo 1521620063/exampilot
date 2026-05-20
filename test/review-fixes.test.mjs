@@ -59,6 +59,22 @@ test('build copies the permission grant page', function () {
   assert.match(source, /copyEntry\(root, dist, 'permission'\)/);
 });
 
+test('advanced request overrides replace key value custom fields', function () {
+  var background = read('background/index.js');
+  var queryAi = read('background/query-ai.js');
+  var ui = read('content/ui.js');
+  var build = read('scripts/build.mjs');
+
+  assert.match(background, /customHeadersJson/);
+  assert.match(background, /customBodyJson/);
+  assert.match(queryAi, /applyRequestOverrides/);
+  assert.match(ui, /Headers JSON 覆盖/);
+  assert.match(ui, /Body JSON 覆盖/);
+  assert.match(build, /background\/request-overrides\.js/);
+  assert.doesNotMatch(background + queryAi + ui, /customBodyFields/);
+}
+);
+
 test('AI calls verify host permission before network fetch', function () {
   var source = read('background/query-ai.js');
   assert.match(source, /assertApiHostPermission\(config\.url\)/);

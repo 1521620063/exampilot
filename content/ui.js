@@ -84,9 +84,8 @@ export function mountPanel(host) {
     var _m = useState('chat-completions'), formMode = _m[0], setFormMode = _m[1];
     var _n = useState(''), customPrompt = _n[0], setCustomPrompt = _n[1];
     var _o = useState(false), promptSaving = _o[0], setPromptSaving = _o[1];
-    // Custom fields state — replaces formAnthropicVersion/formMaxTokens
-    var _p = useState([]), formHeaders = _p[0], setFormHeaders = _p[1];
-    var _q = useState([]), formBodyFields = _q[0], setFormBodyFields = _q[1];
+    var _p = useState(''), formHeadersJson = _p[0], setFormHeadersJson = _p[1];
+    var _q = useState(''), formBodyJson = _q[0], setFormBodyJson = _q[1];
     var _r = useState(false), showHeadersSection = _r[0], setShowHeadersSection = _r[1];
     var _s = useState(false), showBodySection = _s[0], setShowBodySection = _s[1];
     var _t = useState(false), showPreview = _t[0], setShowPreview = _t[1];
@@ -279,8 +278,8 @@ export function mountPanel(host) {
       setFormModel('');
       setFormKey('');
       setFormMode('chat-completions');
-      setFormHeaders([]);
-      setFormBodyFields([]);
+      setFormHeadersJson('');
+      setFormBodyJson('');
       setShowHeadersSection(false);
       setShowBodySection(false);
       setShowPreview(false);
@@ -297,8 +296,8 @@ export function mountPanel(host) {
           setFormModel(res.config.model || '');
           setFormKey(res.config.apiKey || '');
           setFormMode(res.config.apiMode || 'chat-completions');
-          setFormHeaders(res.config.customHeaders || []);
-          setFormBodyFields(res.config.customBodyFields || []);
+          setFormHeadersJson(res.config.customHeadersJson || '');
+          setFormBodyJson(res.config.customBodyJson || '');
           setShowHeadersSection(false);
           setShowBodySection(false);
           setShowPreview(false);
@@ -446,15 +445,107 @@ export function mountPanel(host) {
       });
     }
 
+    function isPlainJsonObject(value) {
+      return Object.prototype.toString.call(value) === '[object Object]';
+    }
+
+    function cloneJson(value) {
+      if (value === undefined) return undefined;
+      return JSON.parse(JSON.stringify(value));
+    }
+
+    function mergeJsonOverride(base, override) {
+      var result = isPlainJsonObject(base) ? cloneJson(base) : {};
+      var patch = isPlainJsonObject(override) ? override : {};
+      Object.keys(patch).forEach(function (key) {
+        var value = patch[key];
+        if (value === null) {
+          delete result[key];
+          return;
+        }
+        if (isPlainJsonObject(value) && isPlainJsonObject(result[key])) {
+          result[key] = mergeJsonOverride(result[key], value);
+          return;
+        }
+        result[key] = cloneJson(value);
+      });
+      return result;
+    }
+
+    function parseJsonObjectInput(rawValue, label) {
+      var text = (rawValue || '').trim();
+      if (!text) return {};
+      var parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch (err) {
+        throw new Error(label + ' 不是有效的 JSON: ' + (err.message || String(err)));
+      }
+      if (!isPlainJsonObject(parsed)) {
+        throw new Error(label + ' 必须是 JSON 对象');
+      }
+      return parsed;
+    }
+
+    function maskPreviewHeaders(headers) {
+      var masked = {};
+      Object.keys(headers).forEach(function (key) {
+        var value = headers[key];
+        if (/authorization|api-key|apikey|token|key/i.test(key)) {
+          if (!value || value === '(未设置)') {
+            masked[key] = value || '(空)';
+            return;
+          }
+          masked[key] = String(value).slice(0, 12) + '...';
+          return;
+        }
+        masked[key] = value;
+      });
+      return masked;
+    }
+
+    function buildPreviewHeaders() {
+      var previewHeaders = {
+        'Content-Type': 'application/json'
+      };
+      if (formMode === 'anthropic') {
+        previewHeaders['x-api-key'] = formKey ? formKey : '(未设置)';
+      } else {
+        previewHeaders['Authorization'] = formKey ? 'Bearer ' + formKey : '(未设置)';
+      }
+      return maskPreviewHeaders(mergeJsonOverride(previewHeaders, parseJsonObjectInput(formHeadersJson, 'Headers JSON')));
+    }
+
+    function buildPreviewBody() {
+      var previewBody = { model: formModel || '(未设置)' };
+      if (formMode === 'responses-api') {
+        previewBody.input = [{ role: 'user', content: [{ type: 'input_image', image_url: '<base64_image>' }, { type: 'input_text', text: '<prompt>' }] }];
+      } else if (formMode === 'anthropic') {
+        previewBody.messages = [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: '<base64_image>' } }, { type: 'text', text: '<prompt>' }] }];
+      } else {
+        previewBody.messages = [{ role: 'user', content: [{ type: 'image_url', image_url: { url: '<base64_image>' } }, { type: 'text', text: '<prompt>' }] }];
+      }
+      return mergeJsonOverride(previewBody, parseJsonObjectInput(formBodyJson, 'Body JSON'));
+    }
+
     function saveForm() {
       if (!formName || !formUrl || !formModel || !formKey) return;
       setFormError('');
       setConfigSaving(true);
 
+      try {
+        parseJsonObjectInput(formHeadersJson, 'Headers JSON');
+        parseJsonObjectInput(formBodyJson, 'Body JSON');
+      } catch (error) {
+        setFormError(error.message || String(error));
+        setConfigSaving(false);
+        return;
+      }
+
       var action = editingId ? 'editConfig' : 'addConfig';
       var payload = editingId
-        ? { action: action, configId: editingId, config: { name: formName, url: formUrl, model: formModel, apiKey: formKey, apiMode: formMode, customHeaders: formHeaders, customBodyFields: formBodyFields } }
-        : { action: action, config: { name: formName, url: formUrl, model: formModel, apiKey: formKey, apiMode: formMode, customHeaders: formHeaders, customBodyFields: formBodyFields } };
+        ? { action: action, configId: editingId, config: { name: formName, url: formUrl, model: formModel, apiKey: formKey, apiMode: formMode, customHeadersJson: formHeadersJson, customBodyJson: formBodyJson } }
+        : { action: action, config: { name: formName, url: formUrl, model: formModel, apiKey: formKey, apiMode: formMode, customHeadersJson: formHeadersJson, customBodyJson: formBodyJson } };
 
       checkApiHostPermission(formUrl).then(function (res) {
         if (!res.success) {
@@ -967,6 +1058,10 @@ export function mountPanel(host) {
               ` : configList.map(function (cfg) {
                 var urlShort = (cfg.url || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
                 var modeLabel = cfg.apiMode === 'responses-api' ? 'Responses API' : cfg.apiMode === 'anthropic' ? 'Anthropic Claude' : 'Chat Completions';
+                var overrideParts = [];
+                if ((cfg.customHeadersJson || '').trim()) overrideParts.push('headers');
+                if ((cfg.customBodyJson || '').trim()) overrideParts.push('body');
+                var overrideLabel = overrideParts.length ? overrideParts.join('+') : '无';
                 return html`
                   <div class="exmp-config-item${cfg.selected ? ' active' : ''}" onClick=${function () { selectConfig(cfg.id); }}>
                     <div class="exmp-config-item-actions">
@@ -974,7 +1069,7 @@ export function mountPanel(host) {
                       <button class="exmp-config-delete-btn" onClick=${function (e) { e.stopPropagation(); deleteConfig(cfg.id); }}>✕</button>
                     </div>
                     <div class="exmp-config-item-name">${cfg.selected ? '● ' : '○ '}${cfg.name || '未命名'}</div>
-                    <div class="exmp-config-item-detail">模型: ${cfg.model} · 模式: ${modeLabel} · 📋 ${(cfg.customHeaders||[]).length} headers · ${(cfg.customBodyFields||[]).length} body · ${urlShort}</div>
+                    <div class="exmp-config-item-detail">模型: ${cfg.model} · 模式: ${modeLabel} · JSON 覆盖: ${overrideLabel} · ${urlShort}</div>
                   </div>
                 `;
               })}
@@ -991,83 +1086,49 @@ export function mountPanel(host) {
                     var newMode = e.target.value;
                     setFormMode(newMode);
                     // Auto-fill Anthropic defaults for new configs
-                    if (newMode === 'anthropic' && editingId === null && formHeaders.length === 0 && formBodyFields.length === 0) {
-                      setFormHeaders([{ key: 'anthropic-version', value: '2023-06-01' }]);
-                      setFormBodyFields([{ key: 'max_tokens', value: '4096' }]);
+                    if (newMode === 'anthropic' && editingId === null && !formHeadersJson.trim() && !formBodyJson.trim()) {
+                      setFormHeadersJson(JSON.stringify({ 'anthropic-version': '2023-06-01' }, null, 2));
+                      setFormBodyJson(JSON.stringify({ max_tokens: 4096 }, null, 2));
                     }
                   }}>
-                    <option value="chat-completions">Chat Completions（标准 OpenAI 兼容）</option>
-                    <option value="responses-api">Responses API（OpenAI）</option>
-                    <option value="anthropic">Anthropic Claude（直接 API）</option>
+                    <option value="chat-completions">OpenAI · Chat Completions</option>
+                    <option value="responses-api">OpenAI · Responses API</option>
+                    <option value="anthropic">Anthropic · Messages API</option>
                   </select>
                   <label>模型名称</label>
                   <input value=${formModel} onInput=${function (e) { setFormModel(e.target.value); }} placeholder="gpt-4o" />
                   <label>API Key</label>
                   <input value=${formKey} onInput=${function (e) { setFormKey(e.target.value); }} type="password" placeholder="sk-..." />
-                  <!-- Custom Headers section -->
+                  <!-- Headers JSON override section -->
                   <div style="margin-top: 8px; border-top: 1px solid #f0f1f3; padding-top: 8px;">
                     <div style="font-size: 11px; font-weight: 600; color: #667085; cursor: pointer; display: flex; align-items: center; justify-content: space-between;" onClick=${function () { setShowHeadersSection(!showHeadersSection); }}>
-                      <span>自定义 Headers (${formHeaders.length})</span>
+                      <span>Headers JSON 覆盖</span>
                       <span style="font-size: 10px; color: #98a2b3;">${showHeadersSection ? '收起 ▲' : '展开 ▼'}</span>
                     </div>
                     ${showHeadersSection ? html`
-                      ${formHeaders.map(function (h, idx) {
-                        return html`
-                          <div style="display: flex; gap: 4px; margin-top: 6px; align-items: center;">
-                            <input value=${h.key} onInput=${function (e) {
-                              var arr = formHeaders.slice();
-                              arr[idx] = { key: e.target.value, value: arr[idx].value };
-                              setFormHeaders(arr);
-                            }} placeholder="Header 名称" style="flex: 1; padding: 5px 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 11px; outline: none; box-sizing: border-box;" />
-                            <input value=${h.value} onInput=${function (e) {
-                              var arr = formHeaders.slice();
-                              arr[idx] = { key: arr[idx].key, value: e.target.value };
-                              setFormHeaders(arr);
-                            }} placeholder="Header 值" style="flex: 1.5; padding: 5px 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 11px; outline: none; box-sizing: border-box;" />
-                            <button style="background: none; border: none; color: #e74c3c; cursor: pointer; font-size: 14px; padding: 2px 6px; line-height: 1;" onClick=${function () {
-                              var arr = formHeaders.slice();
-                              arr.splice(idx, 1);
-                              setFormHeaders(arr);
-                            }}>✕</button>
-                          </div>
-                        `;
-                      })}
-                      <button style="display: block; width: 100%; margin-top: 6px; padding: 5px; border: 1px dashed #d0d5dd; background: transparent; border-radius: 6px; font-size: 11px; color: #667085; cursor: pointer;" onClick=${function () {
-                        setFormHeaders(formHeaders.concat([{ key: '', value: '' }]));
-                      }}>+ 添加 Header</button>
+                      <textarea
+                        value=${formHeadersJson}
+                        onInput=${function (e) { setFormHeadersJson(e.target.value); }}
+                        placeholder=${'{\n  "OpenAI-Organization": "org_xxx"\n}'}
+                        spellcheck="false"
+                        style="width: 100%; margin-top: 6px; min-height: 82px; padding: 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 11px; outline: none; resize: vertical; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.45;"
+                      ></textarea>
                     ` : ''}
                   </div>
-                  <!-- Custom Body section -->
+                  <!-- Body JSON override section -->
                   <div style="margin-top: 8px; border-top: 1px solid #f0f1f3; padding-top: 8px;">
                     <div style="font-size: 11px; font-weight: 600; color: #667085; cursor: pointer; display: flex; align-items: center; justify-content: space-between;" onClick=${function () { setShowBodySection(!showBodySection); }}>
-                      <span>自定义 Body 字段 (${formBodyFields.length})</span>
+                      <span>Body JSON 覆盖</span>
                       <span style="font-size: 10px; color: #98a2b3;">${showBodySection ? '收起 ▲' : '展开 ▼'}</span>
                     </div>
                     ${showBodySection ? html`
-                      ${formBodyFields.map(function (f, idx) {
-                        return html`
-                          <div style="display: flex; gap: 4px; margin-top: 6px; align-items: center;">
-                            <input value=${f.key} onInput=${function (e) {
-                              var arr = formBodyFields.slice();
-                              arr[idx] = { key: e.target.value, value: arr[idx].value };
-                              setFormBodyFields(arr);
-                            }} placeholder="字段名" style="flex: 1; padding: 5px 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 11px; outline: none; box-sizing: border-box;" />
-                            <input value=${f.value} onInput=${function (e) {
-                              var arr = formBodyFields.slice();
-                              arr[idx] = { key: arr[idx].key, value: e.target.value };
-                              setFormBodyFields(arr);
-                            }} placeholder="字段值" style="flex: 1.5; padding: 5px 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 11px; outline: none; box-sizing: border-box;" />
-                            <button style="background: none; border: none; color: #e74c3c; cursor: pointer; font-size: 14px; padding: 2px 6px; line-height: 1;" onClick=${function () {
-                              var arr = formBodyFields.slice();
-                              arr.splice(idx, 1);
-                              setFormBodyFields(arr);
-                            }}>✕</button>
-                          </div>
-                        `;
-                      })}
-                      <button style="display: block; width: 100%; margin-top: 6px; padding: 5px; border: 1px dashed #d0d5dd; background: transparent; border-radius: 6px; font-size: 11px; color: #667085; cursor: pointer;" onClick=${function () {
-                        setFormBodyFields(formBodyFields.concat([{ key: '', value: '' }]));
-                      }}>+ 添加 Body 字段</button>
+                      <textarea
+                        value=${formBodyJson}
+                        onInput=${function (e) { setFormBodyJson(e.target.value); }}
+                        placeholder=${'{\n  "temperature": 0,\n  "max_tokens": 4096,\n  "metadata": { "source": "exampilot" }\n}'}
+                        spellcheck="false"
+                        style="width: 100%; margin-top: 6px; min-height: 116px; padding: 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 11px; outline: none; resize: vertical; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.45;"
+                      ></textarea>
                     ` : ''}
                   </div>
                   <!-- Request Preview section -->
@@ -1081,18 +1142,11 @@ export function mountPanel(host) {
                         <div style="font-size: 10px; font-weight: 600; color: #667085; margin-bottom: 4px;">Headers 预览:</div>
                         <pre style="background: #f5f7fa; border-radius: 6px; padding: 8px; font-size: 10px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin: 0;">
 ${function () {
-  var previewHeaders = {
-    'Content-Type': 'application/json'
-  };
-  if (formMode === 'anthropic') {
-    previewHeaders['x-api-key'] = formKey ? formKey.slice(0, 8) + '...' : '(未设置)';
-  } else {
-    previewHeaders['Authorization'] = formKey ? 'Bearer ' + formKey.slice(0, 8) + '...' : '(未设置)';
+  try {
+    return JSON.stringify(buildPreviewHeaders(), null, 2);
+  } catch (err) {
+    return err.message || String(err);
   }
-  formHeaders.forEach(function (h) {
-    if (h.key) previewHeaders[h.key] = h.value || '(空)';
-  });
-  return JSON.stringify(previewHeaders, null, 2);
 }()}
                         </pre>
                       </div>
@@ -1100,18 +1154,11 @@ ${function () {
                         <div style="font-size: 10px; font-weight: 600; color: #667085; margin-bottom: 4px;">Body 预览:</div>
                         <pre style="background: #f5f7fa; border-radius: 6px; padding: 8px; font-size: 10px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin: 0;">
 ${function () {
-  var previewBody = { model: formModel || '(未设置)' };
-  if (formMode === 'responses-api') {
-    previewBody.input = [{ role: 'user', content: [{ type: 'input_image', image_url: '<base64_image>' }, { type: 'input_text', text: '<prompt>' }] }];
-  } else if (formMode === 'anthropic') {
-    previewBody.messages = [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: '<base64_image>' } }, { type: 'text', text: '<prompt>' }] }];
-  } else {
-    previewBody.messages = [{ role: 'user', content: [{ type: 'image_url', image_url: { url: '<base64_image>' } }, { type: 'text', text: '<prompt>' }] }];
+  try {
+    return JSON.stringify(buildPreviewBody(), null, 2);
+  } catch (err) {
+    return err.message || String(err);
   }
-  formBodyFields.forEach(function (f) {
-    if (f.key) previewBody[f.key] = f.value || '(空)';
-  });
-  return JSON.stringify(previewBody, null, 2);
 }()}
                         </pre>
                       </div>

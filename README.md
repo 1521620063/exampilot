@@ -26,7 +26,7 @@ ExamPilot 是一款 Chrome 浏览器扩展，能够在任意网页中**即时截
 |------|---------|------|
 | **📸 截图** | `chrome.tabs.captureVisibleTab` → 可选 `cropImage()` | 捕获当前浏览器视口，支持全屏截图或拖拽选择指定区域（物理像素坐标 × devicePixelRatio） |
 | **🔐 授权** | `optional_host_permissions` + 当前页授权弹层 | 首次使用某个 API 域名时按需授权，避免安装时申请 `<all_urls>` |
-| **🧠 推理** | 视觉大模型（OpenAI 兼容 / Anthropic 直接 API） | 理解题目内容并推理作答（模型可配置） |
+| **🧠 推理** | 视觉大模型（OpenAI 兼容 / Anthropic Messages API） | 理解题目内容并推理作答（模型可配置） |
 | **🖥️ 展示** | 浮动交互面板 | 页面右下角实时展示识别进度与结果 |
 
 ## 🚀 快速开始
@@ -74,14 +74,15 @@ npm run build
 ## 📁 项目结构
 
 ```
-exampilot-extension/
+exampilot/
 ├── manifest.json            # Manifest V3 扩展清单
 ├── package.json             # 构建脚本与依赖
 ├── scripts/
 │   └── build.mjs            # esbuild 打包脚本
 ├── background/
 │   ├── index.js             # SW 入口：消息路由与流程编排
-│   └── query-ai.js          # AI API 调用模块
+│   ├── query-ai.js          # AI API 调用模块（三种接口模式）
+│   └── request-overrides.js # 自定义请求头/请求体 JSON 覆盖处理
 ├── content/
 │   ├── index.js             # 内容脚本入口（esbuild 构建入口）
 │   ├── ui.js                # Preact+htm 浮动面板组件（Shadow DOM）
@@ -92,6 +93,7 @@ exampilot-extension/
 │   └── host-permission.js   # 点击按钮申请 optional host permission
 ├── icons/                   # 扩展图标（16/48/128）
 ├── docs/                    # 营销落地页与隐私政策
+├── test/                    # Node 测试用例
 ├── dist/chrome/             # 构建输出目录（已 gitignore，加载扩展时选择此目录）
 │   ├── background/index.js
 │   ├── content/bundle/content-bundle.js
@@ -111,7 +113,7 @@ AI 配置通过面板右下角的 **⚙️ 设置** 按钮管理，支持添加�
 
 - **Chat Completions** — 标准 OpenAI 兼容接口 (`/v1/chat/completions`)
 - **Responses API** — OpenAI Responses API (`/v1/responses`)
-- **Anthropic Claude** — Anthropic 直接 API (`/v1/messages`)
+- **Anthropic Claude** — Anthropic Messages API (`/v1/messages`)
 
 新增配置自动设为当前使用（`selected: true`）。
 
@@ -153,7 +155,7 @@ AI 配置通过面板右下角的 **⚙️ 设置** 按钮管理，支持添加�
 | 🎨 UI 框架 | Preact + htm（VDOM 渲染，Shadow DOM 样式隔离） |
 | 🔨 构建工具 | esbuild（ESM → IIFE 打包） |
 | 📡 图像传输 | base64 直传 AI |
-| 🧠 视觉推理 | 视觉大模型（OpenAI 兼容 / Anthropic 直接 API，模型可配置） |
+| 🧠 视觉推理 | 视觉大模型（OpenAI 兼容 / Anthropic Messages API，模型可配置） |
 | ⚡ 扩展能力 | Service Worker · Content Script · Optional Host Permissions |
 
 ## 🤖 关于 AI

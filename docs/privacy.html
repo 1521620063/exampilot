@@ -251,7 +251,7 @@ footer {
 
   <div class="card">
     <h1>隐私政策</h1>
-    <p class="updated">最后更新：2026 年 5 月 16 日</p>
+    <p class="updated">最后更新：2026 年 5 月 20 日</p>
 
     <h2>概述</h2>
     <p>ExamPilot（以下简称"本扩展"）是一款基于视觉 AI 的智能解题工具。本隐私政策说明了本扩展处理用户数据的方式。使用本扩展即表示您同意本政策所述的数据处理方式。</p>
@@ -260,7 +260,7 @@ footer {
 
     <h3>1. 网页截图</h3>
     <ul>
-      <li><strong>收集方式</strong>：当您在网页上双击或点击"开始识别"按钮时，Chrome 会截取当前浏览器视口（viewport）的截图。</li>
+      <li><strong>收集方式</strong>：当您在扩展面板中点击"全屏"或"区域"按钮，或双击页面时，Chrome 会截取当前浏览器视口或您框选区域的截图。</li>
       <li><strong>使用目的</strong>：截图被发送到您自行配置的 AI 大模型 API，用于识别图片中的题目并生成解答。</li>
       <li><strong>传输方式</strong>：截图以 base64 编码直接嵌入 API 请求，不经过任何中间服务器。</li>
       <li><strong>存储与保留</strong>：截图不会持久存储在您的设备或本扩展的开发者服务器上。AI API 处理完成后，截图仅存在于 API 提供方的系统中，其保留政策请参阅相应 API 提供方的隐私政策。</li>
@@ -297,7 +297,7 @@ footer {
       <li>API 密钥等敏感信息仅存储在浏览器的本地存储中</li>
       <li>所有 API 请求均使用 HTTPS 加密传输</li>
       <li>不使用任何远程代码或分析 SDK</li>
-      <li>极小权限设计：仅请求运行所必需的权限（storage、activeTab、scripting）</li>
+      <li>极小权限设计：仅请求运行所必需的权限（storage、activeTab、scripting），API 域名按需单独授权</li>
     </ul>
 
     <h2>第三方链接</h2>
@@ -322,7 +322,7 @@ footer {
 
     <h3 class="en">Data Collected and Processed</h3>
 
-    <p class="en"><strong>1. Screenshots.</strong> When you double-click or click "开始识别" on a webpage, Chrome captures a screenshot of the current viewport. This screenshot is sent to the AI API you have configured for problem recognition and solving. Screenshots are not stored persistently on your device or on the developer's servers. They exist only transiently during processing through the AI API you selected.</p>
+    <p class="en"><strong>1. Screenshots.</strong> When you click "全屏" or "区域" on the panel, or double-click the page, Chrome captures a screenshot of the viewport or your selected region. This screenshot is sent to the AI API you have configured for problem recognition and solving. Screenshots are not stored persistently on your device or on the developer's servers. They exist only transiently during processing through the AI API you selected.</p>
 
     <p class="en"><strong>2. AI Configuration.</strong> API endpoint URLs, model names, and API keys that you enter in the settings panel (⚙️) are stored exclusively in <code>chrome.storage.local</code> on your device. This information is used solely to make requests to the AI API of your choice and is never transmitted to the developer's servers.</p>
 

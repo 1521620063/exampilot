@@ -95,10 +95,6 @@ async function callChatCompletions(config, imageUrl, prompt, signal) {
     'Content-Type': 'application/json',
     'Authorization': 'Bearer ' + config.apiKey
   };
-  // Merge custom headers
-  (config.customHeaders || []).forEach(function (h) {
-    if (h.key) headers[h.key] = h.value;
-  });
 
   var body = {
     model: config.model,
@@ -110,18 +106,12 @@ async function callChatCompletions(config, imageUrl, prompt, signal) {
       ]
     }]
   };
-  // Merge custom body fields (auto-convert numeric strings to numbers)
-  (config.customBodyFields || []).forEach(function (f) {
-    if (f.key) {
-      var num = Number(f.value);
-      body[f.key] = isNaN(num) || f.value === '' ? f.value : num;
-    }
-  });
+  var requestOverrides = applyRequestOverrides(headers, body, config);
 
   const resp = await apiFetch(config.url, {
     method: 'POST',
-    headers: headers,
-    body: JSON.stringify(body),
+    headers: requestOverrides.headers,
+    body: JSON.stringify(requestOverrides.body),
     signal: signal
   });
 
@@ -146,9 +136,6 @@ async function callResponsesAPI(config, imageUrl, prompt, signal) {
     'Content-Type': 'application/json',
     'Authorization': 'Bearer ' + config.apiKey
   };
-  (config.customHeaders || []).forEach(function (h) {
-    if (h.key) headers[h.key] = h.value;
-  });
 
   var body = {
     model: config.model,
@@ -160,17 +147,12 @@ async function callResponsesAPI(config, imageUrl, prompt, signal) {
       ]
     }]
   };
-  (config.customBodyFields || []).forEach(function (f) {
-    if (f.key) {
-      var num = Number(f.value);
-      body[f.key] = isNaN(num) || f.value === '' ? f.value : num;
-    }
-  });
+  var requestOverrides = applyRequestOverrides(headers, body, config);
 
   const resp = await apiFetch(config.url, {
     method: 'POST',
-    headers: headers,
-    body: JSON.stringify(body),
+    headers: requestOverrides.headers,
+    body: JSON.stringify(requestOverrides.body),
     signal: signal
   });
 
@@ -198,9 +180,6 @@ async function callAnthropicAPI(config, imageUrl, prompt, signal) {
     'Content-Type': 'application/json',
     'x-api-key': config.apiKey
   };
-  (config.customHeaders || []).forEach(function (h) {
-    if (h.key) headers[h.key] = h.value;
-  });
 
   var body = {
     model: config.model,
@@ -212,17 +191,12 @@ async function callAnthropicAPI(config, imageUrl, prompt, signal) {
       ]
     }]
   };
-  (config.customBodyFields || []).forEach(function (f) {
-    if (f.key) {
-      var num = Number(f.value);
-      body[f.key] = isNaN(num) || f.value === '' ? f.value : num;
-    }
-  });
+  var requestOverrides = applyRequestOverrides(headers, body, config);
 
   const resp = await apiFetch(config.url, {
     method: 'POST',
-    headers: headers,
-    body: JSON.stringify(body),
+    headers: requestOverrides.headers,
+    body: JSON.stringify(requestOverrides.body),
     signal: signal
   });
 

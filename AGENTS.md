@@ -46,6 +46,7 @@ Content Script                          Background SW
 | File | Role |
 |------|------|
 | `background/index.js` | Service Worker entry. `importScripts()` loads modules. Routes 'captureAndAnalyze' messages |
+| `background/request-overrides.js` | Parses advanced Headers/Body JSON overrides and deep-merges them into default requests |
 | `background/query-ai.js` | Calls vision LLM API with image URL, returns AI answer. Dispatches to `callChatCompletions()`, `callResponsesAPI()`, or `callAnthropicAPI()` based on `config.apiMode` |
 | `content/index.js` | Content script entry (esbuild entry point). Creates host `<div>`, calls `mountPanel()`, handles double-click toggle |
 | `content/ui.js` | Preact+htm panel component with Shadow DOM isolation. Functional component with hooks (`useState`, `useEffect`). Config management CRUD plus in-page API host permission iframe |
@@ -68,8 +69,9 @@ Content Script                          Background SW
 - **AI answer HTML rendering** — AI returns limited HTML with `<b>`, `<br>` etc. Sanitize output before rendering with dangerouslySetInnerHTML, because the API endpoint is user-configurable.
 - **Error propagation** — All errors (API call failure) propagate back to content script via `sendResponse({success:false, error})` for UI display.
 - **Responses API output structure** — `/v1/responses` `output` array can have mixed types (e.g. `reasoning` + `message`). Must find entry with `item.type === 'message'` to read `content[0].text`. Don't assume `output[0]` is the answer.
+- **Advanced request JSON overrides** — Configs store `customHeadersJson` and `customBodyJson` strings, not key/value row arrays. `background/request-overrides.js` parses them as JSON objects and deep-merges them after the default headers/body are built. Objects merge recursively, arrays and primitives replace existing values, and `null` deletes a field. Invalid JSON must surface as a normal `sendResponse({success:false, error})` failure.
 - **Config management** — Configs stored in `chrome.storage.local` (survives SW restart). Users add/edit/delete configs via the ⚙️ button in the panel footer. `addConfig` auto-selects the new config (`selected: true`). Deleting the selected config shifts selection to the first remaining.
-- **Config message actions** — Content↔background CRUD: `getConfigs` (list all), `getConfig` (single by id, auto-defaults `apiMode` for old data), `setActiveConfig` (sets `selected: true` on one, false on others), `addConfig` (pushes new item with `selected: true`), `editConfig` (updates name/url/model/apiKey/apiMode), `deleteConfig` (removes, shifts selection if deleted was selected).
+- **Config message actions** — Content↔background CRUD: `getConfigs` (list all), `getConfig` (single by id, auto-defaults `apiMode`, `customHeadersJson`, `customBodyJson`), `setActiveConfig` (sets `selected: true` on one, false on others), `addConfig` (pushes new item with `selected: true`), `editConfig` (updates name/url/model/apiKey/apiMode/customHeadersJson/customBodyJson), `deleteConfig` (removes, shifts selection if deleted was selected).
 - **Config view inline handlers** — Config list is rendered as Preact VDOM, so click handlers use inline Preact event bindings (`onClick=${handler}`) with `stopPropagation()` on edit/delete buttons. No delegation needed.
 - **Preact + htm** — `import htm from 'htm'` + `const html = htm.bind(h)` provides tagged-template syntax instead of JSX. No JSX transform needed in esbuild. `useState`, `useEffect` from `'preact/hooks'`.
 - **Hooks without destructuring** — Codebase uses `var` (not `const/let`) and avoids destructuring. Hooks pattern: `var _a = useState(initial), value = _a[0], setValue = _a[1]`. Don't use `const [value, setValue] = useState()`.

@@ -1,5 +1,5 @@
-// 加载配置、上传模块和 AI 查询模块（MV3 不支持 ES Module，用 importScripts 合并）
-importScripts('query-ai.js');
+// 加载配置、请求覆盖和 AI 查询模块（MV3 不支持 ES Module，用 importScripts 合并）
+importScripts('request-overrides.js', 'query-ai.js');
 
 // 用于取消进行中的 AI 识别请求
 var currentAbortController = null;
@@ -101,12 +101,8 @@ async function getActiveConfig() {
       if (!selected.apiMode) {
         selected.apiMode = 'chat-completions';
       }
-      if (!selected.customHeaders) {
-        selected.customHeaders = [];
-      }
-      if (!selected.customBodyFields) {
-        selected.customBodyFields = [];
-      }
+      if (selected.customHeadersJson === undefined) selected.customHeadersJson = '';
+      if (selected.customBodyJson === undefined) selected.customBodyJson = '';
       return selected;
     }
     throw new Error('请先点击 ⚙️ 选择 AI 配置');
@@ -285,8 +281,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         model: request.config.model,
         apiKey: request.config.apiKey,
         apiMode: request.config.apiMode || 'chat-completions',
-        customHeaders: request.config.customHeaders || [],
-        customBodyFields: request.config.customBodyFields || [],
+        customHeadersJson: request.config.customHeadersJson || '',
+        customBodyJson: request.config.customBodyJson || '',
         selected: true,
         id: 'cfg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)
       });
@@ -333,8 +329,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // 为旧数据提供默认值
         var result = Object.assign({}, found, {
           apiMode: found.apiMode || 'chat-completions',
-          customHeaders: found.customHeaders || [],
-          customBodyFields: found.customBodyFields || []
+          customHeadersJson: found.customHeadersJson || '',
+          customBodyJson: found.customBodyJson || ''
         });
         sendResponse({ success: true, config: result });
       } else {
@@ -373,8 +369,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       target.model = request.config.model;
       target.apiKey = request.config.apiKey;
       target.apiMode = request.config.apiMode || 'chat-completions';
-      target.customHeaders = request.config.customHeaders || [];
-      target.customBodyFields = request.config.customBodyFields || [];
+      target.customHeadersJson = request.config.customHeadersJson || '';
+      target.customBodyJson = request.config.customBodyJson || '';
       await chrome.storage.local.set({ configList });
       sendResponse({ success: true });
     })().catch(function (error) {
