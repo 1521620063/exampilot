@@ -10,6 +10,7 @@ import { useState, useEffect, useRef } from 'preact/hooks';
 import htm from 'htm';
 
 const html = htm.bind(h);
+var __permissionHandler = null;
 
 function sanitizeAnswerHtml(value) {
   var template = document.createElement('template');
@@ -98,7 +99,6 @@ export function mountPanel(host) {
     var _w = useState(false), selectingRegion = _w[0], setSelectingRegion = _w[1];
     var overlayElRef = useRef(null);
 
-    // ---- 共享响应处理（消除全屏识别和区域识别的重复逻辑）----
     function handleCaptureResponse(response, mySeq) {
       if (mySeq !== currentRequestSeqRef.current) return;
       if (!response.success) {
@@ -319,6 +319,11 @@ export function mountPanel(host) {
 
     function showApiHostPermissionFrame(origin) {
       return new Promise(function (resolve) {
+        if (__permissionHandler) {
+          window.removeEventListener('message', __permissionHandler);
+          __permissionHandler = null;
+        }
+
         var old = document.getElementById('exmp-permission-overlay');
         if (old && old.parentNode) {
           old.parentNode.removeChild(old);
@@ -373,6 +378,7 @@ export function mountPanel(host) {
 
         function cleanup(result) {
           window.removeEventListener('message', handleMessage);
+          __permissionHandler = null;
           if (overlay.parentNode) {
             overlay.parentNode.removeChild(overlay);
           }
@@ -394,6 +400,7 @@ export function mountPanel(host) {
             cleanup(false);
           }
         });
+        __permissionHandler = handleMessage;
         window.addEventListener('message', handleMessage);
 
         frameWrap.appendChild(closeBtn);
@@ -445,7 +452,7 @@ export function mountPanel(host) {
       });
     }
 
-    function isPlainJsonObject(value) {
+    function isPlainObject(value) {
       return Object.prototype.toString.call(value) === '[object Object]';
     }
 
@@ -455,15 +462,15 @@ export function mountPanel(host) {
     }
 
     function mergeJsonOverride(base, override) {
-      var result = isPlainJsonObject(base) ? cloneJson(base) : {};
-      var patch = isPlainJsonObject(override) ? override : {};
+      var result = isPlainObject(base) ? cloneJson(base) : {};
+      var patch = isPlainObject(override) ? override : {};
       Object.keys(patch).forEach(function (key) {
         var value = patch[key];
         if (value === null) {
           delete result[key];
           return;
         }
-        if (isPlainJsonObject(value) && isPlainJsonObject(result[key])) {
+        if (isPlainObject(value) && isPlainObject(result[key])) {
           result[key] = mergeJsonOverride(result[key], value);
           return;
         }
@@ -472,7 +479,7 @@ export function mountPanel(host) {
       return result;
     }
 
-    function parseJsonObjectInput(rawValue, label) {
+    function parseJsonObjectOverride(rawValue, label) {
       var text = (rawValue || '').trim();
       if (!text) return {};
       var parsed;
@@ -481,7 +488,7 @@ export function mountPanel(host) {
       } catch (err) {
         throw new Error(label + ' 不是有效的 JSON: ' + (err.message || String(err)));
       }
-      if (!isPlainJsonObject(parsed)) {
+      if (!isPlainObject(parsed)) {
         throw new Error(label + ' 必须是 JSON 对象');
       }
       return parsed;
@@ -513,7 +520,7 @@ export function mountPanel(host) {
       } else {
         previewHeaders['Authorization'] = formKey ? 'Bearer ' + formKey : '(未设置)';
       }
-      return maskPreviewHeaders(mergeJsonOverride(previewHeaders, parseJsonObjectInput(formHeadersJson, 'Headers JSON')));
+      return maskPreviewHeaders(mergeJsonOverride(previewHeaders, parseJsonObjectOverride(formHeadersJson, 'Headers JSON')));
     }
 
     function buildPreviewBody() {
@@ -525,7 +532,7 @@ export function mountPanel(host) {
       } else {
         previewBody.messages = [{ role: 'user', content: [{ type: 'image_url', image_url: { url: '<base64_image>' } }, { type: 'text', text: '<prompt>' }] }];
       }
-      return mergeJsonOverride(previewBody, parseJsonObjectInput(formBodyJson, 'Body JSON'));
+      return mergeJsonOverride(previewBody, parseJsonObjectOverride(formBodyJson, 'Body JSON'));
     }
 
     function saveForm() {
@@ -534,8 +541,8 @@ export function mountPanel(host) {
       setConfigSaving(true);
 
       try {
-        parseJsonObjectInput(formHeadersJson, 'Headers JSON');
-        parseJsonObjectInput(formBodyJson, 'Body JSON');
+        parseJsonObjectOverride(formHeadersJson, 'Headers JSON');
+        parseJsonObjectOverride(formBodyJson, 'Body JSON');
       } catch (error) {
         setFormError(error.message || String(error));
         setConfigSaving(false);
@@ -554,17 +561,12 @@ export function mountPanel(host) {
         if (!res.granted) {
           setFormError('需要先授权访问 ' + res.origin + '。请在当前页面完成授权。');
           return showApiHostPermissionFrame(res.origin).then(function (granted) {
-            if (!granted) {
-              return { success: true, pendingPermission: true };
+            if (granted) {
+              return saveConfigPayload(payload);
             }
-            return saveConfigPayload(payload).then(function () {
-              return { success: true, pendingPermission: true };
-            });
           });
         }
         return saveConfigPayload(payload);
-      }).then(function (res) {
-        if (!res || res.pendingPermission) return;
       }).catch(function (error) {
         setFormError(error.message || String(error));
       }).then(function () {
@@ -572,8 +574,6 @@ export function mountPanel(host) {
       });
     }
 
-    // ---- Capture handlers ----
-    // 全屏识别：逻辑与原有 handleStartCapture 一致
     function handleFullscreenCapture() {
       currentRequestSeqRef.current++;
       var mySeq = currentRequestSeqRef.current;
@@ -594,7 +594,6 @@ export function mountPanel(host) {
       });
     }
 
-    // 区域识别：隐藏面板，进入区域选择模式
     function handleRegionCapture() {
       currentRequestSeqRef.current++;
       var mySeq = currentRequestSeqRef.current;
@@ -626,7 +625,6 @@ export function mountPanel(host) {
       chrome.runtime.sendMessage({ action: 'cancelCapture' }).catch(function () {});
     }
 
-    // 取消区域选择，恢复面板
     function cancelRegionSelection() {
       setSelectingRegion(false);
       removeRegionOverlay();
@@ -644,11 +642,9 @@ export function mountPanel(host) {
       overlayElRef.current = null;
     }
 
-    // 鼠标按下：记录选区起点，显示选区矩形框
     function handleSelectionMouseDown(e) {
       e.preventDefault();
       e.stopPropagation();
-      // 直接操作 overlay 内的矩形框 DOM
       if (overlayElRef.current) {
         var box = overlayElRef.current.querySelector('.exmp-selection-box');
         if (box) {
@@ -664,7 +660,6 @@ export function mountPanel(host) {
       }
     }
 
-    // 鼠标移动：更新选区矩形框
     function handleSelectionMouseMove(e) {
       if (!overlayElRef.current) return;
       var box = overlayElRef.current.querySelector('.exmp-selection-box');
@@ -679,7 +674,6 @@ export function mountPanel(host) {
       box.style.height = h + 'px';
     }
 
-    // 鼠标松开：确认选区并开始识别
     function handleSelectionMouseUp(e) {
       if (!overlayElRef.current) {
         cancelRegionSelection();
@@ -698,11 +692,9 @@ export function mountPanel(host) {
         dpr: window.devicePixelRatio || 1
       };
 
-      // 清理选区状态，遮罩由 useEffect 清理
       setSelectingRegion(false);
       removeRegionOverlay();
 
-      // 检查最小尺寸
       var MIN_SIZE = 20;
       if (rect.width < MIN_SIZE || rect.height < MIN_SIZE) {
         setStatusText('');
@@ -712,11 +704,9 @@ export function mountPanel(host) {
         return;
       }
 
-      // 恢复面板
       host.style.display = '';
       hiddenByUserRef.current = false;
 
-      // 发起带裁剪坐标的识别请求
       currentRequestSeqRef.current++;
       var mySeq = currentRequestSeqRef.current;
       setCapturing(true);

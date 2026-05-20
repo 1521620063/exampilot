@@ -28,9 +28,11 @@ test('background handles explicit cancellation', function () {
 });
 
 test('API URL validation rejects non-HTTPS endpoints', function () {
-  var source = read('background/query-ai.js');
-  assert.match(source, /validateApiUrl/);
-  assert.match(source, /url\.protocol !== 'https:'/);
+  var requestOverrides = read('background/request-overrides.js');
+  assert.match(requestOverrides, /validateHttpsUrl/);
+  assert.match(requestOverrides, /url\.protocol !== 'https:'/);
+  var queryAi = read('background/query-ai.js');
+  assert.match(queryAi, /validateHttpsUrl\(url\)\.toString\(\)/);
 });
 
 test('package manifest uses optional host permissions for API hosts', function () {
@@ -52,6 +54,11 @@ test('permission request happens from extension page click handler', function ()
   assert.match(source, /authorizeBtn\.addEventListener\('click'/);
   assert.match(source, /chrome\.permissions\.request/);
   assert.match(source, /window\.parent\.postMessage/);
+});
+
+test('extension pages do not use inline scripts blocked by MV3 CSP', function () {
+  var source = read('permission/host-permission.html');
+  assert.doesNotMatch(source, /<script(?![^>]*\bsrc=)[^>]*>/i);
 });
 
 test('build copies the permission grant page', function () {

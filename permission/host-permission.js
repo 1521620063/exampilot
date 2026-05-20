@@ -6,6 +6,10 @@
   var statusEl = document.getElementById('status');
   var authorizeBtn = document.getElementById('authorize');
 
+  if (embedded) {
+    document.body.className = 'embedded';
+  }
+
   function setStatus(message, type) {
     statusEl.textContent = message;
     statusEl.className = type || '';

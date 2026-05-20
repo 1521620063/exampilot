@@ -54,12 +54,31 @@
     };
   }
 
+  /**
+   * 解析并验证 HTTPS URL，返回 URL 对象供调用方按需使用。
+   * 合并 query-ai.js 的 validateApiUrl 和 background/index.js 的 apiUrlToPermissionPattern 中的重复逻辑。
+   */
+  function validateHttpsUrl(rawUrl) {
+    var url;
+    try {
+      url = new URL(rawUrl);
+    } catch (_) {
+      throw new Error('接口地址无效，请填写完整的 HTTPS URL');
+    }
+    if (url.protocol !== 'https:') {
+      throw new Error('接口地址必须使用 HTTPS，避免截图和 API Key 明文传输');
+    }
+    return url;
+  }
+
+  root.validateHttpsUrl = validateHttpsUrl;
   root.mergeJsonOverride = mergeJsonOverride;
   root.parseJsonObjectOverride = parseJsonObjectOverride;
   root.applyRequestOverrides = applyRequestOverrides;
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
+      validateHttpsUrl: validateHttpsUrl,
       mergeJsonOverride: mergeJsonOverride,
       parseJsonObjectOverride: parseJsonObjectOverride,
       applyRequestOverrides: applyRequestOverrides

@@ -1,7 +1,6 @@
 // 加载配置、请求覆盖和 AI 查询模块（MV3 不支持 ES Module，用 importScripts 合并）
 importScripts('request-overrides.js', 'query-ai.js');
 
-// 用于取消进行中的 AI 识别请求
 var currentAbortController = null;
 
 // 点击扩展图标时注入内容脚本（activeTab 策略，不再需要 <all_urls> 权限）
@@ -53,20 +52,8 @@ function autoSelectFallback(list) {
   }
 }
 
-/**
- * 将用户填写的 API 地址转换为 Chrome host permission match pattern。
- * Chrome match pattern 不包含端口，授权粒度按 HTTPS 主机名控制。
- */
 function apiUrlToPermissionPattern(rawUrl) {
-  var url;
-  try {
-    url = new URL(rawUrl);
-  } catch (_) {
-    throw new Error('接口地址无效，请填写完整的 HTTPS URL');
-  }
-  if (url.protocol !== 'https:') {
-    throw new Error('接口地址必须使用 HTTPS，避免截图和 API Key 明文传输');
-  }
+  var url = validateHttpsUrl(rawUrl);
   return url.protocol + '//' + url.hostname + '/*';
 }
 
@@ -108,6 +95,21 @@ async function getActiveConfig() {
     throw new Error('请先点击 ⚙️ 选择 AI 配置');
   }
   throw new Error('请先点击 ⚙️ 添加 AI 配置');
+}
+
+/**
+ * 包装后台消息处理器的异步操作，统一处理成功/失败响应。
+ * 消除每个消息处理器中的重复 catch(sendResponse) 样板代码。
+ */
+function asyncHandler(fn) {
+  return function (request, sender, sendResponse) {
+    Promise.resolve(fn(request, sender)).then(function (result) {
+      sendResponse(result);
+    }).catch(function (error) {
+      sendResponse({ success: false, error: error.message || String(error) });
+    });
+    return true;
+  };
 }
 
 // 启动时初始化 / 迁移配置
@@ -242,13 +244,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // ====== 配置管理操作 ======
 
   if (request.action === 'checkApiHostPermission') {
-    (async () => {
-      var status = await checkApiHostPermission(request.url);
-      sendResponse({ success: true, origin: status.origin, granted: status.granted });
-    })().catch(function (error) {
-      sendResponse({ success: false, error: error.message || String(error) });
-    });
-    return true;
+    return asyncHandler(function (req) {
+      return checkApiHostPermission(req.url).then(function (status) {
+        return { success: true, origin: status.origin, granted: status.granted };
+      });
+    })(request, sender, sendResponse);
   }
 
   if (request.action === 'getConfigs') {
@@ -259,87 +259,71 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === 'setActiveConfig') {
-    (async () => {
+    return asyncHandler(async function (req) {
       const { configList = [] } = await chrome.storage.local.get('configList');
-      configList.forEach(function (c) { c.selected = (c.id === request.configId); });
+      configList.forEach(function (c) { c.selected = (c.id === req.configId); });
       await chrome.storage.local.set({ configList });
-      sendResponse({ success: true });
-    })().catch(function (error) {
-      sendResponse({ success: false, error: error.message || String(error) });
-    });
-    return true;
+      return { success: true };
+    })(request, sender, sendResponse);
   }
 
   if (request.action === 'addConfig') {
-    (async () => {
+    return asyncHandler(async function (req) {
       const { configList = [] } = await chrome.storage.local.get('configList');
-      // 取消全部选中，新配置将作为当前使用
       configList.forEach(function (c) { c.selected = false; });
       configList.push({
-        name: request.config.name,
-        url: request.config.url,
-        model: request.config.model,
-        apiKey: request.config.apiKey,
-        apiMode: request.config.apiMode || 'chat-completions',
-        customHeadersJson: request.config.customHeadersJson || '',
-        customBodyJson: request.config.customBodyJson || '',
+        name: req.config.name,
+        url: req.config.url,
+        model: req.config.model,
+        apiKey: req.config.apiKey,
+        apiMode: req.config.apiMode || 'chat-completions',
+        customHeadersJson: req.config.customHeadersJson || '',
+        customBodyJson: req.config.customBodyJson || '',
         selected: true,
         id: 'cfg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)
       });
       await chrome.storage.local.set({ configList });
-      sendResponse({ success: true });
-    })().catch(function (error) {
-      sendResponse({ success: false, error: error.message || String(error) });
-    });
-    return true;
+      return { success: true };
+    })(request, sender, sendResponse);
   }
 
   if (request.action === 'deleteConfig') {
-    (async () => {
+    return asyncHandler(async function (req) {
       const { configList = [] } = await chrome.storage.local.get('configList');
       var deletedWasSelected = false;
       var idx = -1;
       configList.forEach(function (c, i) {
-        if (c.id === request.configId) {
+        if (c.id === req.configId) {
           deletedWasSelected = c.selected;
           idx = i;
         }
       });
       if (idx === -1) {
-        sendResponse({ success: false, error: '配置未找到' });
-        return;
+        return { success: false, error: '配置未找到' };
       }
       configList.splice(idx, 1);
       if (deletedWasSelected && configList.length > 0) {
         configList[0].selected = true;
       }
       await chrome.storage.local.set({ configList });
-      sendResponse({ success: true, configList: configList });
-    })().catch(function (error) {
-      sendResponse({ success: false, error: error.message || String(error) });
-    });
-    return true;
+      return { success: true, configList: configList };
+    })(request, sender, sendResponse);
   }
 
   if (request.action === 'getConfig') {
-    (async () => {
+    return asyncHandler(async function (req) {
       const { configList = [] } = await chrome.storage.local.get('configList');
-      var found = configList.find(function (c) { return c.id === request.configId; });
+      var found = configList.find(function (c) { return c.id === req.configId; });
       if (found) {
-        // 为旧数据提供默认值
         var result = Object.assign({}, found, {
           apiMode: found.apiMode || 'chat-completions',
           customHeadersJson: found.customHeadersJson || '',
           customBodyJson: found.customBodyJson || ''
         });
-        sendResponse({ success: true, config: result });
-      } else {
-        sendResponse({ success: false, config: null });
+        return { success: true, config: result };
       }
-    })().catch(function (error) {
-      sendResponse({ success: false, error: error.message || String(error), config: null });
-    });
-    return true;
+      return { success: false, config: null };
+    })(request, sender, sendResponse);
   }
 
   if (request.action === 'getPrompt') {
@@ -357,25 +341,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === 'editConfig') {
-    (async () => {
+    return asyncHandler(async function (req) {
       const { configList = [] } = await chrome.storage.local.get('configList');
-      var target = configList.find(function (c) { return c.id === request.configId; });
+      var target = configList.find(function (c) { return c.id === req.configId; });
       if (!target) {
-        sendResponse({ success: false, error: '配置未找到' });
-        return;
+        return { success: false, error: '配置未找到' };
       }
-      target.name = request.config.name;
-      target.url = request.config.url;
-      target.model = request.config.model;
-      target.apiKey = request.config.apiKey;
-      target.apiMode = request.config.apiMode || 'chat-completions';
-      target.customHeadersJson = request.config.customHeadersJson || '';
-      target.customBodyJson = request.config.customBodyJson || '';
+      target.name = req.config.name;
+      target.url = req.config.url;
+      target.model = req.config.model;
+      target.apiKey = req.config.apiKey;
+      target.apiMode = req.config.apiMode || 'chat-completions';
+      target.customHeadersJson = req.config.customHeadersJson || '';
+      target.customBodyJson = req.config.customBodyJson || '';
       await chrome.storage.local.set({ configList });
-      sendResponse({ success: true });
-    })().catch(function (error) {
-      sendResponse({ success: false, error: error.message || String(error) });
-    });
-    return true;
+      return { success: true };
+    })(request, sender, sendResponse);
   }
 });
