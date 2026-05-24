@@ -82,6 +82,22 @@ test('advanced request overrides replace key value custom fields', function () {
 }
 );
 
+test('custom template API mode is wired through background and UI', function () {
+  var background = read('background/index.js');
+  var queryAi = read('background/query-ai.js');
+  var ui = read('content/ui.js');
+
+  assert.match(queryAi, /mode === 'custom-template'/);
+  assert.match(queryAi, /callCustomTemplateAPI/);
+  assert.match(background, /templateHeadersJson/);
+  assert.match(background, /templateBodyJson/);
+  assert.match(background, /templateResponseText/);
+  assert.match(ui, /value="custom-template"/);
+  assert.match(ui, /Headers 模板/);
+  assert.match(ui, /Body 模板/);
+  assert.match(ui, /响应模板/);
+});
+
 test('AI calls verify host permission before network fetch', function () {
   var source = read('background/query-ai.js');
   assert.match(source, /assertApiHostPermission\(config\.url\)/);

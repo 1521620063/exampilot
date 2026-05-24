@@ -20,7 +20,7 @@ execSync(
 
 // 3. Build background files
 execSync(
-  `npx esbuild background/index.js background/request-overrides.js background/query-ai.js ${minifyCli} --outdir=dist/chrome/background --outbase=background`,
+  `npx esbuild background/index.js background/template-engine.js background/request-overrides.js background/query-ai.js ${minifyCli} --outdir=dist/chrome/background --outbase=background`,
   { cwd: root, stdio: 'inherit' }
 );
 

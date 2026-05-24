@@ -1,5 +1,4 @@
-// 加载配置、请求覆盖和 AI 查询模块（MV3 不支持 ES Module，用 importScripts 合并）
-importScripts('request-overrides.js', 'query-ai.js');
+importScripts('template-engine.js', 'request-overrides.js', 'query-ai.js');
 
 var currentAbortController = null;
 
@@ -90,6 +89,9 @@ async function getActiveConfig() {
       }
       if (selected.customHeadersJson === undefined) selected.customHeadersJson = '';
       if (selected.customBodyJson === undefined) selected.customBodyJson = '';
+      if (selected.templateHeadersJson === undefined) selected.templateHeadersJson = '';
+      if (selected.templateBodyJson === undefined) selected.templateBodyJson = '';
+      if (selected.templateResponseText === undefined) selected.templateResponseText = '';
       return selected;
     }
     throw new Error('请先点击 ⚙️ 选择 AI 配置');
@@ -279,6 +281,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         apiMode: req.config.apiMode || 'chat-completions',
         customHeadersJson: req.config.customHeadersJson || '',
         customBodyJson: req.config.customBodyJson || '',
+        templateHeadersJson: req.config.templateHeadersJson || '',
+        templateBodyJson: req.config.templateBodyJson || '',
+        templateResponseText: req.config.templateResponseText || '',
         selected: true,
         id: 'cfg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)
       });
@@ -318,7 +323,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         var result = Object.assign({}, found, {
           apiMode: found.apiMode || 'chat-completions',
           customHeadersJson: found.customHeadersJson || '',
-          customBodyJson: found.customBodyJson || ''
+          customBodyJson: found.customBodyJson || '',
+          templateHeadersJson: found.templateHeadersJson || '',
+          templateBodyJson: found.templateBodyJson || '',
+          templateResponseText: found.templateResponseText || ''
         });
         return { success: true, config: result };
       }
@@ -354,6 +362,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       target.apiMode = req.config.apiMode || 'chat-completions';
       target.customHeadersJson = req.config.customHeadersJson || '';
       target.customBodyJson = req.config.customBodyJson || '';
+      target.templateHeadersJson = req.config.templateHeadersJson || '';
+      target.templateBodyJson = req.config.templateBodyJson || '';
+      target.templateResponseText = req.config.templateResponseText || '';
       await chrome.storage.local.set({ configList });
       return { success: true };
     })(request, sender, sendResponse);

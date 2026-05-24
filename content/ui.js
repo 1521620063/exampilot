@@ -8,6 +8,7 @@
 import { render, h } from 'preact';
 import { useState, useEffect, useRef } from 'preact/hooks';
 import htm from 'htm';
+import '../background/template-engine.js';
 
 const html = htm.bind(h);
 var __permissionHandler = null;
@@ -87,8 +88,12 @@ export function mountPanel(host) {
     var _o = useState(false), promptSaving = _o[0], setPromptSaving = _o[1];
     var _p = useState(''), formHeadersJson = _p[0], setFormHeadersJson = _p[1];
     var _q = useState(''), formBodyJson = _q[0], setFormBodyJson = _q[1];
+    var templateHeadersState = useState(''), formTemplateHeadersJson = templateHeadersState[0], setFormTemplateHeadersJson = templateHeadersState[1];
+    var templateBodyState = useState(''), formTemplateBodyJson = templateBodyState[0], setFormTemplateBodyJson = templateBodyState[1];
+    var templateResponseState = useState(''), formTemplateResponseText = templateResponseState[0], setFormTemplateResponseText = templateResponseState[1];
     var _r = useState(false), showHeadersSection = _r[0], setShowHeadersSection = _r[1];
     var _s = useState(false), showBodySection = _s[0], setShowBodySection = _s[1];
+    var responseSectionState = useState(false), showResponseSection = responseSectionState[0], setShowResponseSection = responseSectionState[1];
     var _t = useState(false), showPreview = _t[0], setShowPreview = _t[1];
     var _u = useState(''), formError = _u[0], setFormError = _u[1];
     var _v = useState(false), configSaving = _v[0], setConfigSaving = _v[1];
@@ -280,8 +285,12 @@ export function mountPanel(host) {
       setFormMode('chat-completions');
       setFormHeadersJson('');
       setFormBodyJson('');
+      setFormTemplateHeadersJson('');
+      setFormTemplateBodyJson('');
+      setFormTemplateResponseText('');
       setShowHeadersSection(false);
       setShowBodySection(false);
+      setShowResponseSection(false);
       setShowPreview(false);
       setFormError('');
       setShowForm(true);
@@ -298,8 +307,12 @@ export function mountPanel(host) {
           setFormMode(res.config.apiMode || 'chat-completions');
           setFormHeadersJson(res.config.customHeadersJson || '');
           setFormBodyJson(res.config.customBodyJson || '');
-          setShowHeadersSection(false);
-          setShowBodySection(false);
+          setFormTemplateHeadersJson(res.config.templateHeadersJson || (res.config.apiMode === 'custom-template' ? getDefaultTemplateHeadersJson() : ''));
+          setFormTemplateBodyJson(res.config.templateBodyJson || (res.config.apiMode === 'custom-template' ? getDefaultTemplateBodyJson() : ''));
+          setFormTemplateResponseText(res.config.templateResponseText || (res.config.apiMode === 'custom-template' ? getDefaultTemplateResponseText() : ''));
+          setShowHeadersSection(res.config.apiMode === 'custom-template');
+          setShowBodySection(res.config.apiMode === 'custom-template');
+          setShowResponseSection(res.config.apiMode === 'custom-template');
           setShowPreview(false);
           setFormError('');
           setShowForm(true);
@@ -494,6 +507,20 @@ export function mountPanel(host) {
       return parsed;
     }
 
+    function buildTemplatePreviewContext() {
+      return {
+        model: formModel || '(未设置)',
+        apiKey: formKey ? '<api_key>' : '',
+        apiKeyBearer: formKey ? 'Bearer <api_key>' : '',
+        prompt: '<prompt>',
+        imageUrl: '<base64_image_url>',
+        imageBase64: '<base64_image>',
+        base64Image: '<base64_image>',
+        imageMimeType: 'image/jpeg',
+        mimeType: 'image/jpeg'
+      };
+    }
+
     function maskPreviewHeaders(headers) {
       var masked = {};
       Object.keys(headers).forEach(function (key) {
@@ -512,6 +539,13 @@ export function mountPanel(host) {
     }
 
     function buildPreviewHeaders() {
+      if (formMode === 'custom-template') {
+        return maskPreviewHeaders(renderJsonObjectTemplate(
+          formTemplateHeadersJson || getDefaultTemplateHeadersJson(),
+          buildTemplatePreviewContext(),
+          'Headers 模板'
+        ));
+      }
       var previewHeaders = {
         'Content-Type': 'application/json'
       };
@@ -524,6 +558,13 @@ export function mountPanel(host) {
     }
 
     function buildPreviewBody() {
+      if (formMode === 'custom-template') {
+        return renderJsonTemplate(
+          formTemplateBodyJson || getDefaultTemplateBodyJson(),
+          buildTemplatePreviewContext(),
+          'Body 模板'
+        );
+      }
       var previewBody = { model: formModel || '(未设置)' };
       if (formMode === 'responses-api') {
         previewBody.input = [{ role: 'user', content: [{ type: 'input_image', image_url: '<base64_image>' }, { type: 'input_text', text: '<prompt>' }] }];
@@ -536,13 +577,29 @@ export function mountPanel(host) {
     }
 
     function saveForm() {
-      if (!formName || !formUrl || !formModel || !formKey) return;
       setFormError('');
+      if (!formName || !formUrl) {
+        setFormError('请填写配置名称和接口地址');
+        return;
+      }
+      if (formMode !== 'custom-template' && (!formModel || !formKey)) {
+        setFormError('请填写模型名称和 API Key');
+        return;
+      }
       setConfigSaving(true);
 
       try {
-        parseJsonObjectOverride(formHeadersJson, 'Headers JSON');
-        parseJsonObjectOverride(formBodyJson, 'Body JSON');
+        if (formMode === 'custom-template') {
+          var previewContext = buildTemplatePreviewContext();
+          renderJsonObjectTemplate(formTemplateHeadersJson || getDefaultTemplateHeadersJson(), previewContext, 'Headers 模板');
+          renderJsonTemplate(formTemplateBodyJson || getDefaultTemplateBodyJson(), previewContext, 'Body 模板');
+          if (!(formTemplateResponseText || getDefaultTemplateResponseText()).trim()) {
+            throw new Error('响应模板不能为空');
+          }
+        } else {
+          parseJsonObjectOverride(formHeadersJson, 'Headers JSON');
+          parseJsonObjectOverride(formBodyJson, 'Body JSON');
+        }
       } catch (error) {
         setFormError(error.message || String(error));
         setConfigSaving(false);
@@ -550,9 +607,21 @@ export function mountPanel(host) {
       }
 
       var action = editingId ? 'editConfig' : 'addConfig';
+      var configPayload = {
+        name: formName,
+        url: formUrl,
+        model: formModel,
+        apiKey: formKey,
+        apiMode: formMode,
+        customHeadersJson: formHeadersJson,
+        customBodyJson: formBodyJson,
+        templateHeadersJson: formTemplateHeadersJson,
+        templateBodyJson: formTemplateBodyJson,
+        templateResponseText: formTemplateResponseText
+      };
       var payload = editingId
-        ? { action: action, configId: editingId, config: { name: formName, url: formUrl, model: formModel, apiKey: formKey, apiMode: formMode, customHeadersJson: formHeadersJson, customBodyJson: formBodyJson } }
-        : { action: action, config: { name: formName, url: formUrl, model: formModel, apiKey: formKey, apiMode: formMode, customHeadersJson: formHeadersJson, customBodyJson: formBodyJson } };
+        ? { action: action, configId: editingId, config: configPayload }
+        : { action: action, config: configPayload };
 
       checkApiHostPermission(formUrl).then(function (res) {
         if (!res.success) {
@@ -778,7 +847,7 @@ export function mountPanel(host) {
           box-sizing: border-box !important;
         }
         .exmp-panel {
-          width: 360px;
+          width: 370px;
           max-height: min(520px, 60vh);
           background: #ffffff;
           border-radius: 14px;
@@ -975,6 +1044,26 @@ export function mountPanel(host) {
           margin-top: 6px;
         }
         .exmp-config-form label:first-child { margin-top: 0; }
+        .exmp-section-toggle {
+          width: 100%;
+          padding: 0;
+          border: none;
+          background: transparent;
+          color: #667085;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          font-family: inherit;
+          font-size: 11px;
+          font-weight: 600;
+          text-align: left;
+        }
+        .exmp-section-toggle:focus-visible {
+          outline: 2px solid #4f6ef7;
+          outline-offset: 2px;
+          border-radius: 4px;
+        }
         .exmp-config-form input {
           width: 100%;
           padding: 6px 8px;
@@ -1047,11 +1136,19 @@ export function mountPanel(host) {
                 <div class="exmp-config-empty">暂无配置，请点击下方按钮添加</div>
               ` : configList.map(function (cfg) {
                 var urlShort = (cfg.url || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-                var modeLabel = cfg.apiMode === 'responses-api' ? 'Responses API' : cfg.apiMode === 'anthropic' ? 'Anthropic Claude' : 'Chat Completions';
+                var modeLabels = { 'responses-api': 'Responses API', 'anthropic': 'Anthropic Claude', 'custom-template': '自定义模板' };
+                var modeLabel = modeLabels[cfg.apiMode] || 'Chat Completions';
                 var overrideParts = [];
-                if ((cfg.customHeadersJson || '').trim()) overrideParts.push('headers');
-                if ((cfg.customBodyJson || '').trim()) overrideParts.push('body');
+                if (cfg.apiMode === 'custom-template') {
+                  if ((cfg.templateHeadersJson || '').trim()) overrideParts.push('headers');
+                  if ((cfg.templateBodyJson || '').trim()) overrideParts.push('body');
+                  if ((cfg.templateResponseText || '').trim()) overrideParts.push('response');
+                } else {
+                  if ((cfg.customHeadersJson || '').trim()) overrideParts.push('headers');
+                  if ((cfg.customBodyJson || '').trim()) overrideParts.push('body');
+                }
                 var overrideLabel = overrideParts.length ? overrideParts.join('+') : '无';
+                var customLabel = cfg.apiMode === 'custom-template' ? '模板: ' : 'JSON 覆盖: ';
                 return html`
                   <div class="exmp-config-item${cfg.selected ? ' active' : ''}" onClick=${function () { selectConfig(cfg.id); }}>
                     <div class="exmp-config-item-actions">
@@ -1059,7 +1156,7 @@ export function mountPanel(host) {
                       <button class="exmp-config-delete-btn" onClick=${function (e) { e.stopPropagation(); deleteConfig(cfg.id); }}>✕</button>
                     </div>
                     <div class="exmp-config-item-name">${cfg.selected ? '● ' : '○ '}${cfg.name || '未命名'}</div>
-                    <div class="exmp-config-item-detail">模型: ${cfg.model} · 模式: ${modeLabel} · JSON 覆盖: ${overrideLabel} · ${urlShort}</div>
+                    <div class="exmp-config-item-detail">模型: ${cfg.model || '-'} · 模式: ${modeLabel} · ${customLabel}${overrideLabel} · ${urlShort}</div>
                   </div>
                 `;
               })}
@@ -1080,53 +1177,107 @@ export function mountPanel(host) {
                       setFormHeadersJson(JSON.stringify({ 'anthropic-version': '2023-06-01' }, null, 2));
                       setFormBodyJson(JSON.stringify({ max_tokens: 4096 }, null, 2));
                     }
+                    if (newMode === 'custom-template') {
+                      if (!formTemplateHeadersJson.trim()) setFormTemplateHeadersJson(getDefaultTemplateHeadersJson());
+                      if (!formTemplateBodyJson.trim()) setFormTemplateBodyJson(getDefaultTemplateBodyJson());
+                      if (!formTemplateResponseText.trim()) setFormTemplateResponseText(getDefaultTemplateResponseText());
+                      setShowHeadersSection(true);
+                      setShowBodySection(true);
+                      setShowResponseSection(true);
+                    }
                   }}>
                     <option value="chat-completions">OpenAI · Chat Completions</option>
                     <option value="responses-api">OpenAI · Responses API</option>
                     <option value="anthropic">Anthropic · Messages API</option>
+                    <option value="custom-template">自定义模板</option>
                   </select>
                   <label>模型名称</label>
                   <input value=${formModel} onInput=${function (e) { setFormModel(e.target.value); }} placeholder="gpt-4o" />
                   <label>API Key</label>
                   <input value=${formKey} onInput=${function (e) { setFormKey(e.target.value); }} type="password" placeholder="sk-..." />
-                  <!-- Headers JSON override section -->
-                  <div style="margin-top: 8px; border-top: 1px solid #f0f1f3; padding-top: 8px;">
-                    <div style="font-size: 11px; font-weight: 600; color: #667085; cursor: pointer; display: flex; align-items: center; justify-content: space-between;" onClick=${function () { setShowHeadersSection(!showHeadersSection); }}>
-                      <span>Headers JSON 覆盖</span>
-                      <span style="font-size: 10px; color: #98a2b3;">${showHeadersSection ? '收起 ▲' : '展开 ▼'}</span>
+                  ${formMode === 'custom-template' ? html`
+                    <div style="margin-top: 8px; border-top: 1px solid #f0f1f3; padding-top: 8px;">
+                      <button type="button" class="exmp-section-toggle" onClick=${function () { setShowHeadersSection(!showHeadersSection); }}>
+                        <span>Headers 模板</span>
+                        <span style="font-size: 10px; color: #98a2b3;">${showHeadersSection ? '收起 ▲' : '展开 ▼'}</span>
+                      </button>
+                      ${showHeadersSection ? html`
+                        <textarea
+                          value=${formTemplateHeadersJson}
+                          onInput=${function (e) { setFormTemplateHeadersJson(e.target.value); }}
+                          placeholder=${getDefaultTemplateHeadersJson()}
+                          spellcheck="false"
+                          style="width: 100%; margin-top: 6px; min-height: 82px; padding: 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 11px; outline: none; resize: vertical; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.45;"
+                        ></textarea>
+                      ` : ''}
                     </div>
-                    ${showHeadersSection ? html`
-                      <textarea
-                        value=${formHeadersJson}
-                        onInput=${function (e) { setFormHeadersJson(e.target.value); }}
-                        placeholder=${'{\n  "OpenAI-Organization": "org_xxx"\n}'}
-                        spellcheck="false"
-                        style="width: 100%; margin-top: 6px; min-height: 82px; padding: 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 11px; outline: none; resize: vertical; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.45;"
-                      ></textarea>
-                    ` : ''}
-                  </div>
-                  <!-- Body JSON override section -->
-                  <div style="margin-top: 8px; border-top: 1px solid #f0f1f3; padding-top: 8px;">
-                    <div style="font-size: 11px; font-weight: 600; color: #667085; cursor: pointer; display: flex; align-items: center; justify-content: space-between;" onClick=${function () { setShowBodySection(!showBodySection); }}>
-                      <span>Body JSON 覆盖</span>
-                      <span style="font-size: 10px; color: #98a2b3;">${showBodySection ? '收起 ▲' : '展开 ▼'}</span>
+                    <div style="margin-top: 8px; border-top: 1px solid #f0f1f3; padding-top: 8px;">
+                      <button type="button" class="exmp-section-toggle" onClick=${function () { setShowBodySection(!showBodySection); }}>
+                        <span>Body 模板</span>
+                        <span style="font-size: 10px; color: #98a2b3;">${showBodySection ? '收起 ▲' : '展开 ▼'}</span>
+                      </button>
+                      ${showBodySection ? html`
+                        <textarea
+                          value=${formTemplateBodyJson}
+                          onInput=${function (e) { setFormTemplateBodyJson(e.target.value); }}
+                          placeholder=${getDefaultTemplateBodyJson()}
+                          spellcheck="false"
+                          style="width: 100%; margin-top: 6px; min-height: 148px; padding: 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 11px; outline: none; resize: vertical; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.45;"
+                        ></textarea>
+                      ` : ''}
                     </div>
-                    ${showBodySection ? html`
-                      <textarea
-                        value=${formBodyJson}
-                        onInput=${function (e) { setFormBodyJson(e.target.value); }}
-                        placeholder=${'{\n  "temperature": 0,\n  "max_tokens": 4096,\n  "metadata": { "source": "exampilot" }\n}'}
-                        spellcheck="false"
-                        style="width: 100%; margin-top: 6px; min-height: 116px; padding: 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 11px; outline: none; resize: vertical; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.45;"
-                      ></textarea>
-                    ` : ''}
-                  </div>
-                  <!-- Request Preview section -->
+                    <div style="margin-top: 8px; border-top: 1px solid #f0f1f3; padding-top: 8px;">
+                      <button type="button" class="exmp-section-toggle" onClick=${function () { setShowResponseSection(!showResponseSection); }}>
+                        <span>响应模板</span>
+                        <span style="font-size: 10px; color: #98a2b3;">${showResponseSection ? '收起 ▲' : '展开 ▼'}</span>
+                      </button>
+                      ${showResponseSection ? html`
+                        <textarea
+                          value=${formTemplateResponseText}
+                          onInput=${function (e) { setFormTemplateResponseText(e.target.value); }}
+                          placeholder=${getDefaultTemplateResponseText()}
+                          spellcheck="false"
+                          style="width: 100%; margin-top: 6px; min-height: 58px; padding: 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 11px; outline: none; resize: vertical; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.45;"
+                        ></textarea>
+                      ` : ''}
+                    </div>
+                  ` : html`
+                    <div style="margin-top: 8px; border-top: 1px solid #f0f1f3; padding-top: 8px;">
+                      <button type="button" class="exmp-section-toggle" onClick=${function () { setShowHeadersSection(!showHeadersSection); }}>
+                        <span>Headers JSON 覆盖</span>
+                        <span style="font-size: 10px; color: #98a2b3;">${showHeadersSection ? '收起 ▲' : '展开 ▼'}</span>
+                      </button>
+                      ${showHeadersSection ? html`
+                        <textarea
+                          value=${formHeadersJson}
+                          onInput=${function (e) { setFormHeadersJson(e.target.value); }}
+                          placeholder=${'{\n  "OpenAI-Organization": "org_xxx"\n}'}
+                          spellcheck="false"
+                          style="width: 100%; margin-top: 6px; min-height: 82px; padding: 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 11px; outline: none; resize: vertical; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.45;"
+                        ></textarea>
+                      ` : ''}
+                    </div>
+                    <div style="margin-top: 8px; border-top: 1px solid #f0f1f3; padding-top: 8px;">
+                      <button type="button" class="exmp-section-toggle" onClick=${function () { setShowBodySection(!showBodySection); }}>
+                        <span>Body JSON 覆盖</span>
+                        <span style="font-size: 10px; color: #98a2b3;">${showBodySection ? '收起 ▲' : '展开 ▼'}</span>
+                      </button>
+                      ${showBodySection ? html`
+                        <textarea
+                          value=${formBodyJson}
+                          onInput=${function (e) { setFormBodyJson(e.target.value); }}
+                          placeholder=${'{\n  "temperature": 0,\n  "max_tokens": 4096,\n  "metadata": { "source": "exampilot" }\n}'}
+                          spellcheck="false"
+                          style="width: 100%; margin-top: 6px; min-height: 116px; padding: 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 11px; outline: none; resize: vertical; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.45;"
+                        ></textarea>
+                      ` : ''}
+                    </div>
+                  `}
                   <div style="margin-top: 8px; border-top: 1px solid #f0f1f3; padding-top: 8px;">
-                    <div style="font-size: 11px; font-weight: 600; color: #667085; cursor: pointer; display: flex; align-items: center; justify-content: space-between;" onClick=${function () { setShowPreview(!showPreview); }}>
+                    <button type="button" class="exmp-section-toggle" onClick=${function () { setShowPreview(!showPreview); }}>
                       <span>📋 请求预览</span>
                       <span style="font-size: 10px; color: #98a2b3;">${showPreview ? '收起 ▲' : '展开 ▼'}</span>
-                    </div>
+                    </button>
                     ${showPreview ? html`
                       <div style="margin-top: 6px;">
                         <div style="font-size: 10px; font-weight: 600; color: #667085; margin-bottom: 4px;">Headers 预览:</div>
@@ -1152,6 +1303,12 @@ ${function () {
 }()}
                         </pre>
                       </div>
+                      ${formMode === 'custom-template' ? html`
+                        <div style="margin-top: 6px;">
+                          <div style="font-size: 10px; font-weight: 600; color: #667085; margin-bottom: 4px;">响应模板:</div>
+                          <pre style="background: #f5f7fa; border-radius: 6px; padding: 8px; font-size: 10px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin: 0;">${formTemplateResponseText || getDefaultTemplateResponseText()}</pre>
+                        </div>
+                      ` : ''}
                     ` : ''}
                   </div>
                   ${formError ? html`<div class="exmp-config-error">${formError}</div>` : ''}
@@ -1189,7 +1346,7 @@ ${function () {
             ${showSpinner ? html`<span class="exmp-loading"></span>` : ''}${statusText}
           </div>
 
-          <div class="exmp-footer exmp-flex exmp-items-center exmp-justify-between exmp-p-8-14">
+          <div class="exmp-footer exmp-flex exmp-items-center exmp-justify-between exmp-gap-6 exmp-p-8-14">
             <span class="exmp-title">⚡ ExamPilot AI</span>
             <div class="exmp-buttons exmp-flex exmp-items-center exmp-gap-6">
               ${viewState === 'config' ? html`

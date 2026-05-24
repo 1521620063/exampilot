@@ -5,6 +5,7 @@
  *   - chat-completions: OpenAI 兼容的 /v1/chat/completions 接口
  *   - responses-api: OpenAI Responses API (/v1/responses)
  *   - anthropic: Anthropic Messages API (/v1/messages)
+ *   - custom-template: 用户自定义 Headers/Body/响应模板
  *
  * @param {string} imageUrl - 图片 URL（HTTP 地址或 data:image/... base64 均可）
  * @param {string} prompt - 系统提示词（来自用户配置）
@@ -20,6 +21,9 @@ async function queryAI(imageUrl, prompt, signal) {
   }
   if (mode === 'anthropic') {
     return callAnthropicAPI(config, imageUrl, prompt, signal);
+  }
+  if (mode === 'custom-template') {
+    return callCustomTemplateAPI(config, imageUrl, prompt, signal);
   }
   return callChatCompletions(config, imageUrl, prompt, signal);
 }
@@ -68,6 +72,86 @@ async function buildApiError(resp, prefix) {
     return new Error(prefix + ' (' + resp.status + '): ' + detail);
   }
   return new Error(prefix + ' (' + resp.status + ')');
+}
+
+function parseImageDataUrl(imageUrl) {
+  var match = String(imageUrl || '').match(/^data:([^;]+);base64,([\s\S]*)$/);
+  return {
+    imageUrl: imageUrl,
+    imageBase64: match ? match[2] : imageUrl,
+    imageMimeType: match ? match[1] : 'image/jpeg'
+  };
+}
+
+function buildCustomTemplateContext(config, imageUrl, prompt) {
+  var image = parseImageDataUrl(imageUrl);
+  return {
+    model: config.model || '',
+    apiKey: config.apiKey || '',
+    apiKeyBearer: config.apiKey ? 'Bearer ' + config.apiKey : '',
+    prompt: prompt || '',
+    imageUrl: image.imageUrl,
+    imageBase64: image.imageBase64,
+    base64Image: image.imageBase64,
+    imageMimeType: image.imageMimeType,
+    mimeType: image.imageMimeType
+  };
+}
+
+function normalizeTemplateHeaders(headers) {
+  var normalized = {};
+  Object.keys(headers || {}).forEach(function (key) {
+    var value = headers[key];
+    if (value === null || value === undefined) return;
+    normalized[key] = String(value);
+  });
+  return normalized;
+}
+
+/**
+ * 自定义模板调用
+ * Headers/Body 使用 JSON 模板，响应使用 {{path.to.value[0]}} 模板提取。
+ */
+async function callCustomTemplateAPI(config, imageUrl, prompt, signal) {
+  var context = buildCustomTemplateContext(config, imageUrl, prompt);
+  var headers = normalizeTemplateHeaders(renderJsonObjectTemplate(
+    config.templateHeadersJson || getDefaultTemplateHeadersJson(),
+    context,
+    'Headers 模板'
+  ));
+  var body = renderJsonTemplate(
+    config.templateBodyJson || getDefaultTemplateBodyJson(),
+    context,
+    'Body 模板'
+  );
+
+  const resp = await apiFetch(config.url, {
+    method: 'POST',
+    headers: headers,
+    body: JSON.stringify(body),
+    signal: signal
+  });
+
+  if (!resp.ok) {
+    throw await buildApiError(resp, 'API调用失败');
+  }
+
+  var data;
+  try {
+    data = await resp.json();
+  } catch (err) {
+    throw new Error('自定义模板响应不是有效的 JSON: ' + (err.message || String(err)));
+  }
+
+  var content = renderResponseTemplate(
+    config.templateResponseText || getDefaultTemplateResponseText(),
+    data,
+    '响应模板'
+  );
+  if (!content || !String(content).trim()) {
+    throw new Error('AI返回内容为空');
+  }
+  return content;
 }
 
 /**

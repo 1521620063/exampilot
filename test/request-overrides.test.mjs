@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
+const templateEngine = require('../background/template-engine.js');
 const overrides = require('../background/request-overrides.js');
 
 test('mergeJsonOverride recursively merges objects and replaces arrays', function () {
@@ -26,6 +27,77 @@ test('mergeJsonOverride recursively merges objects and replaces arrays', functio
     temperature: 0
   });
   assert.deepEqual(base.messages, [{ role: 'user', content: ['default'] }]);
+});
+
+test('renderJsonTemplate replaces placeholders after JSON parsing', function () {
+  var rendered = templateEngine.renderJsonTemplate(
+    '{ "model": "{{model}}", "messages": [{ "text": "{{prompt}}", "image": "{{imageUrl}}" }] }',
+    {
+      model: 'vision-model',
+      prompt: '题干里有 "引号" 和换行\n也应该安全',
+      imageUrl: 'data:image/jpeg;base64,abc123'
+    },
+    'Body 模板'
+  );
+
+  assert.deepEqual(rendered, {
+    model: 'vision-model',
+    messages: [{
+      text: '题干里有 "引号" 和换行\n也应该安全',
+      image: 'data:image/jpeg;base64,abc123'
+    }]
+  });
+});
+
+test('renderJsonTemplate preserves non-string values for exact placeholders', function () {
+  var rendered = templateEngine.renderJsonTemplate(
+    '{ "max_tokens": "{{limits.maxTokens}}", "metadata": "{{metadata}}" }',
+    {
+      limits: { maxTokens: 4096 },
+      metadata: { source: 'exampilot', tags: ['custom'] }
+    },
+    'Body 模板'
+  );
+
+  assert.deepEqual(rendered, {
+    max_tokens: 4096,
+    metadata: { source: 'exampilot', tags: ['custom'] }
+  });
+});
+
+test('renderJsonObjectTemplate requires a JSON object', function () {
+  assert.throws(
+    function () { templateEngine.renderJsonObjectTemplate('[]', {}, 'Headers 模板'); },
+    /Headers 模板 必须是 JSON 对象/
+  );
+});
+
+test('renderResponseTemplate extracts nested response values', function () {
+  var content = templateEngine.renderResponseTemplate(
+    '{{choices[0].message.content}}',
+    {
+      choices: [{ message: { content: '答案是 42' } }]
+    },
+    '响应模板'
+  );
+
+  assert.equal(content, '答案是 42');
+});
+
+test('renderResponseTemplate supports formatted output and reports missing paths', function () {
+  var content = templateEngine.renderResponseTemplate(
+    '答案：{{output[0].content[0].text}}',
+    {
+      output: [{ content: [{ text: 'A' }] }]
+    },
+    '响应模板'
+  );
+
+  assert.equal(content, '答案：A');
+  assert.throws(
+    function () { templateEngine.renderResponseTemplate('{{missing.value}}', {}, '响应模板'); },
+    /响应模板 变量不存在: missing\.value/
+  );
 });
 
 test('mergeJsonOverride removes fields when override value is null', function () {

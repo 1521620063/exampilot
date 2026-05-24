@@ -1,13 +1,4 @@
 (function (root) {
-  function isPlainObject(value) {
-    return Object.prototype.toString.call(value) === '[object Object]';
-  }
-
-  function cloneJson(value) {
-    if (value === undefined) return undefined;
-    return JSON.parse(JSON.stringify(value));
-  }
-
   function mergeJsonOverride(base, override) {
     var result = isPlainObject(base) ? cloneJson(base) : {};
     var patch = isPlainObject(override) ? override : {};
