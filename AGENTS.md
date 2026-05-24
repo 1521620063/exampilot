@@ -12,7 +12,7 @@ Chrome Extension (Manifest V3) that captures viewport screenshots and analyzes v
 |--------|-----|
 | Install dependencies | `npm install` |
 | Build (esbuild) | `npm run build` |
-| Package build | `npm run build:package` |
+| Package build | `npm run build:package` (cross-platform `cross-env NO_MINIFY=true`) |
 | Test | `npm test` |
 | Load extension | Chrome → Extensions (`chrome://extensions`) → "Load unpacked" → select `dist/chrome` |
 | Reload after changes | `npm run build` then `chrome://extensions` → refresh icon on extension card |
@@ -47,13 +47,14 @@ Content Script                          Background SW
 |------|------|
 | `background/index.js` | Service Worker entry. `importScripts()` loads modules. Routes 'captureAndAnalyze' messages |
 | `background/request-overrides.js` | Parses advanced Headers/Body JSON overrides and deep-merges them into default requests |
-| `background/query-ai.js` | Calls vision LLM API with image URL, returns AI answer. Dispatches to `callChatCompletions()`, `callResponsesAPI()`, or `callAnthropicAPI()` based on `config.apiMode` |
+| `background/query-ai.js` | Calls vision LLM API with image URL, returns AI answer. Dispatches to `callChatCompletions()`, `callResponsesAPI()`, `callAnthropicAPI()`, or custom template handling based on `config.apiMode` |
+| `background/template-engine.js` | Renders JSON request templates and extracts answer text from custom response templates |
 | `content/index.js` | Content script entry (esbuild entry point). Creates host `<div>`, calls `mountPanel()`, handles double-click toggle |
 | `content/ui.js` | Preact+htm panel component with Shadow DOM isolation. Functional component with hooks (`useState`, `useEffect`). Config management CRUD plus in-page API host permission iframe |
 | `permission/host-permission.html` | Extension page embedded in the current tab as an iframe for optional host permission grants |
 | `permission/host-permission.js` | Calls `chrome.permissions.request()` from the iframe button click and reports back via `postMessage` |
 | `content/bundle/content-bundle.js` | esbuild output (IIFE). What `manifest.json` points to |
-| `package.json` | Build scripts (`npm run build`) and dependencies (preact, htm, esbuild) |
+| `package.json` | Build scripts (`npm run build`, `npm run build:package`) and dependencies (preact, htm, esbuild, cross-env) |
 | `manifest.json` | MV3 config. `permissions: ["storage", "activeTab", "scripting"]`; `optional_host_permissions: ["https://*/*"]`; `web_accessible_resources` exposes `permission/*` for the iframe grant page |
 
 ## Key Patterns & Gotchas
@@ -70,12 +71,13 @@ Content Script                          Background SW
 - **Error propagation** — All errors (API call failure) propagate back to content script via `sendResponse({success:false, error})` for UI display.
 - **Responses API output structure** — `/v1/responses` `output` array can have mixed types (e.g. `reasoning` + `message`). Must find entry with `item.type === 'message'` to read `content[0].text`. Don't assume `output[0]` is the answer.
 - **Advanced request JSON overrides** — Configs store `customHeadersJson` and `customBodyJson` strings, not key/value row arrays. `background/request-overrides.js` parses them as JSON objects and deep-merges them after the default headers/body are built. Objects merge recursively, arrays and primitives replace existing values, and `null` deletes a field. Invalid JSON must surface as a normal `sendResponse({success:false, error})` failure.
+- **Custom template API mode** — `apiMode: 'custom-template'` uses `templateHeadersJson`, `templateBodyJson`, and `templateResponseText`. `background/template-engine.js` renders placeholders such as `{{model}}`, `{{apiKey}}`, `{{apiKeyBearer}}`, `{{prompt}}`, `{{imageUrl}}`, `{{imageBase64}}`, and `{{imageMimeType}}`. Headers must render to a JSON object; body can render to any JSON value; response template extracts the final answer from provider-specific JSON.
 - **Config management** — Configs stored in `chrome.storage.local` (survives SW restart). Users add/edit/delete configs via the ⚙️ button in the panel footer. `addConfig` auto-selects the new config (`selected: true`). Deleting the selected config shifts selection to the first remaining.
-- **Config message actions** — Content↔background CRUD: `getConfigs` (list all), `getConfig` (single by id, auto-defaults `apiMode`, `customHeadersJson`, `customBodyJson`), `setActiveConfig` (sets `selected: true` on one, false on others), `addConfig` (pushes new item with `selected: true`), `editConfig` (updates name/url/model/apiKey/apiMode/customHeadersJson/customBodyJson), `deleteConfig` (removes, shifts selection if deleted was selected).
+- **Config message actions** — Content↔background CRUD: `getConfigs` (list all), `getConfig` (single by id, auto-defaults `apiMode`, `customHeadersJson`, `customBodyJson`, template fields), `setActiveConfig` (sets `selected: true` on one, false on others), `addConfig` (pushes new item with `selected: true`), `editConfig` (updates name/url/model/apiKey/apiMode/customHeadersJson/customBodyJson/templateHeadersJson/templateBodyJson/templateResponseText), `deleteConfig` (removes, shifts selection if deleted was selected).
 - **Config view inline handlers** — Config list is rendered as Preact VDOM, so click handlers use inline Preact event bindings (`onClick=${handler}`) with `stopPropagation()` on edit/delete buttons. No delegation needed.
 - **Preact + htm** — `import htm from 'htm'` + `const html = htm.bind(h)` provides tagged-template syntax instead of JSX. No JSX transform needed in esbuild. `useState`, `useEffect` from `'preact/hooks'`.
 - **Hooks without destructuring** — Codebase uses `var` (not `const/let`) and avoids destructuring. Hooks pattern: `var _a = useState(initial), value = _a[0], setValue = _a[1]`. Don't use `const [value, setValue] = useState()`.
-- **Bundle size reference** — `npm run build` currently produces a ~45KB minified content bundle; `npm run build:package` produces a larger unminified bundle for package/debug review. Content script loads this single bundle.
+- **Bundle size reference** — `npm run build` currently produces a ~56KB minified content bundle; `npm run build:package` produces a larger unminified bundle for package/debug review. Content script loads this single bundle.
 - **No customElements.define** — Chrome content script isolated worlds have `customElements === null`. Panel is a functional component mounted into shadow root, not a custom element. Mounted via Preact's `render(html`<${Panel} />`, shadowRoot)`.
 - **Storage migration pattern** — `ensureConfigInitialized()` checks `configList[0].selected === undefined` to detect old-format data and migrates in-place. Future storage changes should follow the same detect-and-migrate pattern.
 - **Build output structure** — `scripts/build.mjs` copies `manifest.json`, `icons/`, and `permission/` into `dist/chrome/`, and bundles content/background files. Load `dist/chrome/` in Chrome, not the project root.

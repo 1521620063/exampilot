@@ -26,7 +26,7 @@ ExamPilot 是一款 Chrome 浏览器扩展，能够在任意网页中**即时截
 |------|---------|------|
 | **📸 截图** | `chrome.tabs.captureVisibleTab` → 可选 `cropImage()` | 捕获当前浏览器视口，支持全屏截图或拖拽选择指定区域（物理像素坐标 × devicePixelRatio） |
 | **🔐 授权** | `optional_host_permissions` + 当前页授权弹层 | 首次使用某个 API 域名时按需授权，避免安装时申请 `<all_urls>` |
-| **🧠 推理** | 视觉大模型（OpenAI 兼容 / Anthropic Messages API） | 理解题目内容并推理作答（模型可配置） |
+| **🧠 推理** | 视觉大模型（OpenAI 兼容 / Responses API / Anthropic / 自定义模板） | 理解题目内容并推理作答（请求格式可配置） |
 | **🖥️ 展示** | 浮动交互面板 | 页面右下角实时展示识别进度与结果 |
 
 ## 🚀 快速开始
@@ -48,7 +48,7 @@ npm run build
 
 > 构建产物输出至 `dist/chrome/`。
 > - `npm run build` — 压缩构建，适合本地开发加载
-> - `npm run build:package` — 不压缩构建，适合上架前检查与打包
+> - `npm run build:package` — 不压缩构建，适合上架前检查与打包（通过 `cross-env` 设置 `NO_MINIFY`，Windows/macOS/Linux 均可运行）
 > - 当前版本使用 `optional_host_permissions` 动态授权 API 域名，不再写死 `host_permissions: ["<all_urls>"]`
 
 ### 🎮 使用方式
@@ -64,7 +64,7 @@ npm run build
 | 🗑️ 点击 **清除** | 清空当前识别结果 |
 | ⚙️ 点击 **⚙️ 设置** | 管理 AI 配置：添加/编辑/删除/切换视觉大模型 |
 | ✏️ 在 ⚙️ 中编辑提示词 | 自定义发送给 AI 的指令，支持多行文本，自动保存 |
-| 🔧 在 ⚙️ 中配置自定义请求头/请求体 | 为每个 AI 配置添加任意的 HTTP 请求头和请求体字段，满足不同 API 的个性化需求 |
+| 🔧 在 ⚙️ 中配置请求覆盖/模板 | 为每个 AI 配置添加 HTTP 请求头、请求体字段，或完整自定义模板，满足不同 API 的个性化需求 |
 | 👁️ 在 ⚙️ 中展开请求预览 | 在发送前预览实际 API 请求的完整 JSON 结构，便于调试 |
 | 🔐 首次使用某个 API 域名 | 当前页面会弹出授权框，点击授权后即可调用该厂商接口 |
 | ◀️ 按 **← 返回** | 从配置管理返回主面板 |
@@ -81,8 +81,9 @@ exampilot/
 │   └── build.mjs            # esbuild 打包脚本
 ├── background/
 │   ├── index.js             # SW 入口：消息路由与流程编排
-│   ├── query-ai.js          # AI API 调用模块（三种接口模式）
-│   └── request-overrides.js # 自定义请求头/请求体 JSON 覆盖处理
+│   ├── query-ai.js          # AI API 调用模块（内置模式 + 自定义模板）
+│   ├── request-overrides.js # 自定义请求头/请求体 JSON 覆盖处理
+│   └── template-engine.js   # 自定义模板渲染与响应提取
 ├── content/
 │   ├── index.js             # 内容脚本入口（esbuild 构建入口）
 │   ├── ui.js                # Preact+htm 浮动面板组件（Shadow DOM）
@@ -109,11 +110,12 @@ exampilot/
 
 ## ⚙️ 配置说明
 
-AI 配置通过面板右下角的 **⚙️ 设置** 按钮管理，支持添加多个视觉大模型配置并随时切换。每项包含 `name`、`url`、`model`、`apiKey`、`apiMode`。接口地址必须使用 HTTPS。支持三种接口模式：
+AI 配置通过面板右下角的 **⚙️ 设置** 按钮管理，支持添加多个视觉大模型配置并随时切换。每项包含 `name`、`url`、`model`、`apiKey`、`apiMode`，自定义模板模式还会保存 `templateHeadersJson`、`templateBodyJson`、`templateResponseText`。接口地址必须使用 HTTPS。支持四种接口模式：
 
 - **Chat Completions** — 标准 OpenAI 兼容接口 (`/v1/chat/completions`)
 - **Responses API** — OpenAI Responses API (`/v1/responses`)
 - **Anthropic Claude** — Anthropic Messages API (`/v1/messages`)
+- **自定义模板** — 手写 Headers/Body JSON 模板和响应提取模板，适配任意兼容视觉输入的 HTTPS API
 
 新增配置自动设为当前使用（`selected: true`）。
 
@@ -137,11 +139,21 @@ AI 配置通过面板右下角的 **⚙️ 设置** 按钮管理，支持添加�
 - **请求体示例**：添加 `max_tokens: 4096`、`temperature: 0.7` 等推理参数
 - 数值型字段值自动转换为数字类型发送
 - 切换 API 模式时，Anthropic 模式自动填充 `anthropic-version` 请求头和 `max_tokens` 请求体字段
-- 配置列表项会显示自定义字段数量，一目了然
+- 配置列表项会显示已配置的 JSON 覆盖或模板部分，一目了然
+
+### 🧩 自定义模板模式
+
+当供应商的请求格式无法通过内置三种模式或 JSON 覆盖表达时，可选择 **自定义模板**：
+
+- **Headers 模板** 和 **Body 模板** 必须渲染为合法 JSON；Headers 必须是 JSON 对象
+- 模板支持 `{{model}}`、`{{apiKey}}`、`{{apiKeyBearer}}`、`{{prompt}}`、`{{imageUrl}}`、`{{imageBase64}}`、`{{imageMimeType}}` 等占位符
+- 如果某个字段完全等于一个占位符，渲染时会保留原始类型；例如对象、数组、数字不会被强制转成字符串
+- **响应模板** 用于从供应商返回 JSON 中提取答案文本，适合不同厂商的自定义响应结构
+- 保存配置前会先渲染并校验模板，错误会以普通 UI 错误提示展示
 
 ### 👁️ 请求预览
 
-在发送截图请求前，可展开 **请求预览** 面板查看即将发出的完整 API 请求结构（含合并后的请求头、请求体和图片数据），方便调试和确认配置正确性。
+在发送截图请求前，可展开 **请求预览** 面板查看即将发出的完整 API 请求结构（含合并后的请求头、请求体、模板渲染结果和图片数据），方便调试和确认配置正确性。
 
 ### ✏️ 自定义提示词
 
@@ -155,7 +167,7 @@ AI 配置通过面板右下角的 **⚙️ 设置** 按钮管理，支持添加�
 | 🎨 UI 框架 | Preact + htm（VDOM 渲染，Shadow DOM 样式隔离） |
 | 🔨 构建工具 | esbuild（ESM → IIFE 打包） |
 | 📡 图像传输 | base64 直传 AI |
-| 🧠 视觉推理 | 视觉大模型（OpenAI 兼容 / Anthropic Messages API，模型可配置） |
+| 🧠 视觉推理 | 视觉大模型（OpenAI 兼容 / Responses API / Anthropic / 自定义模板，模型与请求格式可配置） |
 | ⚡ 扩展能力 | Service Worker · Content Script · Optional Host Permissions |
 
 ## 🤖 关于 AI
