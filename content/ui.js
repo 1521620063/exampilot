@@ -9,6 +9,10 @@ import { render, h } from 'preact';
 import { useState, useEffect, useRef } from 'preact/hooks';
 import htm from 'htm';
 import '../background/template-engine.js';
+import {
+  DEFAULT_UI_OPACITY,
+  applyUiOpacity
+} from './ui-opacity.js';
 
 const html = htm.bind(h);
 var __permissionHandler = null;
@@ -97,6 +101,7 @@ export function mountPanel(host) {
     var _t = useState(false), showPreview = _t[0], setShowPreview = _t[1];
     var _u = useState(''), formError = _u[0], setFormError = _u[1];
     var _v = useState(false), configSaving = _v[0], setConfigSaving = _v[1];
+    var opacityState = useState(DEFAULT_UI_OPACITY), uiOpacity = opacityState[0], setUiOpacity = opacityState[1];
     var hiddenByUserRef = useRef(false);
     var currentRequestSeqRef = useRef(0);
 
@@ -151,6 +156,35 @@ export function mountPanel(host) {
       }
       chrome.runtime.onMessage.addListener(handler);
       return function () { chrome.runtime.onMessage.removeListener(handler); };
+    }, []);
+
+    // ---- Global UI opacity preference ----
+    useEffect(function () {
+      var active = true;
+
+      function updateOpacity(value) {
+        if (!active) return;
+        var normalized = applyUiOpacity(host, value);
+        setUiOpacity(normalized);
+      }
+
+      chrome.storage.local.get('uiOpacity').then(function (data) {
+        updateOpacity(data.uiOpacity);
+      }).catch(function () {
+        updateOpacity(DEFAULT_UI_OPACITY);
+      });
+
+      function storageHandler(changes, areaName) {
+        if (areaName === 'local' && changes.uiOpacity) {
+          updateOpacity(changes.uiOpacity.newValue);
+        }
+      }
+
+      chrome.storage.onChanged.addListener(storageHandler);
+      return function () {
+        active = false;
+        chrome.storage.onChanged.removeListener(storageHandler);
+      };
     }, []);
 
     // ---- Listen for toggle-panel custom event ----
@@ -247,6 +281,14 @@ export function mountPanel(host) {
     }, [selectingRegion]);
 
     // ---- Config CRUD helpers ----
+    function saveUiOpacity(value) {
+      var normalized = applyUiOpacity(host, value);
+      setUiOpacity(normalized);
+      chrome.storage.local.set({ uiOpacity: normalized }).catch(function () {
+        // Keep the locally applied value if persistence is temporarily unavailable.
+      });
+    }
+
     function loadConfigs() {
       chrome.runtime.sendMessage({ action: 'getConfigs' }).then(function (res) {
         if (res.success) setConfigList(res.configList || []);
@@ -1124,6 +1166,31 @@ export function mountPanel(host) {
           padding: 20px 0;
           font-size: 12px;
         }
+        .exmp-ui-settings {
+          border-top: 1px solid #f0f1f3;
+          margin-top: 10px;
+          padding-top: 10px;
+        }
+        .exmp-ui-settings-title {
+          color: #667085;
+          font-size: 12px;
+          font-weight: 600;
+          letter-spacing: 0.3px;
+          margin-bottom: 6px;
+        }
+        .exmp-opacity-label {
+          color: #667085;
+          display: flex;
+          font-size: 11px;
+          justify-content: space-between;
+          margin-bottom: 4px;
+        }
+        .exmp-opacity-range {
+          accent-color: #4f6ef7;
+          display: block;
+          min-width: 0;
+          width: 100%;
+        }
       </style>
 
       ${viewState === 'mini' ? html`
@@ -1318,6 +1385,23 @@ ${function () {
                   </div>
                 </div>
               `}
+              <div class="exmp-ui-settings">
+                <div class="exmp-ui-settings-title">🎨 界面设置</div>
+                <label class="exmp-opacity-label" for="exmp-opacity-range">
+                  <span>界面透明度</span>
+                  <span>${Math.round(uiOpacity * 100)}%</span>
+                </label>
+                <input
+                  id="exmp-opacity-range"
+                  class="exmp-opacity-range"
+                  type="range"
+                  min="0.01"
+                  max="1"
+                  step="0.01"
+                  value=${uiOpacity}
+                  onInput=${function (e) { saveUiOpacity(e.target.value); }}
+                />
+              </div>
               <div style="border-top: 1px solid #f0f1f3; margin-top: 10px; padding-top: 10px;">
                 <div style="font-size: 12px; font-weight: 600; color: #667085; letter-spacing: 0.3px; margin-bottom: 6px;">📝 提示词设置</div>
                 <textarea

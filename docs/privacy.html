@@ -251,7 +251,7 @@ footer {
 
   <div class="card">
     <h1>隐私政策</h1>
-    <p class="updated">最后更新：2026 年 5 月 24 日</p>
+    <p class="updated">最后更新：2026 年 7 月 9 日</p>
 
     <h2>概述</h2>
     <p>ExamPilot（以下简称"本扩展"）是一款基于视觉 AI 的智能解题工具。本隐私政策说明了本扩展处理用户数据的方式。使用本扩展即表示您同意本政策所述的数据处理方式。</p>
@@ -260,7 +260,7 @@ footer {
 
     <h3>1. 网页截图</h3>
     <ul>
-      <li><strong>收集方式</strong>：当您在扩展面板中点击"全屏"或"区域"按钮，或双击页面时，Chrome 会截取当前浏览器视口或您框选区域的截图。</li>
+      <li><strong>收集方式</strong>：当您在扩展面板中点击"全屏"或"区域"按钮时，Chrome 会截取当前浏览器视口或您框选区域的截图。双击页面仅用于显示或隐藏扩展面板，不会触发截图。</li>
       <li><strong>使用目的</strong>：截图被发送到您自行配置的 AI 大模型 API，用于识别图片中的题目并生成解答。</li>
       <li><strong>传输方式</strong>：截图以 base64 编码直接嵌入 API 请求，不经过任何中间服务器。</li>
       <li><strong>存储与保留</strong>：截图不会持久存储在您的设备或本扩展的开发者服务器上。AI API 处理完成后，截图仅存在于 API 提供方的系统中，其保留政策请参阅相应 API 提供方的隐私政策。</li>
@@ -273,7 +273,14 @@ footer {
       <li><strong>使用目的</strong>：仅用于向您指定的 AI API 发送请求。</li>
     </ul>
 
-    <h3>3. 不收集的数据</h3>
+    <h3>3. 界面偏好设置</h3>
+    <ul>
+      <li><strong>收集方式</strong>：您在扩展设置页面中调整的界面透明度等本地偏好。</li>
+      <li><strong>存储位置</strong>：仅存储在浏览器的 <code>chrome.storage.local</code> 中。</li>
+      <li><strong>使用目的</strong>：仅用于恢复扩展面板的本地显示效果，不会发送给 AI API 或开发者服务器。</li>
+    </ul>
+
+    <h3>4. 不收集的数据</h3>
     <p>本扩展<strong>不</strong>收集以下数据：</p>
     <ul>
       <li>个人身份信息（姓名、邮箱、电话等）</li>
@@ -296,6 +303,7 @@ footer {
     <ul>
       <li>API 密钥等敏感信息仅存储在浏览器的本地存储中</li>
       <li>所有 API 请求均使用 HTTPS 加密传输</li>
+      <li>API 域名采用可选权限按需授权，不在安装时申请所有网站访问权限</li>
       <li>不使用任何远程代码或分析 SDK</li>
       <li>极小权限设计：仅请求运行所必需的权限（storage、activeTab、scripting），API 域名按需单独授权</li>
     </ul>
@@ -309,30 +317,32 @@ footer {
     <h2>联系方式</h2>
     <p>如果您对本隐私政策有任何疑问或建议，请通过以下方式联系我们：</p>
     <ul>
-      <li>GitHub Issues：<a href="https://github.com/1521620063/exampilot/issues" target="_blank">https://github.com/1521620063/exampilot/issues</a></li>
+      <li>GitHub Issues：<a href="https://github.com/1521620063/exampilot/issues" target="_blank" rel="noopener noreferrer">https://github.com/1521620063/exampilot/issues</a></li>
     </ul>
 
     <hr>
 
     <h2 id="english">Privacy Policy (English)</h2>
-    <p class="en updated">Last updated: May 24, 2026</p>
+    <p class="en updated">Last updated: July 9, 2026</p>
 
     <h3 class="en">Overview</h3>
     <p class="en">ExamPilot is an AI-powered problem-solving tool that captures screenshots of web pages and sends them to user-configured AI vision API for analysis. This privacy policy explains how the extension handles user data.</p>
 
     <h3 class="en">Data Collected and Processed</h3>
 
-    <p class="en"><strong>1. Screenshots.</strong> When you click "全屏" or "区域" on the panel, or double-click the page, Chrome captures a screenshot of the viewport or your selected region. This screenshot is sent to the AI API you have configured for problem recognition and solving. Screenshots are not stored persistently on your device or on the developer's servers. They exist only transiently during processing through the AI API you selected.</p>
+    <p class="en"><strong>1. Screenshots.</strong> When you click "全屏" or "区域" on the panel, Chrome captures a screenshot of the viewport or your selected region. Double-clicking the page only shows or hides the extension panel and does not trigger screenshot capture. Screenshots are sent to the AI API you have configured for problem recognition and solving. Screenshots are not stored persistently on your device or on the developer's servers. They exist only transiently during processing through the AI API you selected.</p>
 
     <p class="en"><strong>2. AI Configuration.</strong> API endpoint URLs, model names, API keys, custom headers/bodies, request templates, response templates, and custom prompts that you enter in the settings panel (⚙️) are stored exclusively in <code>chrome.storage.local</code> on your device. This information is used solely to make requests to the AI API of your choice and is never transmitted to the developer's servers.</p>
 
-    <p class="en"><strong>3. No Data Collection.</strong> This extension does <strong>not</strong> collect personal information, browsing history, bookmarks, passwords, cookies, device identifiers, location data, usage analytics, or any tracking data.</p>
+    <p class="en"><strong>3. UI Preferences.</strong> Local display preferences such as panel opacity are stored exclusively in <code>chrome.storage.local</code>. They are used only to restore the panel appearance and are not sent to AI APIs or developer servers.</p>
+
+    <p class="en"><strong>4. No Data Collection.</strong> This extension does <strong>not</strong> collect personal information, browsing history, bookmarks, passwords, cookies, device identifiers, location data, usage analytics, or any tracking data.</p>
 
     <h3 class="en">Data Sharing</h3>
     <p class="en">The developer does not collect, store, or share any personal data. The only data sharing is with third-party services you explicitly configure: the AI API provider you specify receives the screenshot content for processing. No data is sold, rented, or shared with any other third party.</p>
 
     <h3 class="en">Contact</h3>
-    <p class="en">GitHub Issues: <a href="https://github.com/1521620063/exampilot/issues" target="_blank">https://github.com/1521620063/exampilot/issues</a></p>
+    <p class="en">GitHub Issues: <a href="https://github.com/1521620063/exampilot/issues" target="_blank" rel="noopener noreferrer">https://github.com/1521620063/exampilot/issues</a></p>
   </div>
 
   <footer>&copy; <span id="current-year"></span> ExamPilot</footer>
