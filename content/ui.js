@@ -193,7 +193,6 @@ export function mountPanel(host) {
         if (host.style.display === 'none') {
           host.style.display = '';
           hiddenByUserRef.current = false;
-          setViewState('mini');
         } else {
           host.style.display = 'none';
           hiddenByUserRef.current = true;
@@ -224,6 +223,7 @@ export function mountPanel(host) {
 
       var overlay = document.createElement('div');
       overlay.className = 'exmp-selection-overlay';
+      applyUiOpacity(overlay, uiOpacity);
 
       // 遮罩层样式（内嵌 <style>，因为 document.body 在 Shadow DOM 外）
       var style = document.createElement('style');
