@@ -162,26 +162,76 @@ export function mountPanel(host) {
     }, []);
 
     // ---- Draggable mini panel position ----
+    function clampPositionRatio(value) {
+      return Math.max(0, Math.min(Number(value), 1));
+    }
+
+    function getPositionBounds(width, height) {
+      return {
+        minLeft: 8,
+        maxLeft: Math.max(8, window.innerWidth - width - 8),
+        minTop: 8,
+        maxTop: Math.max(8, window.innerHeight - height - 8)
+      };
+    }
+
+    function positionFromPixels(left, top, width, height) {
+      var bounds = getPositionBounds(width, height);
+      var horizontalRange = bounds.maxLeft - bounds.minLeft;
+      var verticalRange = bounds.maxTop - bounds.minTop;
+      return {
+        xRatio: horizontalRange > 0 ? clampPositionRatio((left - bounds.minLeft) / horizontalRange) : 0,
+        yRatio: verticalRange > 0 ? clampPositionRatio((top - bounds.minTop) / verticalRange) : 0
+      };
+    }
+
     useEffect(function () {
       var active = true;
       chrome.storage.local.get('panelPosition').then(function (data) {
         var saved = data.panelPosition;
-        if (!active || !saved || (saved.side !== 'left' && saved.side !== 'right')) return;
-        setPanelPosition({ side: saved.side, top: Number(saved.top) || 8 });
+        if (!active || !saved) return;
+        var savedXRatio = Number(saved.xRatio);
+        var savedYRatio = Number(saved.yRatio);
+        if (Number.isFinite(savedXRatio) && Number.isFinite(savedYRatio)) {
+          setPanelPosition({
+            xRatio: clampPositionRatio(savedXRatio),
+            yRatio: clampPositionRatio(savedYRatio)
+          });
+          return;
+        }
+
+        var savedLeft = Number(saved.left);
+        var savedTop = Number(saved.top);
+        if (!Number.isFinite(savedLeft)) {
+          if (saved.side !== 'left' && saved.side !== 'right') return;
+          savedLeft = saved.side === 'left' ? 24 : window.innerWidth - 68;
+        }
+        var mini = shadow.querySelector('.exmp-mini');
+        var miniRect = mini ? mini.getBoundingClientRect() : { width: 44, height: 44 };
+        var migratedPosition = positionFromPixels(
+          savedLeft,
+          Number.isFinite(savedTop) ? savedTop : 8,
+          miniRect.width,
+          miniRect.height
+        );
+        setPanelPosition(migratedPosition);
+        chrome.storage.local.set({ panelPosition: migratedPosition }).catch(function () {});
       }).catch(function () {});
       return function () { active = false; };
     }, []);
 
     function applySavedPosition(position) {
       var panel = shadow.querySelector('.exmp-panel, .exmp-mini');
+      var width = panel ? panel.getBoundingClientRect().width : 44;
       var height = panel ? panel.getBoundingClientRect().height : 44;
-      var maxTop = Math.max(8, window.innerHeight - height - 8);
-      var top = Math.max(8, Math.min(position.top, maxTop));
+      var bounds = getPositionBounds(width, height);
+      var left = bounds.minLeft + clampPositionRatio(position.xRatio) * (bounds.maxLeft - bounds.minLeft);
+      var top = bounds.minTop + clampPositionRatio(position.yRatio) * (bounds.maxTop - bounds.minTop);
+      host.style.setProperty('left', left + 'px', 'important');
+      host.style.setProperty('right', 'auto', 'important');
       host.style.setProperty('top', top + 'px', 'important');
       host.style.setProperty('bottom', 'auto', 'important');
-      host.style.setProperty(position.side, '24px', 'important');
-      host.style.setProperty(position.side === 'left' ? 'right' : 'left', 'auto', 'important');
-      host.style.setProperty('align-items', position.side === 'left' ? 'flex-start' : 'flex-end', 'important');
+      host.style.setProperty('align-items', 'flex-start', 'important');
     }
 
     function applyDefaultPosition() {
@@ -208,12 +258,15 @@ export function mountPanel(host) {
     function handleMiniPointerDown(event) {
       if (event.button !== undefined && event.button !== 0) return;
       var rect = host.getBoundingClientRect();
+      var miniRect = event.currentTarget.getBoundingClientRect();
       miniDragRef.current = {
         pointerId: event.pointerId,
         startX: event.clientX,
         startY: event.clientY,
         offsetX: event.clientX - rect.left,
         offsetY: event.clientY - rect.top,
+        width: miniRect.width,
+        height: miniRect.height,
         dragged: false
       };
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -224,8 +277,9 @@ export function mountPanel(host) {
       if (!drag || drag.pointerId !== event.pointerId) return;
       if (!drag.dragged && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4) return;
       drag.dragged = true;
-      var left = Math.max(8, Math.min(event.clientX - drag.offsetX, window.innerWidth - 52));
-      var top = Math.max(8, Math.min(event.clientY - drag.offsetY, window.innerHeight - 52));
+      var bounds = getPositionBounds(drag.width, drag.height);
+      var left = Math.max(bounds.minLeft, Math.min(event.clientX - drag.offsetX, bounds.maxLeft));
+      var top = Math.max(bounds.minTop, Math.min(event.clientY - drag.offsetY, bounds.maxTop));
       host.style.setProperty('left', left + 'px', 'important');
       host.style.setProperty('right', 'auto', 'important');
       host.style.setProperty('top', top + 'px', 'important');
@@ -239,10 +293,7 @@ export function mountPanel(host) {
       if (!drag.dragged) return;
 
       var rect = host.getBoundingClientRect();
-      var nextPosition = {
-        side: rect.left + rect.width / 2 < window.innerWidth / 2 ? 'left' : 'right',
-        top: Math.max(8, Math.min(rect.top, window.innerHeight - 52))
-      };
+      var nextPosition = positionFromPixels(rect.left, rect.top, drag.width, drag.height);
       suppressMiniClickRef.current = true;
       setPanelPosition(nextPosition);
       chrome.storage.local.set({ panelPosition: nextPosition }).catch(function () {});
