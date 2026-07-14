@@ -1,326 +1,810 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ExamPilot — 智能解题引擎</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
-<style>
-:root {
-  --bg: #f8f6f2;
-  --surface: rgba(255,255,255,0.85);
-  --border: rgba(0,0,0,0.05);
-  --text: #1a1a2e;
-  --text-muted: #7a7a8a;
-  --accent: #d4872a;
-  --accent-soft: rgba(212,135,42,0.10);
-  --accent-glow: rgba(212,135,42,0.12);
-  --radius: 16px;
-}
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-  font-family: "Noto Sans SC", -apple-system, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  overflow-x: hidden;
-  position: relative;
-}
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="ExamPilot Chrome 扩展完整使用说明：安装、配置视觉 AI、全屏与区域识别、自定义请求和常见问题。">
+  <meta name="theme-color" content="#f8f6f2">
+  <title>ExamPilot 使用说明</title>
+  <style>
+    :root {
+      --bg: #f8f6f2;
+      --surface: #ffffff;
+      --surface-soft: #fbf6ee;
+      --text: #1a1a2e;
+      --muted: #7a7a8a;
+      --line: rgba(26, 26, 46, .09);
+      --primary: #d4872a;
+      --primary-dark: #b87320;
+      --primary-soft: rgba(212, 135, 42, .11);
+      --cyan: #8c79c6;
+      --green: #3a9f70;
+      --amber: #d4872a;
+      --shadow: 0 18px 60px rgba(71, 53, 30, 0.12);
+      --radius-lg: 28px;
+      --radius-md: 20px;
+      --radius-sm: 12px;
+      --content: 1180px;
+    }
 
-/* ── Animated mesh background (light) ── */
-.mesh {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-.mesh span {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(100px);
-  animation: meshDrift 20s ease-in-out infinite alternate;
-}
-.mesh span:nth-child(1) {
-  width: 600px; height: 600px;
-  background: radial-gradient(circle, rgba(212,135,42,0.08), transparent 70%);
-  top: -15%; left: -10%;
-  animation-duration: 25s;
-}
-.mesh span:nth-child(2) {
-  width: 500px; height: 500px;
-  background: radial-gradient(circle, rgba(200,180,240,0.10), transparent 70%);
-  bottom: -20%; right: -10%;
-  animation-duration: 30s;
-  animation-delay: -5s;
-}
-.mesh span:nth-child(3) {
-  width: 400px; height: 400px;
-  background: radial-gradient(circle, rgba(212,135,42,0.05), transparent 70%);
-  top: 40%; left: 55%;
-  animation-duration: 22s;
-  animation-delay: -10s;
-}
-@keyframes meshDrift {
-  0%   { transform: translate(0, 0) scale(1); }
-  33%  { transform: translate(40px, -30px) scale(1.1); }
-  66%  { transform: translate(-20px, 40px) scale(0.95); }
-  100% { transform: translate(30px, -20px) scale(1.05); }
-}
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 92px; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 10% 3%, rgba(212, 135, 42, 0.10), transparent 24rem),
+        radial-gradient(circle at 92% 13%, rgba(140, 121, 198, 0.10), transparent 22rem),
+        var(--bg);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
 
-/* ── Grain overlay ── */
-.grain {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  opacity: 0.025;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 256px 256px;
-}
+    a { color: inherit; }
+    button, input { font: inherit; }
+    img { display: block; max-width: 100%; }
+    code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
 
-/* ── Layout ── */
-.container {
-  position: relative;
-  z-index: 2;
-  max-width: 780px;
-  width: 100%;
-  padding: 80px 28px 60px;
-  text-align: center;
-}
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: 12px;
+      left: 12px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      color: white;
+      background: var(--primary);
+      transform: translateY(-150%);
+      transition: transform .2s ease;
+    }
+    .skip-link:focus { transform: translateY(0); }
 
-/* ── Hero ── */
-.hero-icon {
-  width: 88px;
-  height: 88px;
-  border-radius: 24px;
-  margin-bottom: 28px;
-  box-shadow:
-    0 0 0 1px rgba(0,0,0,0.04),
-    0 8px 32px rgba(0,0,0,0.06),
-    0 0 60px var(--accent-glow);
-  animation: float 6s ease-in-out infinite;
-  transition: transform 0.3s;
-}
-.hero-icon:hover { transform: scale(1.04); }
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-5px); }
-}
+    .site-header {
+      position: sticky;
+      z-index: 50;
+      top: 0;
+      border-bottom: 1px solid rgba(26, 26, 46, 0.07);
+      background: rgba(248, 246, 242, 0.86);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+    }
+    .nav {
+      width: min(var(--content), calc(100% - 40px));
+      height: 72px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 11px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      text-decoration: none;
+    }
+    .brand img { width: 34px; height: 34px; border-radius: 10px; }
+    .brand span { color: var(--primary); }
+    .nav-links { display: flex; align-items: center; gap: 5px; }
+    .nav-links a {
+      padding: 8px 11px;
+      border-radius: 9px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 650;
+      text-decoration: none;
+      transition: color .2s ease, background .2s ease;
+    }
+    .nav-links a:hover { color: var(--text); background: white; }
+    .nav-links .nav-cta { color: white; background: var(--primary); }
+    .nav-links .nav-cta:hover { color: white; background: var(--primary-dark); }
 
-h1 {
-  font-family: "Sora", sans-serif;
-  font-size: clamp(36px, 6vw, 56px);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  color: var(--text);
-  margin-bottom: 16px;
-  animation: fadeUp 0.8s ease both;
-}
-.subtitle {
-  font-size: 17px;
-  line-height: 1.7;
-  color: var(--text-muted);
-  max-width: 520px;
-  margin: 0 auto 52px;
-  animation: fadeUp 0.8s 0.15s ease both;
-}
+    .hero {
+      width: min(var(--content), calc(100% - 40px));
+      margin: 0 auto;
+      padding: 76px 0 52px;
+      display: grid;
+      grid-template-columns: minmax(0, .85fr) minmax(460px, 1.15fr);
+      align-items: center;
+      gap: 64px;
+    }
+    .hero h1 {
+      margin: 0 0 20px;
+      max-width: 640px;
+      font-size: clamp(42px, 6vw, 72px);
+      line-height: 1.08;
+      letter-spacing: -0.055em;
+    }
+    .hero h1 span {
+      color: transparent;
+      background: linear-gradient(120deg, var(--primary), var(--cyan));
+      background-clip: text;
+      -webkit-background-clip: text;
+    }
+    .hero-copy > p {
+      margin: 0;
+      max-width: 610px;
+      color: var(--muted);
+      font-size: 18px;
+    }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+    .button {
+      min-height: 48px;
+      padding: 0 20px;
+      border: 1px solid transparent;
+      border-radius: 13px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      font-weight: 750;
+      text-decoration: none;
+      transition: transform .2s ease, box-shadow .2s ease, background .2s ease;
+    }
+    .button:hover { transform: translateY(-2px); }
+    .button-primary { color: white; background: var(--primary); box-shadow: 0 12px 26px rgba(212, 135, 42, .24); }
+    .button-primary:hover { background: var(--primary-dark); box-shadow: 0 15px 32px rgba(212, 135, 42, .30); }
+    .button-secondary { border-color: var(--line); background: rgba(255, 255, 255, .72); }
+    .button-secondary:hover { background: white; }
+    .hero-note { margin-top: 18px; color: var(--muted); font-size: 13px; }
+    .hero-note strong { color: var(--green); }
 
-/* ── Feature cards ── */
-.features {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  margin-bottom: 48px;
-  text-align: left;
-}
-.feature {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 24px 22px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.3s, box-shadow 0.3s;
-  animation: fadeUp 0.8s ease both;
-}
-.feature:nth-child(1) { animation-delay: 0.1s; }
-.feature:nth-child(2) { animation-delay: 0.2s; }
-.feature:nth-child(3) { animation-delay: 0.3s; }
-.feature:nth-child(4) { animation-delay: 0.4s; }
+    .hero-visual { position: relative; }
+    .hero-visual::before {
+      content: "";
+      position: absolute;
+      inset: 8% -5% -8% 12%;
+      z-index: -1;
+      border-radius: 40px;
+      background: linear-gradient(135deg, rgba(212, 135, 42, .18), rgba(140, 121, 198, .13));
+      filter: blur(36px);
+    }
+    .browser-frame {
+      overflow: hidden;
+      border: 1px solid rgba(106, 86, 61, .18);
+      border-radius: 24px;
+      background: white;
+      box-shadow: var(--shadow);
+      transform: rotate(1deg);
+    }
+    .browser-bar {
+      height: 40px;
+      padding: 0 15px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      background: #fbf9f5;
+    }
+    .browser-dot { width: 9px; height: 9px; border-radius: 50%; }
+    .browser-dot:nth-child(1) { background: #ff6b6b; }
+    .browser-dot:nth-child(2) { background: #ffd166; }
+    .browser-dot:nth-child(3) { background: #5bd48b; }
+    .address-bar { height: 21px; flex: 1; margin-left: 8px; border-radius: 999px; background: #eeeae3; }
+    .browser-frame img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; }
 
-.feature:hover {
-  transform: translateY(-4px) scale(1.01);
-  border-color: rgba(212,135,42,0.20);
-  box-shadow: 0 12px 40px rgba(0,0,0,0.05), 0 0 40px var(--accent-glow);
-}
-.feature-icon {
-  font-size: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: var(--accent-soft);
-  border: 1px solid rgba(212,135,42,0.12);
-  margin-bottom: 12px;
-}
-.feature h3 {
-  font-family: "Sora", sans-serif;
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  margin-bottom: 6px;
-  color: var(--text);
-}
-.feature p {
-  font-size: 13.5px;
-  line-height: 1.6;
-  color: var(--text-muted);
-}
+    .trust-strip {
+      width: min(var(--content), calc(100% - 40px));
+      margin: 0 auto 82px;
+      padding: 18px 24px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      background: rgba(255, 255, 255, .7);
+    }
+    .trust-item { display: flex; align-items: center; justify-content: center; gap: 9px; color: var(--muted); font-size: 14px; font-weight: 650; }
+    .trust-icon { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; color: var(--primary); background: var(--primary-soft); }
 
-/* ── CTA ── */
-.cta-wrapper { animation: fadeUp 0.8s 0.5s ease both; }
-.cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: linear-gradient(135deg, #d4872a, #b87320);
-  color: #fff;
-  font-weight: 700;
-  font-size: 16px;
-  padding: 14px 36px;
-  border-radius: 12px;
-  text-decoration: none;
-  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s;
-  font-family: "Noto Sans SC", sans-serif;
-  position: relative;
-}
-.cta:hover {
-  transform: scale(1.04);
-  box-shadow: 0 8px 32px rgba(212,135,42,0.30);
-}
-.cta:active { transform: scale(0.97); }
+    .page-grid {
+      width: min(var(--content), calc(100% - 40px));
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr);
+      align-items: start;
+      gap: 48px;
+    }
+    .toc {
+      position: sticky;
+      top: 96px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, .72);
+      backdrop-filter: blur(12px);
+    }
+    .toc strong { display: block; margin: 0 0 9px 10px; font-size: 13px; letter-spacing: .08em; color: var(--muted); }
+    .toc a {
+      display: block;
+      padding: 8px 10px;
+      border-radius: 9px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .toc a:hover, .toc a.active { color: var(--primary); background: var(--primary-soft); }
 
-/* ── Links ── */
-.links {
-  margin-top: 32px;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  animation: fadeUp 0.8s 0.6s ease both;
-}
-.links a {
-  color: var(--text-muted);
-  text-decoration: none;
-  padding: 6px 14px;
-  border-radius: 8px;
-  transition: color 0.2s, background 0.2s;
-}
-.links a:hover {
-  color: var(--text);
-  background: rgba(0,0,0,0.04);
-}
+    main { min-width: 0; }
+    .section { padding: 0 0 88px; }
+    .section-heading { margin-bottom: 28px; }
+    .section-heading h2 {
+      margin: 0 0 9px;
+      font-size: clamp(28px, 4vw, 42px);
+      line-height: 1.18;
+      letter-spacing: -0.035em;
+    }
+    .section-heading p { margin: 0; max-width: 700px; color: var(--muted); font-size: 16px; }
 
-/* ── Footer ── */
-footer {
-  margin-top: 48px;
-  font-size: 12px;
-  color: rgba(0,0,0,0.18);
-  animation: fadeUp 0.8s 0.7s ease both;
-}
+    .quick-grid, .step-grid, .mode-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      box-shadow: 0 10px 34px rgba(71, 53, 30, .06);
+    }
+    .quick-card { padding: 24px; }
+    .quick-card .number, .step-number {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      color: white;
+      background: var(--primary);
+      font-size: 14px;
+      font-weight: 800;
+      box-shadow: 0 8px 18px rgba(212, 135, 42, .22);
+    }
+    .quick-card h3 { margin: 18px 0 6px; font-size: 18px; }
+    .quick-card p { margin: 0; color: var(--muted); font-size: 14px; }
 
-/* ── Utilities ── */
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
+    .callout {
+      margin-top: 18px;
+      padding: 17px 19px;
+      border: 1px solid rgba(140, 121, 198, .28);
+      border-radius: 15px;
+      display: flex;
+      gap: 12px;
+      color: #564b76;
+      background: #f3f0fa;
+      font-size: 14px;
+    }
+    .callout.warning { border-color: #f8d98e; color: #71501a; background: #fff8e7; }
+    .callout strong { display: block; margin-bottom: 2px; color: var(--text); }
 
-@media (max-width: 540px) {
-  .container { padding: 60px 20px 40px; }
-  .features { grid-template-columns: 1fr; }
-  .hero-icon { width: 72px; height: 72px; border-radius: 20px; }
-}
-</style>
+    .install-list { display: grid; gap: 18px; }
+    .install-step {
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: minmax(0, .9fr) minmax(360px, 1.1fr);
+      align-items: stretch;
+    }
+    .step-copy { padding: 30px; }
+    .step-copy h3 { margin: 16px 0 8px; font-size: 22px; }
+    .step-copy p { margin: 0; color: var(--muted); }
+    .step-copy code { padding: 2px 6px; border-radius: 6px; color: var(--primary-dark); background: var(--primary-soft); }
+    .step-visual { min-height: 235px; padding: 28px; display: grid; place-items: center; background: linear-gradient(145deg, #f7efe3, #fcfaf7); }
+
+    .store-card { width: min(100%, 390px); padding: 18px; border: 1px solid rgba(81, 65, 46, .16); border-radius: 16px; background: white; box-shadow: 0 14px 32px rgba(71, 53, 30, .13); }
+    .store-top { display: flex; align-items: center; gap: 13px; }
+    .store-top img { width: 48px; height: 48px; border-radius: 12px; }
+    .store-title { font-weight: 800; }
+    .stars { color: var(--amber); font-size: 12px; letter-spacing: 1px; }
+    .store-button { margin-top: 16px; padding: 10px 14px; border-radius: 10px; color: white; background: var(--primary); text-align: center; font-size: 13px; font-weight: 750; }
+
+    .toolbar-mock { width: min(100%, 430px); }
+    .toolbar-line { height: 56px; padding: 8px 12px; border: 1px solid rgba(81, 65, 46, .16); border-radius: 14px; display: flex; align-items: center; gap: 9px; background: white; box-shadow: 0 12px 30px rgba(71, 53, 30, .12); }
+    .toolbar-address { height: 28px; flex: 1; border-radius: 9px; background: #f0ede7; }
+    .toolbar-puzzle, .toolbar-app { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: #f0ede7; }
+    .toolbar-app { position: relative; border: 2px solid var(--primary); background: white; }
+    .toolbar-app img { width: 22px; height: 22px; border-radius: 6px; }
+    .toolbar-tip { width: max-content; max-width: 100%; margin: 12px 8px 0 auto; padding: 8px 11px; border-radius: 9px; color: white; background: var(--text); font-size: 12px; }
+
+    .panel-mock { width: min(100%, 360px); overflow: hidden; border: 1px solid rgba(81, 65, 46, .16); border-radius: 18px; background: white; box-shadow: 0 18px 45px rgba(71, 53, 30, .18); }
+    .panel-answer { min-height: 115px; padding: 18px; color: var(--muted); font-size: 13px; }
+    .panel-status { padding: 10px 16px; border-top: 1px solid var(--line); color: var(--green); font-size: 12px; }
+    .panel-footer { padding: 10px 12px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+    .panel-logo { margin-right: auto; color: var(--muted); font-size: 12px; font-weight: 750; }
+    .panel-btn { padding: 7px 10px; border-radius: 8px; color: var(--muted); background: #f2eee8; font-size: 11px; font-weight: 700; }
+    .panel-btn.primary { color: white; background: var(--primary); }
+
+    .config-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .config-card { padding: 24px; }
+    .config-card h3 { margin: 0 0 6px; font-size: 20px; }
+    .config-card > p { margin: 0 0 20px; color: var(--muted); font-size: 14px; }
+    .field { margin-top: 13px; }
+    .field label { display: block; margin-bottom: 6px; color: #5e596a; font-size: 12px; font-weight: 750; }
+    .input {
+      min-height: 40px;
+      padding: 9px 11px;
+      border: 1px solid rgba(81, 65, 46, .16);
+      border-radius: 9px;
+      color: #7b7481;
+      background: #fcfbf9;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+    .save-bar { margin-top: 16px; padding: 10px; border-radius: 9px; color: white; background: var(--primary); text-align: center; font-size: 12px; font-weight: 750; }
+    .permission-card { padding: 24px; display: flex; flex-direction: column; justify-content: center; background: linear-gradient(145deg, #2d2942, #6f4b35); color: white; }
+    .permission-card .shield { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; color: #f5c982; background: rgba(255,255,255,.12); font-size: 26px; }
+    .permission-card h3 { margin: 18px 0 7px; font-size: 23px; }
+    .permission-card p { margin: 0; color: #e6dfef; font-size: 14px; }
+    .permission-button { margin-top: 18px; padding: 11px 14px; border-radius: 10px; color: #4f382b; background: white; text-align: center; font-size: 13px; font-weight: 800; }
+
+    .mode-card { padding: 22px; }
+    .mode-icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: var(--primary); background: var(--primary-soft); font-weight: 850; }
+    .mode-card h3 { margin: 15px 0 5px; font-size: 17px; }
+    .mode-card p { margin: 0; color: var(--muted); font-size: 13px; }
+
+    .usage-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .usage-card { overflow: hidden; }
+    .usage-preview { min-height: 248px; padding: 28px; position: relative; display: grid; place-items: center; background: linear-gradient(145deg, #f7efe3, #fcfaf7); }
+    .selection-page { width: 100%; height: 185px; position: relative; overflow: hidden; border: 1px solid rgba(81, 65, 46, .16); border-radius: 13px; background: white; }
+    .selection-page::before { content: "题目内容与选项"; position: absolute; top: 24px; left: 24px; color: #686171; font-size: 13px; }
+    .selection-page::after { content: ""; position: absolute; inset: 60px 24px 26px; background: repeating-linear-gradient(#e9e5df 0 5px, transparent 5px 16px); }
+    .selection-box { position: absolute; z-index: 2; inset: 42px 46px 30px 40px; border: 2px solid var(--primary); background: rgba(212, 135, 42, .08); box-shadow: 0 0 0 999px rgba(31, 26, 40, .46); }
+    .selection-label { position: absolute; z-index: 3; top: 48px; right: 52px; padding: 5px 8px; border-radius: 6px; color: white; background: var(--primary); font-size: 10px; }
+    .capture-page { width: 100%; height: 185px; padding: 24px; border: 1px solid rgba(81, 65, 46, .16); border-radius: 13px; background: white; }
+    .capture-page .line { height: 7px; margin-bottom: 11px; border-radius: 999px; background: #e9e5df; }
+    .capture-page .line:nth-child(1) { width: 48%; height: 13px; background: #77707e; }
+    .capture-page .line:nth-child(2) { width: 82%; }
+    .capture-page .line:nth-child(3) { width: 72%; }
+    .capture-page .line:nth-child(4) { width: 88%; }
+    .capture-page .line:nth-child(5) { width: 60%; }
+    .capture-badge { position: absolute; right: 42px; bottom: 40px; padding: 8px 11px; border-radius: 8px; color: white; background: var(--primary); font-size: 11px; font-weight: 750; box-shadow: 0 7px 18px rgba(212,135,42,.24); }
+    .usage-copy { padding: 24px; }
+    .usage-copy h3 { margin: 0 0 7px; font-size: 20px; }
+    .usage-copy p { margin: 0; color: var(--muted); font-size: 14px; }
+    .usage-copy ul { margin: 14px 0 0; padding-left: 20px; color: var(--muted); font-size: 13px; }
+
+    .button-guide { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .guide-item { padding: 16px; border: 1px solid var(--line); border-radius: 14px; display: flex; gap: 13px; background: white; }
+    .guide-key { min-width: 58px; height: 32px; padding: 0 9px; border-radius: 8px; display: grid; place-items: center; color: var(--primary); background: var(--primary-soft); font-size: 12px; font-weight: 800; }
+    .guide-item strong { display: block; font-size: 14px; }
+    .guide-item p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+
+    .code-example { overflow: hidden; margin-top: 18px; border: 1px solid #3c354a; border-radius: 16px; background: #242033; color: #eee8f2; }
+    .code-head { padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,.1); display: flex; align-items: center; justify-content: space-between; color: #bfb3c8; font-size: 12px; }
+    .copy-button { border: 0; padding: 6px 9px; border-radius: 7px; color: white; background: rgba(255,255,255,.1); cursor: pointer; font-size: 12px; }
+    .copy-button:hover { background: rgba(255,255,255,.18); }
+    pre { margin: 0; padding: 18px; overflow: auto; font-size: 13px; line-height: 1.7; }
+    .code-key { color: #e7b56f; }
+    .code-value { color: #b9d998; }
+
+    .faq-list { display: grid; gap: 12px; }
+    details { border: 1px solid var(--line); border-radius: 15px; background: white; }
+    summary { padding: 18px 20px; cursor: pointer; font-weight: 750; list-style: none; }
+    summary::-webkit-details-marker { display: none; }
+    summary::after { content: "+"; float: right; color: var(--primary); font-size: 20px; line-height: 1; }
+    details[open] summary::after { content: "−"; }
+    details p { margin: 0; padding: 0 20px 18px; color: var(--muted); font-size: 14px; }
+
+    .final-cta {
+      margin-bottom: 72px;
+      padding: 42px;
+      border-radius: var(--radius-lg);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 30px;
+      color: white;
+      background: linear-gradient(125deg, #2d2942, #6d4934 55%, #d4872a);
+      box-shadow: 0 22px 55px rgba(90, 60, 35, .22);
+    }
+    .final-cta h2 { margin: 0 0 6px; font-size: 30px; }
+    .final-cta p { margin: 0; color: #eee5f2; }
+    .final-cta .button { flex: 0 0 auto; color: var(--primary-dark); background: white; }
+
+    footer { border-top: 1px solid var(--line); background: rgba(255,255,255,.55); }
+    .footer-inner { width: min(var(--content), calc(100% - 40px)); min-height: 110px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 24px; color: var(--muted); font-size: 13px; }
+    .footer-links { display: flex; gap: 18px; }
+    .footer-links a { text-decoration: none; }
+    .footer-links a:hover { color: var(--primary); }
+
+    @media (max-width: 980px) {
+      .nav-links a:not(.nav-cta) { display: none; }
+      .hero { grid-template-columns: 1fr; gap: 42px; padding-top: 56px; }
+      .hero-copy { text-align: center; }
+      .hero-copy > p { margin-inline: auto; }
+      .hero-actions { justify-content: center; }
+      .trust-strip { grid-template-columns: repeat(2, 1fr); }
+      .page-grid { grid-template-columns: 1fr; }
+      .toc { display: none; }
+      .install-step { grid-template-columns: 1fr; }
+      .step-visual { min-height: 220px; }
+      .quick-grid, .step-grid, .mode-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 680px) {
+      .nav { width: min(100% - 28px, var(--content)); }
+      .brand { font-size: 15px; }
+      .nav-links .nav-cta { padding-inline: 12px; }
+      .hero, .trust-strip, .page-grid, .footer-inner { width: min(100% - 28px, var(--content)); }
+      .hero { padding-top: 42px; }
+      .hero h1 { font-size: 42px; }
+      .hero-copy > p { font-size: 16px; }
+      .hero-actions { flex-direction: column; }
+      .button { width: 100%; }
+      .browser-frame { border-radius: 16px; transform: none; }
+      .trust-strip { grid-template-columns: 1fr; padding: 14px; }
+      .trust-item { justify-content: flex-start; }
+      .quick-grid, .step-grid, .mode-grid, .config-layout, .usage-tabs, .button-guide { grid-template-columns: 1fr; }
+      .section { padding-bottom: 64px; }
+      .section-heading h2 { font-size: 30px; }
+      .step-copy, .config-card, .permission-card, .usage-copy { padding: 21px; }
+      .step-visual, .usage-preview { padding: 20px; }
+      .install-step { grid-template-columns: minmax(0, 1fr); }
+      .final-cta { padding: 28px 22px; flex-direction: column; align-items: flex-start; }
+      .final-cta .button { width: 100%; }
+      .footer-inner { padding: 25px 0; flex-direction: column; align-items: flex-start; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { transition: none !important; }
+    }
+  </style>
 </head>
 <body>
+  <a class="skip-link" href="#main">跳到正文</a>
 
-<div class="mesh" aria-hidden="true">
-  <span></span>
-  <span></span>
-  <span></span>
-</div>
-<div class="grain" aria-hidden="true"></div>
+  <header class="site-header">
+    <nav class="nav" aria-label="主导航">
+      <a class="brand" href="#top">
+        <img src="icon128.png" alt="">
+        <span>ExamPilot</span> 使用说明
+      </a>
+      <div class="nav-links">
+        <a href="#install">安装</a>
+        <a href="#configure">配置</a>
+        <a href="#capture">识别</a>
+        <a href="#faq">常见问题</a>
+        <a class="nav-cta" href="https://chromewebstore.google.com/detail/exampilot-%E6%99%BA%E8%83%BD%E8%A7%A3%E9%A2%98%E5%BC%95%E6%93%8E/cekiablfmjeejkgfklapmifkcmeipnnf" target="_blank" rel="noopener noreferrer">安装扩展</a>
+      </div>
+    </nav>
+  </header>
 
-<div class="container">
-  <img class="hero-icon" src="icon128.png" alt="ExamPilot">
+  <div id="top"></div>
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-copy">
+      <h1 id="hero-title">看见题目，<span>马上分析</span></h1>
+      <p>ExamPilot 是一款浏览器视觉 AI 助手。截取当前页面或框选题目区域，即可把图片发送到你配置的视觉模型，并在网页悬浮面板中查看答案与解析。</p>
+      <div class="hero-actions">
+        <a class="button button-primary" href="https://chromewebstore.google.com/detail/exampilot-%E6%99%BA%E8%83%BD%E8%A7%A3%E9%A2%98%E5%BC%95%E6%93%8E/cekiablfmjeejkgfklapmifkcmeipnnf" target="_blank" rel="noopener noreferrer">安装 Chrome 扩展 <span aria-hidden="true">→</span></a>
+        <a class="button button-secondary" href="#quick-start">查看快速上手</a>
+      </div>
+      <div class="hero-note"><strong>✓</strong> 支持 OpenAI 兼容接口、Responses API、Anthropic 与自定义模板</div>
+    </div>
+    <div class="hero-visual" aria-label="ExamPilot 在网页中分析微积分内容的界面示例">
+      <div class="browser-frame">
+        <div class="browser-bar" aria-hidden="true">
+          <span class="browser-dot"></span><span class="browser-dot"></span><span class="browser-dot"></span><span class="address-bar"></span>
+        </div>
+        <img src="images/image0.png" alt="ExamPilot 悬浮面板显示 AI 分析结果">
+      </div>
+    </div>
+  </section>
 
-  <h1>ExamPilot</h1>
-  <p class="subtitle">
-    基于视觉 AI 的智能解题引擎<br>
-    全屏或框选截图，多模型实时推理，悬浮面板轻巧可调
-  </p>
-
-  <div class="features">
-    <div class="feature">
-      <div class="feature-icon">📸</div>
-      <h3>一键截图</h3>
-      <p>点击全屏按钮截取当前视口，也可拖拽框选页面特定区域进行识别</p>
-    </div>
-    <div class="feature">
-      <div class="feature-icon">🧠</div>
-      <h3>AI 智能分析</h3>
-      <p>接入主流视觉大模型，支持 OpenAI 兼容 / Responses / Anthropic / 自定义模板</p>
-    </div>
-    <div class="feature">
-      <div class="feature-icon">⚙️</div>
-      <h3>灵活配置</h3>
-      <p>多套 API 配置切换，支持 JSON 覆盖、自定义模板请求和自定义提示词</p>
-    </div>
-    <div class="feature">
-      <div class="feature-icon">👁️</div>
-      <h3>请求预览</h3>
-      <p>发送前查看 Headers、Body 与响应模板，调试新接口更清楚</p>
-    </div>
-    <div class="feature">
-      <div class="feature-icon">🎛️</div>
-      <h3>透明面板</h3>
-      <p>悬浮面板支持透明度调节，答题时减少遮挡、保持专注</p>
-    </div>
-    <div class="feature">
-      <div class="feature-icon">🔒</div>
-      <h3>隐私优先</h3>
-      <p>API 域名按需授权，数据仅与您配置的接口交互，无追踪、无分析</p>
-    </div>
+  <div class="trust-strip" aria-label="产品特点">
+    <div class="trust-item"><span class="trust-icon">⌁</span>全屏与区域截图</div>
+    <div class="trust-item"><span class="trust-icon">AI</span>多模型自由切换</div>
+    <div class="trust-item"><span class="trust-icon">◇</span>API 密钥本地保存</div>
+    <div class="trust-item"><span class="trust-icon">⚡</span>悬浮面板即时反馈</div>
   </div>
 
-  <div class="cta-wrapper">
-    <a class="cta" href="https://chromewebstore.google.com/detail/exampilot-%E6%99%BA%E8%83%BD%E8%A7%A3%E9%A2%98%E5%BC%95%E6%93%8E/cekiablfmjeejkgfklapmifkcmeipnnf" target="_blank" rel="noopener noreferrer">
-      <span>安装 Chrome 扩展</span>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-    </a>
+  <div class="page-grid">
+    <aside class="toc" aria-label="页面目录">
+      <strong>使用指南</strong>
+      <a href="#quick-start">快速上手</a>
+      <a href="#install">安装扩展</a>
+      <a href="#configure">配置模型</a>
+      <a href="#api-modes">接口模式</a>
+      <a href="#capture">开始识别</a>
+      <a href="#advanced">高级配置</a>
+      <a href="#faq">常见问题</a>
+    </aside>
+
+    <main id="main">
+      <section class="section" id="quick-start">
+        <div class="section-heading">
+          <h2>三步开始使用</h2>
+          <p>首次使用只需安装扩展、添加 API 配置，然后在任意网页上开始截图识别。</p>
+        </div>
+        <div class="quick-grid">
+          <article class="card quick-card">
+            <div class="number">1</div>
+            <h3>安装并固定</h3>
+            <p>从 Chrome 应用商店安装 ExamPilot，并将图标固定到浏览器工具栏。</p>
+          </article>
+          <article class="card quick-card">
+            <div class="number">2</div>
+            <h3>填写模型配置</h3>
+            <p>输入 API 地址、模型名称与 API Key，选择匹配的接口模式后保存。</p>
+          </article>
+          <article class="card quick-card">
+            <div class="number">3</div>
+            <h3>截图并分析</h3>
+            <p>点击“全屏”或“区域”，等待状态栏显示“识别完成”即可查看结果。</p>
+          </article>
+        </div>
+        <div class="callout">
+          <span aria-hidden="true">💡</span>
+          <div><strong>使用前准备</strong>你需要一个支持图片输入的视觉模型 API。ExamPilot 不提供模型额度，也不会代管你的 API Key。</div>
+        </div>
+      </section>
+
+      <section class="section" id="install">
+        <div class="section-heading">
+          <h2>安装扩展</h2>
+          <p>推荐直接从 Chrome 应用商店安装。开发者也可以构建项目后加载 <code>dist/chrome/</code>。</p>
+        </div>
+        <div class="install-list">
+          <article class="card install-step">
+            <div class="step-copy">
+              <div class="step-number">1</div>
+              <h3>打开扩展商店</h3>
+              <p>进入 ExamPilot 商店页面，点击“添加至 Chrome”，并在浏览器确认窗口中完成安装。</p>
+            </div>
+            <div class="step-visual">
+              <div class="store-card" aria-hidden="true">
+                <div class="store-top">
+                  <img src="icon128.png" alt="">
+                  <div><div class="store-title">ExamPilot 智能解题引擎</div><div class="stars">★★★★★</div></div>
+                </div>
+                <div class="store-button">添加至 Chrome</div>
+              </div>
+            </div>
+          </article>
+
+          <article class="card install-step">
+            <div class="step-copy">
+              <div class="step-number">2</div>
+              <h3>固定到工具栏</h3>
+              <p>点击浏览器右上角的扩展按钮，在 ExamPilot 旁点击固定图标。之后点击 ExamPilot 图标即可在当前网页呼出面板。</p>
+            </div>
+            <div class="step-visual">
+              <div class="toolbar-mock" aria-hidden="true">
+                <div class="toolbar-line">
+                  <div class="toolbar-address"></div>
+                  <div class="toolbar-puzzle">🧩</div>
+                  <div class="toolbar-app"><img src="icon128.png" alt=""></div>
+                </div>
+                <div class="toolbar-tip">点击图标，在当前页面打开 ExamPilot</div>
+              </div>
+            </div>
+          </article>
+
+          <article class="card install-step">
+            <div class="step-copy">
+              <div class="step-number">3</div>
+              <h3>确认面板出现</h3>
+              <p>打开任意普通网页后点击扩展图标，右下角会出现悬浮面板。双击页面空白区域可以快速显示或隐藏面板。</p>
+            </div>
+            <div class="step-visual">
+              <div class="panel-mock" aria-hidden="true">
+                <div class="panel-answer">准备就绪。请先在设置中添加一个视觉模型配置。</div>
+                <div class="panel-status">✓ 等待操作</div>
+                <div class="panel-footer"><span class="panel-logo">⚡ ExamPilot AI</span><span class="panel-btn primary">全屏</span><span class="panel-btn">区域</span><span class="panel-btn">⚙</span></div>
+              </div>
+            </div>
+          </article>
+        </div>
+        <div class="callout warning">
+          <span aria-hidden="true">⚠️</span>
+          <div><strong>面板没有出现？</strong>Chrome 内置页面、扩展商店页面和部分受保护页面不允许注入扩展脚本。请切换到普通 HTTPS 网页后重试。</div>
+        </div>
+      </section>
+
+      <section class="section" id="configure">
+        <div class="section-heading">
+          <h2>配置视觉模型</h2>
+          <p>点击面板右下角的 ⚙️，添加你的 API 配置。API 地址必须使用 HTTPS。</p>
+        </div>
+        <div class="config-layout">
+          <article class="card config-card">
+            <h3>配置示例</h3>
+            <p>以下展示 OpenAI 兼容接口最常见的填写方式。</p>
+            <div class="field"><label>配置名称</label><div class="input">我的视觉模型</div></div>
+            <div class="field"><label>API 地址</label><div class="input">https://api.example.com/v1/chat/completions</div></div>
+            <div class="field"><label>模型名称</label><div class="input">vision-model-name</div></div>
+            <div class="field"><label>API Key</label><div class="input">••••••••••••••••</div></div>
+            <div class="field"><label>接口模式</label><div class="input">Chat Completions</div></div>
+            <div class="save-bar">保存配置</div>
+          </article>
+          <article class="card permission-card">
+            <div class="shield">◆</div>
+            <h3>首次访问需要授权</h3>
+            <p>保存配置或开始识别时，ExamPilot 会检查 API 域名权限。如果尚未授权，当前页面会显示授权弹层。</p>
+            <div class="permission-button">授权访问该 API 域名</div>
+          </article>
+        </div>
+        <div class="callout">
+          <span aria-hidden="true">🔐</span>
+          <div><strong>按域名授权</strong>扩展只申请你正在使用的 API 域名，不会在安装时申请访问所有网站。配置与 API Key 存储在本地浏览器中。</div>
+        </div>
+      </section>
+
+      <section class="section" id="api-modes">
+        <div class="section-heading">
+          <h2>选择正确的接口模式</h2>
+          <p>接口模式决定请求体和响应解析方式。请以 API 服务商文档中的接口路径与格式为准。</p>
+        </div>
+        <div class="mode-grid">
+          <article class="card mode-card"><div class="mode-icon">C</div><h3>Chat Completions</h3><p>适用于 <code>/v1/chat/completions</code> 及多数 OpenAI 兼容视觉接口。</p></article>
+          <article class="card mode-card"><div class="mode-icon">R</div><h3>Responses API</h3><p>适用于 OpenAI 风格的 <code>/v1/responses</code> 接口与对应输出结构。</p></article>
+          <article class="card mode-card"><div class="mode-icon">A</div><h3>Anthropic</h3><p>适用于 <code>/v1/messages</code>，图片会按 Anthropic 的 base64 格式发送。</p></article>
+        </div>
+        <div class="callout">
+          <span aria-hidden="true">🧩</span>
+          <div><strong>格式不属于以上三种？</strong>选择“自定义模板”，自行定义 Headers、Body 和响应文本提取规则。</div>
+        </div>
+      </section>
+
+      <section class="section" id="capture">
+        <div class="section-heading">
+          <h2>开始截图识别</h2>
+          <p>根据页面内容选择“全屏”或“区域”。区域识别通常更快，也能减少无关内容对模型判断的干扰。</p>
+        </div>
+        <div class="usage-tabs">
+          <article class="card usage-card">
+            <div class="usage-preview">
+              <div class="capture-page" aria-hidden="true"><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div></div>
+              <div class="capture-badge">截取当前视口</div>
+            </div>
+            <div class="usage-copy">
+              <h3>全屏识别</h3>
+              <p>截取浏览器当前可见区域，适合内容集中、题目完整显示在一屏内的页面。</p>
+              <ul><li>点击“全屏”后面板会暂时隐藏</li><li>长页面只会截取当前可见视口</li></ul>
+            </div>
+          </article>
+          <article class="card usage-card">
+            <div class="usage-preview">
+              <div class="selection-page" aria-hidden="true"><div class="selection-box"></div><div class="selection-label">拖拽选择题目</div></div>
+            </div>
+            <div class="usage-copy">
+              <h3>区域识别</h3>
+              <p>点击“区域”后按住鼠标拖拽，只选择题目和必要的上下文，再松开鼠标开始分析。</p>
+              <ul><li>按 ESC 可退出区域选择</li><li>尽量包含完整题干、选项和图表</li></ul>
+            </div>
+          </article>
+        </div>
+
+        <div class="section-heading" style="margin-top: 36px; margin-bottom: 18px;">
+          <h2 style="font-size: 25px;">面板操作速查</h2>
+        </div>
+        <div class="button-guide">
+          <div class="guide-item"><div class="guide-key">全屏</div><div><strong>识别当前视口</strong><p>适合整页内容简洁、题目已完整显示。</p></div></div>
+          <div class="guide-item"><div class="guide-key">区域</div><div><strong>框选指定内容</strong><p>减少干扰信息，推荐用于大多数题目。</p></div></div>
+          <div class="guide-item"><div class="guide-key">取消</div><div><strong>中止当前请求</strong><p>接口响应过慢或选错区域时使用。</p></div></div>
+          <div class="guide-item"><div class="guide-key">清除</div><div><strong>清空当前结果</strong><p>不会删除 API 配置或自定义提示词。</p></div></div>
+          <div class="guide-item"><div class="guide-key">⚙️</div><div><strong>打开设置</strong><p>管理模型、请求模板、提示词与透明度。</p></div></div>
+          <div class="guide-item"><div class="guide-key">双击</div><div><strong>显示或隐藏面板</strong><p>在页面空白区域双击即可切换。</p></div></div>
+        </div>
+        <div class="callout">
+          <span aria-hidden="true">⏱️</span>
+          <div><strong>状态提示</strong>识别过程通常依次显示“截图中 → 裁剪中（区域模式）→ AI 识别中 → 识别完成”。</div>
+        </div>
+      </section>
+
+      <section class="section" id="advanced">
+        <div class="section-heading">
+          <h2>高级配置</h2>
+          <p>当服务商需要额外参数时，可以使用 JSON 覆盖；请求结构完全不同则使用自定义模板。</p>
+        </div>
+        <article class="card config-card">
+          <h3>Headers / Body JSON 覆盖</h3>
+          <p>对象会递归合并，数组与基础类型会替换默认值；字段设置为 <code>null</code> 可删除默认字段。</p>
+          <div class="code-example">
+            <div class="code-head"><span>Body JSON 示例</span><button class="copy-button" type="button" data-copy="body-json">复制</button></div>
+            <pre id="body-json"><code>{
+  <span class="code-key">"temperature"</span>: <span class="code-value">0.2</span>,
+  <span class="code-key">"max_tokens"</span>: <span class="code-value">2048</span>,
+  <span class="code-key">"stream"</span>: <span class="code-value">false</span>
+}</code></pre>
+          </div>
+        </article>
+        <article class="card config-card" style="margin-top: 18px;">
+          <h3>自定义模板占位符</h3>
+          <p>常用占位符包括 <code>{{model}}</code>、<code>{{apiKey}}</code>、<code>{{apiKeyBearer}}</code>、<code>{{prompt}}</code>、<code>{{imageUrl}}</code>、<code>{{imageBase64}}</code> 与 <code>{{imageMimeType}}</code>。</p>
+          <div class="code-example">
+            <div class="code-head"><span>Headers 模板示例</span><button class="copy-button" type="button" data-copy="headers-json">复制</button></div>
+            <pre id="headers-json"><code>{
+  <span class="code-key">"Content-Type"</span>: <span class="code-value">"application/json"</span>,
+  <span class="code-key">"Authorization"</span>: <span class="code-value">"{{apiKeyBearer}}"</span>
+}</code></pre>
+          </div>
+        </article>
+        <div class="callout warning">
+          <span aria-hidden="true">🛡️</span>
+          <div><strong>检查请求预览</strong>发送前展开“请求预览”，确认 URL、Headers、Body 和图片字段符合服务商文档，尤其不要把 API Key 放进不必要的字段。</div>
+        </div>
+      </section>
+
+      <section class="section" id="faq">
+        <div class="section-heading">
+          <h2>常见问题</h2>
+          <p>优先检查 API 地址、接口模式、模型是否支持图片输入，以及 API 域名是否已授权。</p>
+        </div>
+        <div class="faq-list">
+          <details>
+            <summary>点击扩展图标后没有出现面板</summary>
+            <p>请确认当前是普通网页，而不是 <code>chrome://</code> 页面、Chrome 应用商店或浏览器内置 PDF 页面。刷新普通网页后再次点击扩展图标。</p>
+          </details>
+          <details>
+            <summary>提示需要 API 域名权限</summary>
+            <p>在当前网页弹出的 ExamPilot 授权框中点击授权。权限仅针对配置 URL 对应的 HTTPS 域名；如果修改了 API 域名，需要重新授权。</p>
+          </details>
+          <details>
+            <summary>接口返回 401、403 或模型不存在</summary>
+            <p>401 通常表示 API Key 无效，403 可能是权限或区域限制，模型不存在则需要核对模型名称。请使用请求预览与服务商文档逐项对照。</p>
+          </details>
+          <details>
+            <summary>提示 CORS 或网络请求失败</summary>
+            <p>确认 API URL 使用 HTTPS、域名已授权，并且服务商允许浏览器扩展访问。部分仅面向服务器端的接口即使授权后仍可能拒绝浏览器请求。</p>
+          </details>
+          <details>
+            <summary>答案不完整或没有识别到题目</summary>
+            <p>优先使用区域识别，并完整框选题干、选项、图表和必要上下文。也可以在设置中优化自定义提示词，要求模型给出答案、步骤和简短解释。</p>
+          </details>
+          <details>
+            <summary>截图和 API Key 会上传到哪里？</summary>
+            <p>截图只会发送到你配置的 API 地址，API Key 与配置保存在 Chrome 本地存储。ExamPilot 本身不提供中转服务。详情请查看隐私政策。</p>
+          </details>
+        </div>
+      </section>
+
+      <section class="final-cta" aria-label="安装 ExamPilot">
+        <div><h2>准备好开始了吗？</h2><p>安装扩展，添加你的视觉模型配置，然后在网页中一键分析。</p></div>
+        <a class="button" href="https://chromewebstore.google.com/detail/exampilot-%E6%99%BA%E8%83%BD%E8%A7%A3%E9%A2%98%E5%BC%95%E6%93%8E/cekiablfmjeejkgfklapmifkcmeipnnf" target="_blank" rel="noopener noreferrer">前往 Chrome 应用商店</a>
+      </section>
+    </main>
   </div>
 
-  <div class="links">
-    <a href="privacy.html">隐私政策</a>
-    <span style="color:rgba(0,0,0,0.12)">·</span>
-    <a href="https://github.com/1521620063/exampilot" target="_blank" rel="noopener noreferrer">GitHub</a>
-  </div>
+  <footer>
+    <div class="footer-inner">
+      <div>© <span id="current-year"></span> ExamPilot · 本页面可直接通过 GitHub Pages 部署</div>
+      <div class="footer-links">
+        <a href="privacy.html">隐私政策</a>
+        <a href="https://github.com/1521620063/exampilot" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="#top">返回顶部 ↑</a>
+      </div>
+    </div>
+  </footer>
 
-  <footer>&copy; <span id="current-year"></span> ExamPilot</footer>
-</div>
+  <script>
+    document.getElementById('current-year').textContent = new Date().getFullYear();
 
-<script>document.getElementById('current-year').textContent = new Date().getFullYear()</script>
+    var copyButtons = document.querySelectorAll('[data-copy]');
+    copyButtons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var target = document.getElementById(button.getAttribute('data-copy'));
+        if (!target || !navigator.clipboard) return;
+        navigator.clipboard.writeText(target.innerText).then(function () {
+          var original = button.textContent;
+          button.textContent = '已复制';
+          window.setTimeout(function () { button.textContent = original; }, 1400);
+        });
+      });
+    });
+
+    var sections = Array.prototype.slice.call(document.querySelectorAll('main section[id]'));
+    var tocLinks = Array.prototype.slice.call(document.querySelectorAll('.toc a'));
+    if ('IntersectionObserver' in window) {
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          tocLinks.forEach(function (link) {
+            link.classList.toggle('active', link.getAttribute('href') === '#' + entry.target.id);
+          });
+        });
+      }, { rootMargin: '-20% 0px -70% 0px' });
+      sections.forEach(function (section) { observer.observe(section); });
+    }
+  </script>
 </body>
 </html>
