@@ -102,8 +102,11 @@ export function mountPanel(host) {
     var _u = useState(''), formError = _u[0], setFormError = _u[1];
     var _v = useState(false), configSaving = _v[0], setConfigSaving = _v[1];
     var opacityState = useState(DEFAULT_UI_OPACITY), uiOpacity = opacityState[0], setUiOpacity = opacityState[1];
+    var positionState = useState(null), panelPosition = positionState[0], setPanelPosition = positionState[1];
     var hiddenByUserRef = useRef(false);
     var currentRequestSeqRef = useRef(0);
+    var miniDragRef = useRef(null);
+    var suppressMiniClickRef = useRef(false);
 
     // 区域选择相关状态
     var _w = useState(false), selectingRegion = _w[0], setSelectingRegion = _w[1];
@@ -157,6 +160,112 @@ export function mountPanel(host) {
       chrome.runtime.onMessage.addListener(handler);
       return function () { chrome.runtime.onMessage.removeListener(handler); };
     }, []);
+
+    // ---- Draggable mini panel position ----
+    useEffect(function () {
+      var active = true;
+      chrome.storage.local.get('panelPosition').then(function (data) {
+        var saved = data.panelPosition;
+        if (!active || !saved || (saved.side !== 'left' && saved.side !== 'right')) return;
+        setPanelPosition({ side: saved.side, top: Number(saved.top) || 8 });
+      }).catch(function () {});
+      return function () { active = false; };
+    }, []);
+
+    function applySavedPosition(position) {
+      var panel = shadow.querySelector('.exmp-panel, .exmp-mini');
+      var height = panel ? panel.getBoundingClientRect().height : 44;
+      var maxTop = Math.max(8, window.innerHeight - height - 8);
+      var top = Math.max(8, Math.min(position.top, maxTop));
+      host.style.setProperty('top', top + 'px', 'important');
+      host.style.setProperty('bottom', 'auto', 'important');
+      host.style.setProperty(position.side, '24px', 'important');
+      host.style.setProperty(position.side === 'left' ? 'right' : 'left', 'auto', 'important');
+      host.style.setProperty('align-items', position.side === 'left' ? 'flex-start' : 'flex-end', 'important');
+    }
+
+    function applyDefaultPosition() {
+      ['top', 'bottom', 'left', 'right', 'align-items'].forEach(function (property) {
+        host.style.removeProperty(property);
+      });
+    }
+
+    useEffect(function () {
+      if (!panelPosition) return;
+
+      function updatePosition() {
+        applySavedPosition(panelPosition);
+      }
+
+      var frame = requestAnimationFrame(updatePosition);
+      window.addEventListener('resize', updatePosition);
+      return function () {
+        cancelAnimationFrame(frame);
+        window.removeEventListener('resize', updatePosition);
+      };
+    }, [panelPosition, viewState]);
+
+    function handleMiniPointerDown(event) {
+      if (event.button !== undefined && event.button !== 0) return;
+      var rect = host.getBoundingClientRect();
+      miniDragRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        offsetX: event.clientX - rect.left,
+        offsetY: event.clientY - rect.top,
+        dragged: false
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+
+    function handleMiniPointerMove(event) {
+      var drag = miniDragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      if (!drag.dragged && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4) return;
+      drag.dragged = true;
+      var left = Math.max(8, Math.min(event.clientX - drag.offsetX, window.innerWidth - 52));
+      var top = Math.max(8, Math.min(event.clientY - drag.offsetY, window.innerHeight - 52));
+      host.style.setProperty('left', left + 'px', 'important');
+      host.style.setProperty('right', 'auto', 'important');
+      host.style.setProperty('top', top + 'px', 'important');
+      host.style.setProperty('bottom', 'auto', 'important');
+    }
+
+    function handleMiniPointerUp(event) {
+      var drag = miniDragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      miniDragRef.current = null;
+      if (!drag.dragged) return;
+
+      var rect = host.getBoundingClientRect();
+      var nextPosition = {
+        side: rect.left + rect.width / 2 < window.innerWidth / 2 ? 'left' : 'right',
+        top: Math.max(8, Math.min(rect.top, window.innerHeight - 52))
+      };
+      suppressMiniClickRef.current = true;
+      setPanelPosition(nextPosition);
+      chrome.storage.local.set({ panelPosition: nextPosition }).catch(function () {});
+    }
+
+    function handleMiniPointerCancel(event) {
+      var drag = miniDragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      miniDragRef.current = null;
+      if (panelPosition) {
+        applySavedPosition(panelPosition);
+      } else {
+        applyDefaultPosition();
+      }
+    }
+
+    function handleMiniClick() {
+      if (suppressMiniClickRef.current) {
+        suppressMiniClickRef.current = false;
+        return;
+      }
+      setViewState('main');
+    }
 
     // ---- Global UI opacity preference ----
     useEffect(function () {
@@ -909,7 +1018,9 @@ export function mountPanel(host) {
           display: flex;
           align-items: center;
           justify-content: center;
-          cursor: pointer;
+          cursor: grab;
+          touch-action: none;
+          user-select: none;
           box-shadow: 0 2px 12px rgba(79,110,247,0.35);
           transition: transform 0.2s, box-shadow 0.2s;
         }
@@ -917,6 +1028,7 @@ export function mountPanel(host) {
           transform: scale(1.1);
           box-shadow: 0 4px 16px rgba(79,110,247,0.45);
         }
+        .exmp-mini:active { cursor: grabbing; }
         .exmp-footer {
           border-top: 1px solid #f0f1f3;
           min-height: 36px;
@@ -1194,7 +1306,15 @@ export function mountPanel(host) {
       </style>
 
       ${viewState === 'mini' ? html`
-        <div class="exmp-mini" onClick=${function () { setViewState('main'); }}>⚡</div>
+        <div
+          class="exmp-mini"
+          title="拖动可调整位置，点击展开"
+          onPointerDown=${handleMiniPointerDown}
+          onPointerMove=${handleMiniPointerMove}
+          onPointerUp=${handleMiniPointerUp}
+          onPointerCancel=${handleMiniPointerCancel}
+          onClick=${handleMiniClick}
+        >⚡</div>
       ` : html`
         <div class="exmp-panel">
           ${viewState === 'config' ? html`
