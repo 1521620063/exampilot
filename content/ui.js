@@ -227,15 +227,15 @@ export function mountPanel(host) {
       var bounds = getPositionBounds(width, height);
       var left = bounds.minLeft + clampPositionRatio(position.xRatio) * (bounds.maxLeft - bounds.minLeft);
       var top = bounds.minTop + clampPositionRatio(position.yRatio) * (bounds.maxTop - bounds.minTop);
-      host.style.setProperty('left', left + 'px', 'important');
-      host.style.setProperty('right', 'auto', 'important');
-      host.style.setProperty('top', top + 'px', 'important');
-      host.style.setProperty('bottom', 'auto', 'important');
-      host.style.setProperty('align-items', 'flex-start', 'important');
+      host.style.setProperty('--exmp-left', left + 'px');
+      host.style.setProperty('--exmp-right', 'auto');
+      host.style.setProperty('--exmp-top', top + 'px');
+      host.style.setProperty('--exmp-bottom', 'auto');
+      host.style.setProperty('--exmp-align-items', 'flex-start');
     }
 
     function applyDefaultPosition() {
-      ['top', 'bottom', 'left', 'right', 'align-items'].forEach(function (property) {
+      ['--exmp-top', '--exmp-bottom', '--exmp-left', '--exmp-right', '--exmp-align-items'].forEach(function (property) {
         host.style.removeProperty(property);
       });
     }
@@ -247,11 +247,26 @@ export function mountPanel(host) {
         applySavedPosition(panelPosition);
       }
 
-      var frame = requestAnimationFrame(updatePosition);
-      window.addEventListener('resize', updatePosition);
+      var frame = 0;
+      function schedulePositionUpdate() {
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(updatePosition);
+      }
+
+      schedulePositionUpdate();
+      window.addEventListener('resize', schedulePositionUpdate);
+
+      var panel = shadow.querySelector('.exmp-panel, .exmp-mini');
+      var resizeObserver = null;
+      if (panel && window.ResizeObserver) {
+        resizeObserver = new window.ResizeObserver(schedulePositionUpdate);
+        resizeObserver.observe(panel);
+      }
+
       return function () {
         cancelAnimationFrame(frame);
-        window.removeEventListener('resize', updatePosition);
+        window.removeEventListener('resize', schedulePositionUpdate);
+        if (resizeObserver) resizeObserver.disconnect();
       };
     }, [panelPosition, viewState]);
 
@@ -280,10 +295,10 @@ export function mountPanel(host) {
       var bounds = getPositionBounds(drag.width, drag.height);
       var left = Math.max(bounds.minLeft, Math.min(event.clientX - drag.offsetX, bounds.maxLeft));
       var top = Math.max(bounds.minTop, Math.min(event.clientY - drag.offsetY, bounds.maxTop));
-      host.style.setProperty('left', left + 'px', 'important');
-      host.style.setProperty('right', 'auto', 'important');
-      host.style.setProperty('top', top + 'px', 'important');
-      host.style.setProperty('bottom', 'auto', 'important');
+      host.style.setProperty('--exmp-left', left + 'px');
+      host.style.setProperty('--exmp-right', 'auto');
+      host.style.setProperty('--exmp-top', top + 'px');
+      host.style.setProperty('--exmp-bottom', 'auto');
     }
 
     function handleMiniPointerUp(event) {
@@ -1033,10 +1048,12 @@ export function mountPanel(host) {
           all: initial;
           display: flex;
           flex-direction: column;
-          align-items: flex-end;
+          align-items: var(--exmp-align-items, flex-end);
           position: fixed !important;
-          bottom: 24px !important;
-          right: 24px !important;
+          top: var(--exmp-top, auto) !important;
+          bottom: var(--exmp-bottom, 24px) !important;
+          left: var(--exmp-left, auto) !important;
+          right: var(--exmp-right, 24px) !important;
           z-index: 2147483647 !important;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif !important;
           font-size: 13px !important;
@@ -1082,6 +1099,7 @@ export function mountPanel(host) {
         .exmp-mini:active { cursor: grabbing; }
         .exmp-footer {
           border-top: 1px solid #f0f1f3;
+          flex: 0 0 auto;
           min-height: 36px;
         }
         .exmp-title {
@@ -1146,10 +1164,13 @@ export function mountPanel(host) {
         .exmp-btn-back:hover { background: #f2f4f7; }
         .exmp-status {
           color: #98a2b3;
+          flex: 0 0 auto;
           min-height: 26px;
         }
         .exmp-status:empty { display: none; }
         .exmp-content {
+          flex: 1 1 auto;
+          min-height: 0;
           padding: 8px 14px 10px;
           overflow-y: auto;
           max-height: 360px;
@@ -1190,6 +1211,8 @@ export function mountPanel(host) {
 
         /* ---- Config management view ---- */
         .exmp-config {
+          flex: 1 1 auto;
+          min-height: 0;
           padding: 8px 14px 10px;
           overflow-y: auto;
           max-height: 360px;
@@ -1369,7 +1392,7 @@ export function mountPanel(host) {
       ` : html`
         <div class="exmp-panel">
           ${viewState === 'config' ? html`
-            <div class="exmp-config">
+            <div class="exmp-config" key="config">
               ${configList.length === 0 ? html`
                 <div class="exmp-config-empty">暂无配置，请点击下方按钮添加</div>
               ` : configList.map(function (cfg) {
@@ -1587,7 +1610,7 @@ ${function () {
               </div>
             </div>
           ` : html`
-            <div class="exmp-content">
+            <div class="exmp-content" key="content">
               ${answers.length === 0 ? '' : answers.map(function (a) {
                 if (a.type === 'answer') {
                   return html`<div class="exmp-answer" dangerouslySetInnerHTML=${{ __html: sanitizeAnswerHtml(a.content) }} />`;
