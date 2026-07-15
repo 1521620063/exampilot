@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="ExamPilot Chrome 扩展完整使用说明：安装、配置视觉 AI、全屏与区域识别、自定义请求和常见问题。">
+  <meta name="description" content="ExamPilot Chrome 扩展完整使用说明：安装、配置视觉 AI、全屏与区域识别、配置迁移、自定义请求和常见问题。">
   <meta name="theme-color" content="#f8f6f2">
   <title>ExamPilot 使用说明</title>
   <style>
@@ -28,9 +28,10 @@
     }
 
     * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; scroll-padding-top: 92px; }
+    html { overflow-x: hidden; scroll-behavior: smooth; scroll-padding-top: 92px; }
     body {
       margin: 0;
+      overflow-x: hidden;
       color: var(--text);
       background:
         radial-gradient(circle at 10% 3%, rgba(212, 135, 42, 0.10), transparent 24rem),
@@ -463,6 +464,7 @@
         <a href="#install">安装</a>
         <a href="#configure">配置</a>
         <a href="#capture">识别</a>
+        <a href="#migration">迁移</a>
         <a href="#faq">常见问题</a>
         <a class="nav-cta" href="https://chromewebstore.google.com/detail/exampilot-%E6%99%BA%E8%83%BD%E8%A7%A3%E9%A2%98%E5%BC%95%E6%93%8E/cekiablfmjeejkgfklapmifkcmeipnnf" target="_blank" rel="noopener noreferrer">安装扩展</a>
       </div>
@@ -505,6 +507,7 @@
       <a href="#configure">配置模型</a>
       <a href="#api-modes">接口模式</a>
       <a href="#capture">开始识别</a>
+      <a href="#migration">配置迁移</a>
       <a href="#advanced">高级配置</a>
       <a href="#faq">常见问题</a>
     </aside>
@@ -682,12 +685,38 @@
           <div class="guide-item"><div class="guide-key">区域</div><div><strong>框选指定内容</strong><p>减少干扰信息，推荐用于大多数题目。</p></div></div>
           <div class="guide-item"><div class="guide-key">取消</div><div><strong>中止当前请求</strong><p>接口响应过慢或选错区域时使用。</p></div></div>
           <div class="guide-item"><div class="guide-key">清除</div><div><strong>清空当前结果</strong><p>不会删除 API 配置或自定义提示词。</p></div></div>
-          <div class="guide-item"><div class="guide-key">⚙️</div><div><strong>打开设置</strong><p>管理模型、请求模板、提示词与透明度。</p></div></div>
+          <div class="guide-item"><div class="guide-key">⚙️</div><div><strong>打开设置</strong><p>管理模型、请求模板、配置迁移、提示词与透明度。</p></div></div>
+          <div class="guide-item"><div class="guide-key">—</div><div><strong>折叠为迷你按钮</strong><p>拖动 ⚡ 按钮可调整面板位置，点击按钮重新展开。</p></div></div>
           <div class="guide-item"><div class="guide-key">双击</div><div><strong>显示或隐藏面板</strong><p>在页面空白区域双击即可切换。</p></div></div>
         </div>
         <div class="callout">
           <span aria-hidden="true">⏱️</span>
           <div><strong>状态提示</strong>识别过程通常依次显示“截图中 → 裁剪中（区域模式）→ AI 识别中 → 识别完成”。</div>
+        </div>
+      </section>
+
+      <section class="section" id="migration">
+        <div class="section-heading">
+          <h2>迁移与备份配置</h2>
+          <p>在 ⚙️ 设置的“配置迁移”中，可以把常用模型设置带到另一台设备，或在修改前留一份本地备份。</p>
+        </div>
+        <div class="config-layout">
+          <article class="card config-card">
+            <h3>↓ 导出配置</h3>
+            <p>点击后浏览器会下载 <code>exampilot-settings-YYYY-MM-DD.json</code>。文件包含全部模型配置、当前选中项、自定义提示词和界面透明度。</p>
+          </article>
+          <article class="card config-card">
+            <h3>↑ 导入配置</h3>
+            <p>选择 ExamPilot JSON 备份并确认后，扩展会校验文件内容，再替换当前浏览器中的全部配置、提示词与透明度。</p>
+          </article>
+        </div>
+        <div class="callout warning">
+          <span aria-hidden="true">🔑</span>
+          <div><strong>备份包含未加密的 API Key</strong>请只保存在可信设备和私密位置，不要分享、上传到公共网盘链接或提交到代码仓库。导入后首次使用新 API 域名时仍需重新授权。</div>
+        </div>
+        <div class="callout">
+          <span aria-hidden="true">📍</span>
+          <div><strong>面板位置单独保存在本机</strong>拖动迷你 ⚡ 按钮后，位置会自动保存并适配窗口尺寸；面板位置与 API 域名授权不会写入导出文件。</div>
         </div>
       </section>
 
@@ -754,6 +783,14 @@
           <details>
             <summary>截图和 API Key 会上传到哪里？</summary>
             <p>截图只会发送到你配置的 API 地址，API Key 与配置保存在 Chrome 本地存储。ExamPilot 本身不提供中转服务。详情请查看隐私政策。</p>
+          </details>
+          <details>
+            <summary>导入配置后为什么仍然提示域名授权？</summary>
+            <p>导出文件只包含模型配置、提示词和透明度，不包含 Chrome 授予扩展的 API 域名权限。换设备或浏览器后，首次使用每个 API 域名时需要重新授权。</p>
+          </details>
+          <details>
+            <summary>导出的配置文件可以分享吗？</summary>
+            <p>不建议。备份是可读的 JSON，其中包含 API Key 以及自定义请求内容。请把它当作密码文件保管；如发生泄露，请立即在 API 服务商处撤销或轮换密钥。</p>
           </details>
         </div>
       </section>
