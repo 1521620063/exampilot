@@ -1,4 +1,4 @@
-importScripts('template-engine.js', 'request-overrides.js', 'query-ai.js');
+importScripts('template-engine.js', 'request-overrides.js', 'settings-transfer.js', 'query-ai.js');
 
 var currentAbortController = null;
 
@@ -258,6 +258,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sendResponse({ success: true, configList: data.configList || [] });
     });
     return true;
+  }
+
+  if (request.action === 'exportSettings') {
+    return asyncHandler(async function () {
+      var data = await chrome.storage.local.get(['configList', 'customPrompt', 'uiOpacity']);
+      var backup = ExamPilotSettingsTransfer.createSettingsBackup({
+        configList: data.configList || [],
+        customPrompt: data.customPrompt || '',
+        uiOpacity: data.uiOpacity === undefined ? 0.95 : data.uiOpacity
+      });
+      return { success: true, backup: backup };
+    })(request, sender, sendResponse);
+  }
+
+  if (request.action === 'importSettings') {
+    return asyncHandler(async function (req) {
+      var settings = ExamPilotSettingsTransfer.normalizeSettingsBackup(req.backup);
+      await chrome.storage.local.set(settings);
+      return { success: true, configCount: settings.configList.length };
+    })(request, sender, sendResponse);
   }
 
   if (request.action === 'setActiveConfig') {

@@ -17,6 +17,16 @@ import {
 const html = htm.bind(h);
 var __permissionHandler = null;
 
+function getApiUrlPlaceholder(apiMode) {
+  var placeholders = {
+    'chat-completions': 'https://api.openai.com/v1/chat/completions',
+    'responses-api': 'https://api.openai.com/v1/responses',
+    'anthropic': 'https://api.anthropic.com/v1/messages',
+    'custom-template': 'https://api.example.com/v1/analyze'
+  };
+  return placeholders[apiMode] || placeholders['chat-completions'];
+}
+
 function sanitizeAnswerHtml(value) {
   var template = document.createElement('template');
   template.innerHTML = String(value || '');
@@ -102,11 +112,14 @@ export function mountPanel(host) {
     var _u = useState(''), formError = _u[0], setFormError = _u[1];
     var _v = useState(false), configSaving = _v[0], setConfigSaving = _v[1];
     var opacityState = useState(DEFAULT_UI_OPACITY), uiOpacity = opacityState[0], setUiOpacity = opacityState[1];
+    var transferBusyState = useState(false), transferBusy = transferBusyState[0], setTransferBusy = transferBusyState[1];
+    var transferMessageState = useState(null), transferMessage = transferMessageState[0], setTransferMessage = transferMessageState[1];
     var positionState = useState(null), panelPosition = positionState[0], setPanelPosition = positionState[1];
     var hiddenByUserRef = useRef(false);
     var currentRequestSeqRef = useRef(0);
     var miniDragRef = useRef(null);
     var suppressMiniClickRef = useRef(false);
+    var importInputRef = useRef(null);
 
     // 区域选择相关状态
     var _w = useState(false), selectingRegion = _w[0], setSelectingRegion = _w[1];
@@ -491,6 +504,78 @@ export function mountPanel(host) {
 
     function deleteConfig(id) {
       chrome.runtime.sendMessage({ action: 'deleteConfig', configId: id }).then(loadConfigs);
+    }
+
+    function exportSettings() {
+      setTransferBusy(true);
+      setTransferMessage(null);
+      chrome.runtime.sendMessage({ action: 'exportSettings' }).then(function (res) {
+        if (!res || !res.success) {
+          throw new Error(res && res.error ? res.error : '导出失败');
+        }
+        var blob = new Blob([JSON.stringify(res.backup, null, 2)], { type: 'application/json' });
+        var downloadUrl = URL.createObjectURL(blob);
+        var link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = 'exampilot-settings-' + new Date().toISOString().slice(0, 10) + '.json';
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(function () { URL.revokeObjectURL(downloadUrl); }, 1000);
+        setTransferMessage({ type: 'success', text: '配置已导出，请妥善保管文件' });
+      }).catch(function (error) {
+        setTransferMessage({ type: 'error', text: error.message || String(error) });
+      }).then(function () {
+        setTransferBusy(false);
+      });
+    }
+
+    function chooseImportFile() {
+      if (importInputRef.current) importInputRef.current.click();
+    }
+
+    function importSettings(event) {
+      var input = event.target;
+      var file = input.files && input.files[0];
+      input.value = '';
+      if (!file) return;
+      if (file.size > 2 * 1024 * 1024) {
+        setTransferMessage({ type: 'error', text: '配置文件不能超过 2 MB' });
+        return;
+      }
+      if (!window.confirm('导入会替换当前电脑上的全部 ExamPilot 配置，是否继续？')) return;
+
+      setTransferBusy(true);
+      setTransferMessage(null);
+      file.text().then(function (text) {
+        var backup;
+        try {
+          backup = JSON.parse(text);
+        } catch (_) {
+          throw new Error('配置文件不是有效的 JSON');
+        }
+        return chrome.runtime.sendMessage({ action: 'importSettings', backup: backup });
+      }).then(function (res) {
+        if (!res || !res.success) {
+          throw new Error(res && res.error ? res.error : '导入失败');
+        }
+        cancelForm();
+        loadConfigs();
+        loadPrompt();
+        return chrome.storage.local.get('uiOpacity').then(function (data) {
+          var normalized = applyUiOpacity(host, data.uiOpacity);
+          setUiOpacity(normalized);
+          setTransferMessage({
+            type: 'success',
+            text: '已导入 ' + res.configCount + ' 个配置，首次使用新域名时需授权'
+          });
+        });
+      }).catch(function (error) {
+        setTransferMessage({ type: 'error', text: error.message || String(error) });
+      }).then(function () {
+        setTransferBusy(false);
+      });
     }
 
     function openAddForm() {
@@ -1352,6 +1437,32 @@ export function mountPanel(host) {
           padding: 20px 0;
           font-size: 12px;
         }
+        .exmp-transfer {
+          border-top: 1px solid #f0f1f3;
+          margin-top: 10px;
+          padding-top: 10px;
+        }
+        .exmp-transfer-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .exmp-transfer-btn {
+          align-items: center;
+          background: #fff;
+          border: 1px solid #d0d5dd;
+          border-radius: 6px;
+          color: #344054;
+          cursor: pointer;
+          display: flex;
+          font-family: inherit;
+          font-size: 11px;
+          justify-content: center;
+          min-height: 30px;
+          padding: 5px 8px;
+        }
+        .exmp-transfer-btn:hover { background: #f9fafc; border-color: #98a2b3; }
+        .exmp-transfer-btn:disabled { cursor: default; opacity: 0.55; }
+        .exmp-transfer-note { color: #b54708; font-size: 10px; line-height: 1.4; margin-top: 6px; }
+        .exmp-transfer-message { font-size: 10px; line-height: 1.4; margin-top: 6px; }
+        .exmp-transfer-message.success { color: #067647; }
+        .exmp-transfer-message.error { color: #b42318; }
         .exmp-ui-settings {
           border-top: 1px solid #f0f1f3;
           margin-top: 10px;
@@ -1428,7 +1539,7 @@ export function mountPanel(host) {
                   <label>配置名称</label>
                   <input value=${formName} onInput=${function (e) { setFormName(e.target.value); }} placeholder="例如: 我的 OpenAI" />
                   <label>接口地址 (URL)</label>
-                  <input value=${formUrl} onInput=${function (e) { setFormUrl(e.target.value); }} placeholder="https://api.openai.com/v1/chat/completions" />
+                  <input value=${formUrl} onInput=${function (e) { setFormUrl(e.target.value); }} placeholder=${getApiUrlPlaceholder(formMode)} />
                   <label>接口模式</label>
                   <select value=${formMode} onChange=${function (e) {
                     var newMode = e.target.value;
@@ -1579,6 +1690,34 @@ ${function () {
                   </div>
                 </div>
               `}
+              <div class="exmp-transfer">
+                <div class="exmp-ui-settings-title">配置迁移</div>
+                <div class="exmp-transfer-actions">
+                  <button
+                    class="exmp-transfer-btn"
+                    disabled=${transferBusy}
+                    title="导出全部 ExamPilot 配置"
+                    onClick=${exportSettings}
+                  >↓ 导出配置</button>
+                  <button
+                    class="exmp-transfer-btn"
+                    disabled=${transferBusy}
+                    title="从 ExamPilot 配置文件导入"
+                    onClick=${chooseImportFile}
+                  >↑ 导入配置</button>
+                </div>
+                <input
+                  ref=${importInputRef}
+                  type="file"
+                  accept="application/json,.json"
+                  style="display: none;"
+                  onChange=${importSettings}
+                />
+                <div class="exmp-transfer-note">导出文件包含 API Key，请勿分享或上传到公共位置。</div>
+                ${transferMessage ? html`
+                  <div class="exmp-transfer-message ${transferMessage.type}">${transferMessage.text}</div>
+                ` : ''}
+              </div>
               <div class="exmp-ui-settings">
                 <div class="exmp-ui-settings-title">🎨 界面设置</div>
                 <label class="exmp-opacity-label" for="exmp-opacity-range">
