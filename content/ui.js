@@ -162,6 +162,7 @@ export function mountPanel(host) {
         setShowSpinner(false);
         if (response.result && response.result.mode === 'silent') {
           installSilentTarget(response.result);
+          window.scrollBy(0, silentScrollPixelsRef.current);
           copySilentClipboardText(response.result.clipboardText).then(function (copied) {
             if (mySeq !== currentRequestSeqRef.current) return;
             if (copied) {
@@ -445,13 +446,7 @@ export function mountPanel(host) {
     // ---- Listen for extension-level clear command ----
     useEffect(function () {
       function handler() {
-        if (selectingRegion) {
-          cancelRegionSelection();
-        } else if (capturing || showSpinner) {
-          cancelCapture();
-        } else {
-          handleClear();
-        }
+        handleCancelOrClear();
       }
       host.addEventListener('clear-results', handler);
       return function () { host.removeEventListener('clear-results', handler); };
@@ -1138,10 +1133,11 @@ export function mountPanel(host) {
         textarea.focus();
         textarea.select();
         var copied = document.execCommand('copy');
-        if (textarea.parentNode) textarea.parentNode.removeChild(textarea);
         return copied === true;
       } catch (error) {
         return false;
+      } finally {
+        if (textarea && textarea.parentNode) textarea.parentNode.removeChild(textarea);
       }
     }
 
@@ -1282,9 +1278,6 @@ export function mountPanel(host) {
         if (state) states.push(state);
       });
       silentTargetRef.current = states;
-      if (states.length > 0) {
-        window.scrollBy(0, silentScrollPixelsRef.current);
-      }
     }
 
     function handleFullscreenCapture() {
@@ -1342,6 +1335,16 @@ export function mountPanel(host) {
       setShowSpinner(false);
       setStatusText('已取消');
       chrome.runtime.sendMessage({ action: 'cancelCapture' }).catch(function () {});
+    }
+
+    function handleCancelOrClear() {
+      if (selectingRegion) {
+        cancelRegionSelection();
+      } else if (capturing || showSpinner) {
+        cancelCapture();
+      } else {
+        handleClear();
+      }
     }
 
     function cancelRegionSelection() {
@@ -2230,12 +2233,12 @@ ${function () {
               ${viewState === 'config' ? html`
                 <button class="exmp-btn exmp-btn-back" onClick=${function () { setViewState('main'); }}>← 返回</button>
               ` : html`
-                ${capturing ? html`
-                  <button class="exmp-btn exmp-btn-clear" onClick=${cancelCapture}>取消</button>
+                ${capturing || selectingRegion ? html`
+                  <button class="exmp-btn exmp-btn-clear" onClick=${handleCancelOrClear}>取消</button>
                 ` : html`
                   <button class="exmp-btn exmp-btn-start" onClick=${handleFullscreenCapture}>全屏</button>
                   <button class="exmp-btn exmp-btn-region" onClick=${handleRegionCapture}>区域</button>
-                  <button class="exmp-btn exmp-btn-clear" onClick=${handleClear}>清除</button>
+                  <button class="exmp-btn exmp-btn-clear" onClick=${handleCancelOrClear}>清除</button>
                 `}
                 <button class="exmp-btn exmp-btn-settings" onClick=${openConfigView}>⚙️</button>
                 <button class="exmp-btn exmp-btn-mini" onClick=${function () { setViewState('mini'); }}>—</button>

@@ -309,6 +309,14 @@ function hasPercentTarget(data) {
     (data.target && (data.target.unit === 'percent' || data.target.units === 'percent')));
 }
 
+function validatePercentRange(value, label) {
+  var number = readFiniteNumber(value, label);
+  if (number < 0 || number > 1) {
+    throw new Error('静默模式返回的 ' + label + ' 必须在 0 到 1 之间');
+  }
+  return number;
+}
+
 function pickPercentPoint(data) {
   return data.coordinatePercent || data.coordinatesPercent || data.pointPercent ||
     (data.target && (data.target.unit === 'percent' || data.target.units === 'percent') ? data.target : null);
@@ -377,12 +385,15 @@ function normalizeSilentTarget(parsed, rect, viewport) {
     var percentPoint = pickPercentPoint(parsed);
     var percentBox = pickPercentBox(parsed);
     if (percentBox && typeof percentBox === 'object') {
-      var boxX = readFiniteNumber(percentBox.x, 'bboxPercent.x');
-      var boxY = readFiniteNumber(percentBox.y, 'bboxPercent.y');
-      var boxWidth = readFiniteNumber(percentBox.width, 'bboxPercent.width');
-      var boxHeight = readFiniteNumber(percentBox.height, 'bboxPercent.height');
-      if (boxX < 0 || boxY < 0 || boxX > 1 || boxY > 1 || boxWidth <= 0 || boxHeight <= 0) {
-        throw new Error('静默模式返回的 bboxPercent 必须在 0 到 1 之间');
+      var boxX = validatePercentRange(percentBox.x, 'bboxPercent.x');
+      var boxY = validatePercentRange(percentBox.y, 'bboxPercent.y');
+      var boxWidth = validatePercentRange(percentBox.width, 'bboxPercent.width');
+      var boxHeight = validatePercentRange(percentBox.height, 'bboxPercent.height');
+      if (boxWidth <= 0 || boxHeight <= 0) {
+        throw new Error('静默模式返回的 bboxPercent.width/height 必须大于 0');
+      }
+      if (boxX + boxWidth > 1 || boxY + boxHeight > 1) {
+        throw new Error('静默模式返回的 bboxPercent 超出截图范围');
       }
       rawX = boxX;
       rawY = boxY;
@@ -393,14 +404,17 @@ function normalizeSilentTarget(parsed, rect, viewport) {
       localX = boxX * sourceWidth + width / 2;
       localY = boxY * sourceHeight + height / 2;
       if (percentPoint && percentPoint.x !== undefined && percentPoint.y !== undefined) {
-        rawX = readFiniteNumber(percentPoint.x, 'coordinatePercent.x');
-        rawY = readFiniteNumber(percentPoint.y, 'coordinatePercent.y');
+        rawX = validatePercentRange(percentPoint.x, 'coordinatePercent.x');
+        rawY = validatePercentRange(percentPoint.y, 'coordinatePercent.y');
+        if (rawX < boxX || rawX > boxX + boxWidth || rawY < boxY || rawY > boxY + boxHeight) {
+          throw new Error('静默模式返回的 coordinatePercent 必须落在 bboxPercent 内');
+        }
         localX = rawX * sourceWidth;
         localY = rawY * sourceHeight;
       }
     } else if (percentPoint && typeof percentPoint === 'object') {
-      rawX = readFiniteNumber(percentPoint.x, 'coordinatePercent.x');
-      rawY = readFiniteNumber(percentPoint.y, 'coordinatePercent.y');
+      rawX = validatePercentRange(percentPoint.x, 'coordinatePercent.x');
+      rawY = validatePercentRange(percentPoint.y, 'coordinatePercent.y');
       rawWidth = 32 / sourceWidth;
       rawHeight = 32 / sourceHeight;
       localX = rawX * sourceWidth;
