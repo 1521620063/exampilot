@@ -16,6 +16,19 @@ import {
 
 const html = htm.bind(h);
 var __permissionHandler = null;
+var DEFAULT_SILENT_SCROLL_PIXELS = 5;
+var DEFAULT_SILENT_PROMPT = '请识别图片中所有完整显示的题目。只返回一个 JSON 对象，不要使用 Markdown 代码块，不要输出多余文字。\n' +
+  '不要定位到题干空白、横线、输入框、解析区域或未完整显示的题目。\n' +
+  '选择题必须返回正确选项本身的位置：bboxPercent 要框住正确选项行，至少包含选项字母圆圈和选项文本；coordinatePercent 要落在这个 bboxPercent 内。\n' +
+  '简答题、填空题、编程题等没有可悬浮正确选项的题目，不要编造坐标，只返回答案文本，并设置 "clipboardOnly": true。\n' +
+  '如果编程题已经给定了部分代码、函数签名、类定义、输入输出处理或注释要求，请在已有内容基础上补全，不要重写无关结构，不要删除题目给定的代码。\n' +
+  'JSON 格式必须为：{"items":[{"questionNumber":"题号","answer":"正确答案文本","choice":"A/B/C/D 等选项字母","coordinatePercent":{"x":0到1的小数,"y":0到1的小数},"bboxPercent":{"x":0到1的小数,"y":0到1的小数,"width":0到1的小数,"height":0到1的小数}},{"questionNumber":"题号","answer":"简答/编程题答案文本","clipboardOnly":true}]}';
+
+function normalizeSilentScrollPixels(value) {
+  var number = Number(value);
+  if (!Number.isFinite(number)) return DEFAULT_SILENT_SCROLL_PIXELS;
+  return Math.max(0, Math.min(Math.round(number), 200));
+}
 
 function getApiUrlPlaceholder(apiMode) {
   var placeholders = {
@@ -100,6 +113,8 @@ export function mountPanel(host) {
     var _m = useState('chat-completions'), formMode = _m[0], setFormMode = _m[1];
     var _n = useState(''), customPrompt = _n[0], setCustomPrompt = _n[1];
     var _o = useState(false), promptSaving = _o[0], setPromptSaving = _o[1];
+    var silentPromptState = useState(''), silentPrompt = silentPromptState[0], setSilentPrompt = silentPromptState[1];
+    var silentPromptSavingState = useState(false), silentPromptSaving = silentPromptSavingState[0], setSilentPromptSaving = silentPromptSavingState[1];
     var _p = useState(''), formHeadersJson = _p[0], setFormHeadersJson = _p[1];
     var _q = useState(''), formBodyJson = _q[0], setFormBodyJson = _q[1];
     var templateHeadersState = useState(''), formTemplateHeadersJson = templateHeadersState[0], setFormTemplateHeadersJson = templateHeadersState[1];
@@ -112,6 +127,9 @@ export function mountPanel(host) {
     var _u = useState(''), formError = _u[0], setFormError = _u[1];
     var _v = useState(false), configSaving = _v[0], setConfigSaving = _v[1];
     var opacityState = useState(DEFAULT_UI_OPACITY), uiOpacity = opacityState[0], setUiOpacity = opacityState[1];
+    var silentModeState = useState(false), silentModeEnabled = silentModeState[0], setSilentModeEnabled = silentModeState[1];
+    var silentScrollState = useState(DEFAULT_SILENT_SCROLL_PIXELS), silentScrollPixels = silentScrollState[0], setSilentScrollPixels = silentScrollState[1];
+    var silentDebugFrameState = useState(false), silentDebugFrameEnabled = silentDebugFrameState[0], setSilentDebugFrameEnabled = silentDebugFrameState[1];
     var transferBusyState = useState(false), transferBusy = transferBusyState[0], setTransferBusy = transferBusyState[1];
     var transferMessageState = useState(null), transferMessage = transferMessageState[0], setTransferMessage = transferMessageState[1];
     var positionState = useState(null), panelPosition = positionState[0], setPanelPosition = positionState[1];
@@ -120,10 +138,18 @@ export function mountPanel(host) {
     var miniDragRef = useRef(null);
     var suppressMiniClickRef = useRef(false);
     var importInputRef = useRef(null);
+    var silentTargetRef = useRef(null);
+    var silentHoverTimerRef = useRef(null);
+    var silentHoverTargetRef = useRef(null);
+    var silentScrollPixelsRef = useRef(DEFAULT_SILENT_SCROLL_PIXELS);
+    var silentDebugFrameEnabledRef = useRef(false);
 
     // 区域选择相关状态
     var _w = useState(false), selectingRegion = _w[0], setSelectingRegion = _w[1];
     var overlayElRef = useRef(null);
+
+    silentScrollPixelsRef.current = silentScrollPixels;
+    silentDebugFrameEnabledRef.current = silentDebugFrameEnabled;
 
     function handleCaptureResponse(response, mySeq) {
       if (mySeq !== currentRequestSeqRef.current) return;
@@ -134,12 +160,31 @@ export function mountPanel(host) {
       } else {
         setStatusText('识别完成');
         setShowSpinner(false);
+        if (response.result && response.result.mode === 'silent') {
+          installSilentTarget(response.result);
+          copySilentClipboardText(response.result.clipboardText).then(function (copied) {
+            if (mySeq !== currentRequestSeqRef.current) return;
+            if (copied) {
+              setStatusText(response.result.targets && response.result.targets.length > 0 ? '静默模式已就绪，答案已复制' : '答案已复制到剪切板');
+            } else if (response.result.clipboardText) {
+              setStatusText('剪切板写入失败');
+              setAnswers(function (prev) { return prev.concat([{ type: 'error', content: '❌ 浏览器阻止了自动复制，请检查剪切板权限' }]); });
+            } else {
+              setStatusText('静默模式已就绪');
+            }
+          });
+          if (!response.result.clipboardText) {
+            setStatusText('静默模式已就绪');
+          }
+          return;
+        }
         setAnswers(function (prev) { return prev.concat([{ type: 'answer', content: response.result }]); });
       }
     }
 
     function handleCaptureError(error, mySeq) {
       if (mySeq !== currentRequestSeqRef.current) return;
+      removeSilentTarget();
       setStatusText('处理失败');
       setShowSpinner(false);
       setAnswers(function (prev) { return prev.concat([{ type: 'error', content: '❌ ' + (error.message || String(error)) }]); });
@@ -168,6 +213,13 @@ export function mountPanel(host) {
             request.message.indexOf('...') !== -1 ||
             request.message.indexOf('中') !== -1
           );
+          return;
+        }
+
+        if (request.action === 'activeConfigChanged') {
+          setStatusText('已切换配置：' + (request.configName || '未命名配置'));
+          setShowSpinner(false);
+          loadConfigs();
         }
       }
       chrome.runtime.onMessage.addListener(handler);
@@ -390,6 +442,46 @@ export function mountPanel(host) {
       return function () { host.removeEventListener('toggle-panel', handler); };
     }, []);
 
+    // ---- Listen for extension-level clear command ----
+    useEffect(function () {
+      function handler() {
+        if (selectingRegion) {
+          cancelRegionSelection();
+        } else if (capturing || showSpinner) {
+          cancelCapture();
+        } else {
+          handleClear();
+        }
+      }
+      host.addEventListener('clear-results', handler);
+      return function () { host.removeEventListener('clear-results', handler); };
+    }, [selectingRegion, capturing, showSpinner]);
+
+    useEffect(function () {
+      return function () {
+        removeSilentTarget();
+      };
+    }, []);
+
+    // ---- Listen for extension-level shortcut commands ----
+    useEffect(function () {
+      function handler(event) {
+        var mode = event.detail && event.detail.mode;
+        if (mode === 'region') {
+          handleRegionCapture();
+        } else {
+          handleFullscreenCapture();
+        }
+      }
+      window.__exampilotPanelReady = true;
+      host.addEventListener('start-capture', handler);
+      host.dispatchEvent(new CustomEvent('exampilot-panel-ready'));
+      return function () {
+        window.__exampilotPanelReady = false;
+        host.removeEventListener('start-capture', handler);
+      };
+    }, []);
+
     // ---- 区域选择模式下按 ESC 取消 ----
     useEffect(function () {
       function handleKeyDown(e) {
@@ -477,6 +569,58 @@ export function mountPanel(host) {
       });
     }
 
+    function loadSilentMode() {
+      chrome.runtime.sendMessage({ action: 'getSilentMode' }).then(function (res) {
+        if (res && res.success) {
+          setSilentModeEnabled(res.silentModeEnabled === true);
+          setSilentScrollPixels(normalizeSilentScrollPixels(res.silentScrollPixels));
+          setSilentDebugFrameEnabled(res.silentDebugFrameEnabled === true);
+        }
+      }).catch(function () {});
+    }
+
+    function saveSilentMode(value) {
+      var enabled = value === true;
+      setSilentModeEnabled(enabled);
+      chrome.runtime.sendMessage({
+        action: 'setSilentMode',
+        silentModeEnabled: enabled
+      }).catch(function () {
+        setSilentModeEnabled(!enabled);
+      });
+    }
+
+    function saveSilentScrollPixels(value) {
+      var normalized = normalizeSilentScrollPixels(value);
+      setSilentScrollPixels(normalized);
+      chrome.runtime.sendMessage({
+        action: 'setSilentScrollPixels',
+        silentScrollPixels: normalized
+      }).catch(function () {
+        loadSilentMode();
+      });
+    }
+
+    function applySilentDebugFrameVisibility(enabled) {
+      var state = silentTargetRef.current;
+      var states = Array.isArray(state) ? state : (state ? [state] : []);
+      states.forEach(function (item) {
+        if (item && item.updateVisualState) item.updateVisualState(enabled);
+      });
+    }
+
+    function saveSilentDebugFrame(value) {
+      var enabled = value === true;
+      setSilentDebugFrameEnabled(enabled);
+      applySilentDebugFrameVisibility(enabled);
+      chrome.runtime.sendMessage({
+        action: 'setSilentDebugFrame',
+        silentDebugFrameEnabled: enabled
+      }).catch(function () {
+        loadSilentMode();
+      });
+    }
+
     function loadConfigs() {
       chrome.runtime.sendMessage({ action: 'getConfigs' }).then(function (res) {
         if (res.success) setConfigList(res.configList || []);
@@ -485,7 +629,10 @@ export function mountPanel(host) {
 
     function loadPrompt() {
       chrome.runtime.sendMessage({ action: 'getPrompt' }).then(function (res) {
-        if (res.success) setCustomPrompt(res.prompt || '');
+        if (res.success) {
+          setCustomPrompt(res.prompt || '');
+          setSilentPrompt(res.silentPrompt || '');
+        }
       });
     }
 
@@ -495,6 +642,15 @@ export function mountPanel(host) {
         setPromptSaving(false);
       }).catch(function () {
         setPromptSaving(false);
+      });
+    }
+
+    function saveSilentPrompt() {
+      setSilentPromptSaving(true);
+      chrome.runtime.sendMessage({ action: 'setSilentPrompt', prompt: silentPrompt }).then(function () {
+        setSilentPromptSaving(false);
+      }).catch(function () {
+        setSilentPromptSaving(false);
       });
     }
 
@@ -563,6 +719,7 @@ export function mountPanel(host) {
         cancelForm();
         loadConfigs();
         loadPrompt();
+        loadSilentMode();
         return chrome.storage.local.get('uiOpacity').then(function (data) {
           var normalized = applyUiOpacity(host, data.uiOpacity);
           setUiOpacity(normalized);
@@ -945,16 +1102,205 @@ export function mountPanel(host) {
       });
     }
 
+    function buildViewportPayload() {
+      return {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        dpr: window.devicePixelRatio || 1
+      };
+    }
+
+    async function copySilentClipboardText(text) {
+      var value = String(text || '').trim();
+      if (!value) return false;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(value);
+          return true;
+        }
+      } catch (error) {
+        // Some pages block Clipboard API from content scripts; fall back below.
+      }
+      try {
+        var textarea = document.createElement('textarea');
+        textarea.value = value;
+        textarea.setAttribute('readonly', '');
+        textarea.style.cssText = [
+          'position: fixed',
+          'left: -9999px',
+          'top: 0',
+          'width: 1px',
+          'height: 1px',
+          'opacity: 0',
+          'pointer-events: none'
+        ].join(';');
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        var copied = document.execCommand('copy');
+        if (textarea.parentNode) textarea.parentNode.removeChild(textarea);
+        return copied === true;
+      } catch (error) {
+        return false;
+      }
+    }
+
+    function clearSilentHoverTimer() {
+      if (silentHoverTimerRef.current) {
+        window.clearTimeout(silentHoverTimerRef.current);
+        silentHoverTimerRef.current = null;
+      }
+      silentHoverTargetRef.current = null;
+    }
+
+    function removeSilentTarget() {
+      clearSilentHoverTimer();
+      var state = silentTargetRef.current;
+      var states = Array.isArray(state) ? state : (state ? [state] : []);
+      states.forEach(function (item) {
+        if (!item) return;
+        window.removeEventListener('scroll', item.updatePosition, true);
+        window.removeEventListener('resize', item.updatePosition, true);
+        document.removeEventListener('mousemove', item.handleMouseMove, true);
+        if (item.el && item.el.parentNode) {
+          item.el.parentNode.removeChild(item.el);
+        }
+      });
+      silentTargetRef.current = null;
+    }
+
+    function installSingleSilentTarget(result, index) {
+      var target = result && result.target;
+      if (!target) return null;
+      var x = Number(target.x);
+      var y = Number(target.y);
+      var width = Number(target.width);
+      var height = Number(target.height);
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width) || !Number.isFinite(height)) return null;
+
+      var color = '#ef4444';
+      var el = document.createElement('div');
+      el.className = 'exmp-silent-target';
+      el.setAttribute('aria-hidden', 'true');
+      el.style.cssText = [
+        'position: fixed',
+        'left: 0',
+        'top: 0',
+        'width: 32px',
+        'height: 32px',
+        'z-index: 2147483645',
+        'pointer-events: none',
+        'cursor: default',
+        'box-sizing: border-box'
+      ].join(';');
+
+      var center = document.createElement('div');
+      center.style.cssText = [
+        'position: absolute',
+        'left: 50%',
+        'top: 50%',
+        'width: 10px',
+        'height: 10px',
+        'margin-left: -5px',
+        'margin-top: -5px',
+        'border-radius: 50%',
+        'background: ' + color,
+        'box-shadow: 0 0 0 2px #fff'
+      ].join(';');
+      el.appendChild(center);
+
+      var docX = window.scrollX + x;
+      var docY = window.scrollY + y;
+      var state = {
+        el: el,
+        docX: docX,
+        docY: docY,
+        width: Math.max(8, width),
+        height: Math.max(8, height),
+        isHovering: false,
+        hoverTriggered: false,
+        center: center,
+        updateVisualState: function (enabled) {
+          el.style.border = enabled ? '2px solid ' + color : '2px solid transparent';
+          el.style.background = enabled ? 'rgba(239,68,68,0.12)' : 'transparent';
+          center.style.display = enabled ? 'block' : 'none';
+        },
+        updatePosition: function () {
+          el.style.left = (state.docX - window.scrollX) + 'px';
+          el.style.top = (state.docY - window.scrollY) + 'px';
+          el.style.width = state.width + 'px';
+          el.style.height = state.height + 'px';
+        },
+        containsPoint: function (clientX, clientY) {
+          var left = state.docX - window.scrollX;
+          var top = state.docY - window.scrollY;
+          return clientX >= left &&
+            clientX <= left + state.width &&
+            clientY >= top &&
+            clientY <= top + state.height;
+        },
+        handleMouseMove: function (event) {
+          if (!state.containsPoint(event.clientX, event.clientY)) {
+            state.isHovering = false;
+            state.hoverTriggered = false;
+            if (silentHoverTargetRef.current === state) {
+              clearSilentHoverTimer();
+            }
+            return;
+          }
+          if (state.isHovering && state.hoverTriggered) return;
+          if (silentHoverTimerRef.current && silentHoverTargetRef.current === state) return;
+          state.isHovering = true;
+          clearSilentHoverTimer();
+          silentHoverTargetRef.current = state;
+          silentHoverTimerRef.current = window.setTimeout(function () {
+            silentHoverTimerRef.current = null;
+            silentHoverTargetRef.current = null;
+            if (!state.isHovering || state.hoverTriggered) return;
+            state.hoverTriggered = true;
+            window.scrollBy(0, silentScrollPixelsRef.current);
+            setStatusText('静默模式已触发');
+          }, 350);
+        }
+      };
+
+      document.body.appendChild(el);
+      state.updateVisualState(silentDebugFrameEnabledRef.current);
+      state.updatePosition();
+      window.addEventListener('scroll', state.updatePosition, true);
+      window.addEventListener('resize', state.updatePosition, true);
+      document.addEventListener('mousemove', state.handleMouseMove, true);
+      return state;
+    }
+
+    function installSilentTarget(result) {
+      removeSilentTarget();
+      var targets = result && Array.isArray(result.targets) ? result.targets : [result];
+      var states = [];
+      targets.forEach(function (item, index) {
+        var state = installSingleSilentTarget(item, index);
+        if (state) states.push(state);
+      });
+      silentTargetRef.current = states;
+      if (states.length > 0) {
+        window.scrollBy(0, silentScrollPixelsRef.current);
+      }
+    }
+
     function handleFullscreenCapture() {
       currentRequestSeqRef.current++;
       var mySeq = currentRequestSeqRef.current;
+      removeSilentTarget();
       setCapturing(true);
       setStatusText('准备中...');
       setShowSpinner(true);
 
       ensureActiveConfigPermissionBeforeCapture().then(function (ok) {
         if (!ok) return null;
-        return chrome.runtime.sendMessage({ action: 'captureAndAnalyze' });
+        return chrome.runtime.sendMessage({
+          action: 'captureAndAnalyze',
+          viewport: buildViewportPayload()
+        });
       }).then(function (response) {
         if (!response) return;
         handleCaptureResponse(response, mySeq);
@@ -968,6 +1314,7 @@ export function mountPanel(host) {
     function handleRegionCapture() {
       currentRequestSeqRef.current++;
       var mySeq = currentRequestSeqRef.current;
+      removeSilentTarget();
       setCapturing(true);
       setStatusText('准备中...');
       setShowSpinner(true);
@@ -990,6 +1337,7 @@ export function mountPanel(host) {
 
     function cancelCapture() {
       currentRequestSeqRef.current++;
+      removeSilentTarget();
       setCapturing(false);
       setShowSpinner(false);
       setStatusText('已取消');
@@ -1089,7 +1437,8 @@ export function mountPanel(host) {
         setStatusText('截图中...');
         return chrome.runtime.sendMessage({
           action: 'captureAndAnalyzeWithRect',
-          rect: rect
+          rect: rect,
+          viewport: buildViewportPayload()
         });
       }).then(function (response) {
         if (!response) return;
@@ -1102,6 +1451,7 @@ export function mountPanel(host) {
     }
 
     function handleClear() {
+      removeSilentTarget();
       setAnswers([]);
       setStatusText('');
     }
@@ -1109,6 +1459,7 @@ export function mountPanel(host) {
     function openConfigView() {
       loadConfigs();
       loadPrompt();
+      loadSilentMode();
       setViewState('config');
     }
 
@@ -1488,6 +1839,59 @@ export function mountPanel(host) {
           min-width: 0;
           width: 100%;
         }
+        .exmp-switch-row {
+          align-items: center;
+          color: #344054;
+          display: flex;
+          font-size: 12px;
+          justify-content: space-between;
+          margin-top: 10px;
+        }
+        .exmp-switch {
+          align-items: center;
+          background: #e4e7ec;
+          border-radius: 999px;
+          cursor: pointer;
+          display: inline-flex;
+          flex: 0 0 auto;
+          height: 22px;
+          padding: 2px;
+          transition: background 0.15s;
+          width: 40px;
+        }
+        .exmp-switch.active { background: #4f6ef7; }
+        .exmp-switch-knob {
+          background: #fff;
+          border-radius: 50%;
+          box-shadow: 0 1px 2px rgba(16,24,40,0.18);
+          height: 18px;
+          transform: translateX(0);
+          transition: transform 0.15s;
+          width: 18px;
+        }
+        .exmp-switch.active .exmp-switch-knob { transform: translateX(18px); }
+        .exmp-number-input {
+          border: 1px solid #d0d5dd;
+          border-radius: 6px;
+          box-sizing: border-box;
+          color: #344054;
+          font: inherit;
+          font-size: 12px;
+          height: 28px;
+          outline: none;
+          padding: 4px 8px;
+          text-align: right;
+          width: 72px;
+        }
+        .exmp-number-input:focus {
+          border-color: #4f6ef7;
+          box-shadow: 0 0 0 2px rgba(79,110,247,0.14);
+        }
+        .exmp-input-suffix {
+          color: #667085;
+          font-size: 12px;
+          margin-left: 6px;
+        }
       </style>
 
       ${viewState === 'mini' ? html`
@@ -1734,17 +2138,70 @@ ${function () {
                   value=${uiOpacity}
                   onInput=${function (e) { saveUiOpacity(e.target.value); }}
                 />
+                <div class="exmp-switch-row">
+                  <span>静默模式</span>
+                  <button
+                    type="button"
+                    class="exmp-switch${silentModeEnabled ? ' active' : ''}"
+                    aria-pressed=${silentModeEnabled ? 'true' : 'false'}
+                    title="开启后使用答案坐标进行悬停反馈"
+                    onClick=${function () { saveSilentMode(!silentModeEnabled); }}
+                  >
+                    <span class="exmp-switch-knob"></span>
+                  </button>
+                </div>
+                <label class="exmp-switch-row" for="exmp-silent-scroll-pixels">
+                  <span>静默滚动距离</span>
+                  <span class="exmp-flex exmp-items-center">
+                    <input
+                      id="exmp-silent-scroll-pixels"
+                      class="exmp-number-input"
+                      type="number"
+                      min="0"
+                      max="200"
+                      step="1"
+                      value=${silentScrollPixels}
+                      onChange=${function (e) { saveSilentScrollPixels(e.target.value); }}
+                    />
+                    <span class="exmp-input-suffix">px</span>
+                  </span>
+                </label>
+                <div class="exmp-switch-row">
+                  <span>显示静默框</span>
+                  <button
+                    type="button"
+                    class="exmp-switch${silentDebugFrameEnabled ? ' active' : ''}"
+                    aria-pressed=${silentDebugFrameEnabled ? 'true' : 'false'}
+                    title="开启后在页面上显示 AI 返回的答案区域"
+                    onClick=${function () { saveSilentDebugFrame(!silentDebugFrameEnabled); }}
+                  >
+                    <span class="exmp-switch-knob"></span>
+                  </button>
+                </div>
               </div>
               <div style="border-top: 1px solid #f0f1f3; margin-top: 10px; padding-top: 10px;">
-                <div style="font-size: 12px; font-weight: 600; color: #667085; letter-spacing: 0.3px; margin-bottom: 6px;">📝 提示词设置</div>
+                <div style="font-size: 12px; font-weight: 600; color: #667085; letter-spacing: 0.3px; margin-bottom: 6px;">📝 普通提示词</div>
                 <textarea
                   value=${customPrompt}
                   onInput=${function (e) { setCustomPrompt(e.target.value); }}
                   style="width: 100%; padding: 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 12px; outline: none; resize: vertical; min-height: 100px; box-sizing: border-box; font-family: inherit; line-height: 1.5;"
-                  placeholder="输入自定义提示词..."
+                  placeholder="输入普通模式提示词..."
                 ></textarea>
                 <div class="exmp-config-form-actions exmp-flex exmp-gap-6" style="margin-top: 6px;">
                   <button class="exmp-config-save-btn" disabled=${promptSaving} onClick=${savePrompt}>${promptSaving ? '保存中...' : '保存提示词'}</button>
+                </div>
+              </div>
+              <div style="border-top: 1px solid #f0f1f3; margin-top: 10px; padding-top: 10px;">
+                <div style="font-size: 12px; font-weight: 600; color: #667085; letter-spacing: 0.3px; margin-bottom: 6px;">静默提示词</div>
+                <textarea
+                  value=${silentPrompt}
+                  onInput=${function (e) { setSilentPrompt(e.target.value); }}
+                  style="width: 100%; padding: 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 12px; outline: none; resize: vertical; min-height: 150px; box-sizing: border-box; font-family: inherit; line-height: 1.5;"
+                  placeholder=${DEFAULT_SILENT_PROMPT}
+                ></textarea>
+                <div class="exmp-config-form-actions exmp-flex exmp-gap-6" style="margin-top: 6px;">
+                  <button class="exmp-config-save-btn" disabled=${silentPromptSaving} onClick=${saveSilentPrompt}>${silentPromptSaving ? '保存中...' : '保存静默提示词'}</button>
+                  <button class="exmp-config-btn" type="button" disabled=${silentPromptSaving} onClick=${function () { setSilentPrompt(DEFAULT_SILENT_PROMPT); }}>恢复默认</button>
                 </div>
               </div>
             </div>
