@@ -1849,12 +1849,16 @@ export function mountPanel(host) {
         }
         .exmp-switch {
           align-items: center;
+          appearance: none;
           background: #e4e7ec;
+          border: 0;
           border-radius: 999px;
+          box-sizing: border-box;
           cursor: pointer;
           display: inline-flex;
           flex: 0 0 auto;
           height: 22px;
+          margin: 0;
           padding: 2px;
           transition: background 0.15s;
           width: 40px;
@@ -2201,7 +2205,7 @@ ${function () {
                 ></textarea>
                 <div class="exmp-config-form-actions exmp-flex exmp-gap-6" style="margin-top: 6px;">
                   <button class="exmp-config-save-btn" disabled=${silentPromptSaving} onClick=${saveSilentPrompt}>${silentPromptSaving ? '保存中...' : '保存静默提示词'}</button>
-                  <button class="exmp-config-btn" type="button" disabled=${silentPromptSaving} onClick=${function () { setSilentPrompt(DEFAULT_SILENT_PROMPT); }}>恢复默认</button>
+                  <button class="exmp-config-cancel-btn" type="button" disabled=${silentPromptSaving} onClick=${function () { setSilentPrompt(DEFAULT_SILENT_PROMPT); }}>恢复默认</button>
                 </div>
               </div>
             </div>
