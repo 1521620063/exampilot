@@ -251,7 +251,7 @@ footer {
 
   <div class="card">
     <h1>隐私政策</h1>
-    <p class="updated">最后更新：2026 年 7 月 15 日</p>
+    <p class="updated">最后更新：2026 年 8 月 12 日</p>
 
     <h2>概述</h2>
     <p>ExamPilot（以下简称"本扩展"）是一款基于视觉 AI 的智能解题工具。本隐私政策说明了本扩展处理用户数据的方式。使用本扩展即表示您同意本政策所述的数据处理方式。</p>
@@ -273,21 +273,29 @@ footer {
       <li><strong>使用目的</strong>：仅用于向您指定的 AI API 发送请求；发起请求时，API 密钥及必要的自定义请求内容会直接发送给该 API 服务商。</li>
     </ul>
 
-    <h3>3. 界面偏好设置</h3>
+    <h3>3. 静默模式数据</h3>
     <ul>
-      <li><strong>收集方式</strong>：您在扩展设置页面中调整的界面透明度，以及拖动迷你面板后保存的相对位置等本地偏好。</li>
-      <li><strong>存储位置</strong>：仅存储在浏览器的 <code>chrome.storage.local</code> 中。</li>
-      <li><strong>使用目的</strong>：仅用于恢复扩展面板的本地显示效果，不会发送给 AI API 或开发者服务器。</li>
+      <li><strong>收集方式</strong>：当您主动开启静默模式并发起识别时，AI API 会被要求返回结构化答案，包括答案文本、题号、选择题答案区域的百分比坐标，或在简答题、填空题、编程题中返回仅复制到剪切板的答案文本。</li>
+      <li><strong>使用目的</strong>：选择题坐标仅用于在当前网页创建本地透明命中区域；鼠标悬停后按您配置的距离滚动页面。若开启“显示静默框”，扩展会在当前页面本地绘制红色调试框，帮助您确认 AI 返回坐标是否对齐。</li>
+      <li><strong>剪切板写入</strong>：对于没有可悬浮选项的题型，扩展可能会把 AI 返回的答案文本写入系统剪切板。该行为仅发生在您主动开启静默模式并完成识别后，剪切板内容不会发送给开发者服务器。</li>
+      <li><strong>存储与保留</strong>：静默模式的命中区域、调试框和悬停监听仅存在于当前页面会话中；清除结果、取消、新一轮识别或页面卸载时会移除。</li>
     </ul>
 
-    <h3>4. 配置导入与导出</h3>
+    <h3>4. 界面偏好设置</h3>
     <ul>
-      <li><strong>导出内容</strong>：仅当您主动点击“导出配置”时，扩展才会在本地生成 JSON 备份。备份包含模型配置、API 密钥、自定义请求内容、自定义提示词和界面透明度，但不包含面板位置或 Chrome API 域名授权。</li>
+      <li><strong>收集方式</strong>：您在扩展设置页面中调整的界面透明度、静默模式开关、静默滚动距离、是否显示静默框，以及拖动迷你面板后保存的相对位置等本地偏好。</li>
+      <li><strong>存储位置</strong>：仅存储在浏览器的 <code>chrome.storage.local</code> 中。</li>
+      <li><strong>使用目的</strong>：仅用于恢复扩展面板的本地显示效果和静默模式本地交互行为，不会发送给 AI API 或开发者服务器。</li>
+    </ul>
+
+    <h3>5. 配置导入与导出</h3>
+    <ul>
+      <li><strong>导出内容</strong>：仅当您主动点击“导出配置”时，扩展才会在本地生成 JSON 备份。备份包含模型配置、API 密钥、自定义请求内容、自定义提示词、静默模式提示词、静默模式设置和界面透明度，但不包含面板位置或 Chrome API 域名授权。</li>
       <li><strong>文件处理</strong>：备份文件由浏览器直接下载到您选择的本地位置，不会上传到开发者服务器。该文件包含未加密的 API 密钥，应由您妥善保管。</li>
       <li><strong>导入处理</strong>：仅当您主动选择文件并确认导入时，扩展才会在本地读取、校验并写入配置。导入文件不会上传到开发者服务器。</li>
     </ul>
 
-    <h3>5. 不收集的数据</h3>
+    <h3>6. 不收集的数据</h3>
     <p>本扩展<strong>不</strong>收集以下数据：</p>
     <ul>
       <li>个人身份信息（姓名、邮箱、电话等）</li>
@@ -312,8 +320,9 @@ footer {
       <li>配置备份仅在用户主动操作时于本地生成或读取，不经过开发者服务器</li>
       <li>所有 API 请求均使用 HTTPS 加密传输</li>
       <li>API 域名采用可选权限按需授权，不在安装时申请所有网站访问权限</li>
+      <li>静默模式调试框、命中区域和监听器仅在当前页面临时创建，可通过清除结果或新一轮识别移除</li>
       <li>不使用任何远程代码或分析 SDK</li>
-      <li>极小权限设计：仅请求运行所必需的权限（storage、activeTab、scripting），API 域名按需单独授权</li>
+      <li>极小权限设计：仅请求运行所必需的权限（storage、activeTab、scripting、clipboardWrite），API 域名按需单独授权</li>
     </ul>
 
     <h2>第三方链接</h2>
@@ -331,7 +340,7 @@ footer {
     <hr>
 
     <h2 id="english">Privacy Policy (English)</h2>
-    <p class="en updated">Last updated: July 15, 2026</p>
+    <p class="en updated">Last updated: August 12, 2026</p>
 
     <h3 class="en">Overview</h3>
     <p class="en">ExamPilot is an AI-powered problem-solving tool that captures screenshots of web pages and sends them to user-configured AI vision API for analysis. This privacy policy explains how the extension handles user data.</p>
@@ -342,11 +351,13 @@ footer {
 
     <p class="en"><strong>2. AI Configuration.</strong> API endpoint URLs, model names, API keys, custom headers/bodies, request templates, response templates, and custom prompts that you enter in the settings panel (⚙️) are stored exclusively in <code>chrome.storage.local</code> on your device. This information is used solely to make requests to the AI API of your choice and is never transmitted to the developer's servers.</p>
 
-    <p class="en"><strong>3. UI Preferences.</strong> Local display preferences such as panel opacity and the relative position saved after dragging the mini panel are stored exclusively in <code>chrome.storage.local</code>. They are used only to restore the panel appearance and are not sent to AI APIs or developer servers.</p>
+    <p class="en"><strong>3. Silent Mode Data.</strong> When you enable Silent Mode and start recognition, the AI API is asked to return structured answers, including answer text and percentage coordinates for selectable answers, or clipboard-only answer text for short-answer, fill-in-the-blank, or coding questions. Coordinates are used locally to create transparent hover targets on the current page. If debug frames are enabled, red frames are drawn locally to help verify alignment. For questions without hoverable choices, the extension may write the AI answer to your system clipboard after recognition. Clipboard contents are not sent to the developer's servers.</p>
 
-    <p class="en"><strong>4. Settings Import and Export.</strong> A JSON backup is created locally only when you click “Export Settings.” It contains model configurations, API keys, custom request data, custom prompts, and panel opacity, but not the panel position or Chrome API host permissions. The browser downloads the file directly and it is never uploaded to the developer's servers. API keys in the file are not encrypted. An import file is read, validated, and stored locally only after you select it and confirm the import.</p>
+    <p class="en"><strong>4. UI Preferences.</strong> Local display preferences such as panel opacity, Silent Mode state, Silent Mode scroll distance, debug frame visibility, and the relative position saved after dragging the mini panel are stored exclusively in <code>chrome.storage.local</code>. They are used only to restore local panel behavior and are not sent to AI APIs or developer servers.</p>
 
-    <p class="en"><strong>5. No Data Collection.</strong> This extension does <strong>not</strong> collect personal information, browsing history, bookmarks, passwords, cookies, device identifiers, location data, usage analytics, or any tracking data.</p>
+    <p class="en"><strong>5. Settings Import and Export.</strong> A JSON backup is created locally only when you click “Export Settings.” It contains model configurations, API keys, custom request data, custom prompts, Silent Mode prompt and settings, and panel opacity, but not the panel position or Chrome API host permissions. The browser downloads the file directly and it is never uploaded to the developer's servers. API keys in the file are not encrypted. An import file is read, validated, and stored locally only after you select it and confirm the import.</p>
+
+    <p class="en"><strong>6. No Data Collection.</strong> This extension does <strong>not</strong> collect personal information, browsing history, bookmarks, passwords, cookies, device identifiers, location data, usage analytics, or any tracking data.</p>
 
     <h3 class="en">Data Sharing</h3>
     <p class="en">The developer does not collect, store, or share any personal data. The only data sharing is with third-party services you explicitly configure: the AI API provider you specify receives the screenshot, API key, and any custom request data required to process the request. No data is sold, rented, or shared with any other third party.</p>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="ExamPilot Chrome 扩展完整使用说明：安装、配置视觉 AI、全屏与区域识别、配置迁移、自定义请求和常见问题。">
+  <meta name="description" content="ExamPilot Chrome 扩展完整使用说明：安装、配置视觉 AI、普通识别、静默模式、快捷键、配置迁移、自定义请求和常见问题。">
   <meta name="theme-color" content="#f8f6f2">
   <title>ExamPilot 使用说明</title>
   <style>
@@ -368,6 +368,15 @@
     .guide-key { min-width: 58px; height: 32px; padding: 0 9px; border-radius: 8px; display: grid; place-items: center; color: var(--primary); background: var(--primary-soft); font-size: 12px; font-weight: 800; }
     .guide-item strong { display: block; font-size: 14px; }
     .guide-item p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+    .silent-demo { width: 100%; height: 210px; position: relative; overflow: hidden; border: 1px solid rgba(81, 65, 46, .16); border-radius: 13px; background: white; }
+    .silent-demo .question-line { position: absolute; left: 24px; right: 24px; height: 8px; border-radius: 999px; background: #e9e5df; }
+    .silent-demo .question-line:nth-child(1) { top: 24px; width: 52%; height: 13px; background: #77707e; }
+    .silent-demo .question-line:nth-child(2) { top: 52px; width: 84%; }
+    .silent-demo .question-line:nth-child(3) { top: 74px; width: 72%; }
+    .silent-option { position: absolute; left: 34px; right: 34px; height: 30px; border-radius: 8px; background: #f8f5ef; }
+    .silent-option.a { top: 106px; }
+    .silent-option.b { top: 146px; }
+    .silent-frame { position: absolute; left: 31px; right: 31px; top: 143px; height: 36px; border: 2px solid #ef4444; border-radius: 8px; background: rgba(239, 68, 68, .05); }
 
     .code-example { overflow: hidden; margin-top: 18px; border: 1px solid #3c354a; border-radius: 16px; background: #242033; color: #eee8f2; }
     .code-head { padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,.1); display: flex; align-items: center; justify-content: space-between; color: #bfb3c8; font-size: 12px; }
@@ -464,6 +473,7 @@
         <a href="#install">安装</a>
         <a href="#configure">配置</a>
         <a href="#capture">识别</a>
+        <a href="#silent-mode">静默</a>
         <a href="#migration">迁移</a>
         <a href="#faq">常见问题</a>
         <a class="nav-cta" href="https://chromewebstore.google.com/detail/exampilot-%E6%99%BA%E8%83%BD%E8%A7%A3%E9%A2%98%E5%BC%95%E6%93%8E/cekiablfmjeejkgfklapmifkcmeipnnf" target="_blank" rel="noopener noreferrer">安装扩展</a>
@@ -475,12 +485,12 @@
   <section class="hero" aria-labelledby="hero-title">
     <div class="hero-copy">
       <h1 id="hero-title">看见题目，<span>马上分析</span></h1>
-      <p>ExamPilot 是一款浏览器视觉 AI 助手。截取当前页面或框选题目区域，即可把图片发送到你配置的视觉模型，并在网页悬浮面板中查看答案与解析。</p>
+      <p>ExamPilot 是一款浏览器视觉 AI 助手。截取当前页面或框选题目区域，即可把图片发送到你配置的视觉模型；普通模式在面板展示解析，静默模式可用悬浮命中区和剪切板反馈答案。</p>
       <div class="hero-actions">
         <a class="button button-primary" href="https://chromewebstore.google.com/detail/exampilot-%E6%99%BA%E8%83%BD%E8%A7%A3%E9%A2%98%E5%BC%95%E6%93%8E/cekiablfmjeejkgfklapmifkcmeipnnf" target="_blank" rel="noopener noreferrer">安装 Chrome 扩展 <span aria-hidden="true">→</span></a>
         <a class="button button-secondary" href="#quick-start">查看快速上手</a>
       </div>
-      <div class="hero-note"><strong>✓</strong> 支持 OpenAI 兼容接口、Responses API、Anthropic 与自定义模板</div>
+      <div class="hero-note"><strong>✓</strong> 1.7.0 支持静默模式、百分比坐标、多题识别、剪切板答案和可配置滚动距离</div>
     </div>
     <div class="hero-visual" aria-label="ExamPilot 在网页中分析微积分内容的界面示例">
       <div class="browser-frame">
@@ -496,7 +506,7 @@
     <div class="trust-item"><span class="trust-icon">⌁</span>全屏与区域截图</div>
     <div class="trust-item"><span class="trust-icon">AI</span>多模型自由切换</div>
     <div class="trust-item"><span class="trust-icon">◇</span>API 密钥本地保存</div>
-    <div class="trust-item"><span class="trust-icon">⚡</span>悬浮面板即时反馈</div>
+    <div class="trust-item"><span class="trust-icon">⌖</span>静默命中区反馈</div>
   </div>
 
   <div class="page-grid">
@@ -507,6 +517,7 @@
       <a href="#configure">配置模型</a>
       <a href="#api-modes">接口模式</a>
       <a href="#capture">开始识别</a>
+      <a href="#silent-mode">静默模式</a>
       <a href="#migration">配置迁移</a>
       <a href="#advanced">高级配置</a>
       <a href="#faq">常见问题</a>
@@ -532,12 +543,12 @@
           <article class="card quick-card">
             <div class="number">3</div>
             <h3>截图并分析</h3>
-            <p>点击“全屏”或“区域”，等待状态栏显示“识别完成”即可查看结果。</p>
+            <p>点击“全屏”或“区域”，普通模式查看面板答案；静默模式使用悬浮命中区、滚动反馈或剪切板答案。</p>
           </article>
         </div>
         <div class="callout">
           <span aria-hidden="true">💡</span>
-          <div><strong>使用前准备</strong>你需要一个支持图片输入的视觉模型 API。ExamPilot 不提供模型额度，也不会代管你的 API Key。</div>
+          <div><strong>使用前准备</strong>你需要一个支持图片输入的视觉模型 API。若开启静默模式，模型还需要稳定返回约定 JSON。</div>
         </div>
       </section>
 
@@ -683,15 +694,66 @@
         <div class="button-guide">
           <div class="guide-item"><div class="guide-key">全屏</div><div><strong>识别当前视口</strong><p>适合整页内容简洁、题目已完整显示。</p></div></div>
           <div class="guide-item"><div class="guide-key">区域</div><div><strong>框选指定内容</strong><p>减少干扰信息，推荐用于大多数题目。</p></div></div>
-          <div class="guide-item"><div class="guide-key">取消</div><div><strong>中止当前请求</strong><p>接口响应过慢或选错区域时使用。</p></div></div>
-          <div class="guide-item"><div class="guide-key">清除</div><div><strong>清空当前结果</strong><p>不会删除 API 配置或自定义提示词。</p></div></div>
-          <div class="guide-item"><div class="guide-key">⚙️</div><div><strong>打开设置</strong><p>管理模型、请求模板、配置迁移、提示词与透明度。</p></div></div>
+          <div class="guide-item"><div class="guide-key">取消</div><div><strong>中止当前动作</strong><p>识别中取消请求，区域选择中退出选择。</p></div></div>
+          <div class="guide-item"><div class="guide-key">清除</div><div><strong>清空当前结果</strong><p>已有结果时清空答案、静默命中区与调试框。</p></div></div>
+          <div class="guide-item"><div class="guide-key">⌘1/2</div><div><strong>快捷截图</strong><p>Windows 用 Ctrl+Shift+1/2，macOS 用 MacCtrl+Shift+1/2。</p></div></div>
+          <div class="guide-item"><div class="guide-key">⌘4</div><div><strong>取消或清除</strong><p>Windows 用 Ctrl+Shift+4，macOS 用 MacCtrl+Shift+4。</p></div></div>
+          <div class="guide-item"><div class="guide-key">⚙️</div><div><strong>打开设置</strong><p>管理模型、请求模板、配置迁移、提示词、静默模式与透明度。</p></div></div>
           <div class="guide-item"><div class="guide-key">—</div><div><strong>折叠为迷你按钮</strong><p>拖动 ⚡ 按钮可调整面板位置，点击按钮重新展开。</p></div></div>
           <div class="guide-item"><div class="guide-key">双击</div><div><strong>显示或隐藏面板</strong><p>在页面空白区域双击即可切换。</p></div></div>
         </div>
         <div class="callout">
           <span aria-hidden="true">⏱️</span>
           <div><strong>状态提示</strong>识别过程通常依次显示“截图中 → 裁剪中（区域模式）→ AI 识别中 → 识别完成”。</div>
+        </div>
+      </section>
+
+      <section class="section" id="silent-mode">
+        <div class="section-heading">
+          <h2>静默模式</h2>
+          <p>静默模式是全局开关，默认关闭。关闭时仍按普通模式在面板里展示答案；开启后会要求 AI 返回结构化 JSON，用于页面内悬浮反馈。</p>
+        </div>
+        <div class="usage-tabs">
+          <article class="card usage-card">
+            <div class="usage-preview">
+              <div class="silent-demo" aria-hidden="true">
+                <div class="question-line"></div>
+                <div class="question-line"></div>
+                <div class="question-line"></div>
+                <div class="silent-option a"></div>
+                <div class="silent-option b"></div>
+                <div class="silent-frame"></div>
+              </div>
+              <div class="capture-badge">显示静默框</div>
+            </div>
+            <div class="usage-copy">
+              <h3>选择题命中区</h3>
+              <p>AI 返回每道题正确答案的百分比坐标。扩展会在当前页面创建透明命中区，鼠标进入并短暂停留后按配置距离向下滚动。</p>
+              <ul><li>支持一次截图识别多道题</li><li>区域截图会自动把选区内百分比换算回视口位置</li><li>调试框只用于查看位置，关闭后悬浮触发仍保留</li></ul>
+            </div>
+          </article>
+          <article class="card usage-card">
+            <div class="usage-preview">
+              <div class="panel-mock" aria-hidden="true">
+                <div class="panel-answer">静默模式已就绪。简答题或编程题答案会复制到剪切板。</div>
+                <div class="panel-status">✓ 答案已复制到剪切板</div>
+                <div class="panel-footer"><span class="panel-logo">⚡ ExamPilot AI</span><span class="panel-btn">清除</span><span class="panel-btn">⚙</span></div>
+              </div>
+            </div>
+            <div class="usage-copy">
+              <h3>无选项题复制答案</h3>
+              <p>简答题、填空题、编程题没有可靠的悬浮目标时，提示词要求 AI 不编造坐标，而是返回 <code>clipboardOnly</code>，扩展会把答案写入剪切板。</p>
+              <ul><li>编程题如果已有代码内容，默认提示词要求在已有内容上补全</li><li>静默提示词可编辑，也可以恢复默认后再保存</li></ul>
+            </div>
+          </article>
+        </div>
+        <div class="callout">
+          <span aria-hidden="true">⚙️</span>
+          <div><strong>可配置项</strong>在设置里可以开启静默模式、设置滚动像素、开关红色调试框，并单独编辑静默提示词。滚动距离会同时用于 AI 识别完成后的自动滚动和鼠标悬停后的滚动。</div>
+        </div>
+        <div class="callout warning">
+          <span aria-hidden="true">🧪</span>
+          <div><strong>自定义模板注意</strong>自定义模板也能配合静默模式，但响应模板最终提取出的文本必须是约定 JSON；解析失败、缺坐标或坐标越界都会显示错误。</div>
         </div>
       </section>
 
@@ -703,11 +765,11 @@
         <div class="config-layout">
           <article class="card config-card">
             <h3>↓ 导出配置</h3>
-            <p>点击后浏览器会下载 <code>exampilot-settings-YYYY-MM-DD.json</code>。文件包含全部模型配置、当前选中项、自定义提示词和界面透明度。</p>
+            <p>点击后浏览器会下载 <code>exampilot-settings-YYYY-MM-DD.json</code>。文件包含全部模型配置、当前选中项、自定义提示词、静默提示词、静默模式设置和界面透明度。</p>
           </article>
           <article class="card config-card">
             <h3>↑ 导入配置</h3>
-            <p>选择 ExamPilot JSON 备份并确认后，扩展会校验文件内容，再替换当前浏览器中的全部配置、提示词与透明度。</p>
+            <p>选择 ExamPilot JSON 备份并确认后，扩展会校验文件内容，再替换当前浏览器中的全部配置、提示词、静默模式设置与透明度。</p>
           </article>
         </div>
         <div class="callout warning">
@@ -779,6 +841,22 @@
           <details>
             <summary>答案不完整或没有识别到题目</summary>
             <p>优先使用区域识别，并完整框选题干、选项、图表和必要上下文。也可以在设置中优化自定义提示词，要求模型给出答案、步骤和简短解释。</p>
+          </details>
+          <details>
+            <summary>静默模式为什么不在面板里显示完整答案？</summary>
+            <p>静默模式会优先创建页面命中区，通过悬浮和滚动反馈答案；因此不会把选择题完整答案追加到普通答案列表。没有可悬浮目标的简答题、填空题或编程题会把答案复制到剪切板。</p>
+          </details>
+          <details>
+            <summary>静默模式里的红框是什么？</summary>
+            <p>红框是“显示静默框”开启后的调试视图，用来查看 AI 返回的百分比坐标是否对齐正确选项。关闭后红框不显示，但透明命中区和鼠标悬浮滚动仍会工作。</p>
+          </details>
+          <details>
+            <summary>静默模式提示坐标越界或 JSON 错误</summary>
+            <p>这通常表示模型没有按静默提示词返回约定结构，或返回的百分比不在 0 到 1 范围内。请恢复默认静默提示词，或检查自定义模板的响应提取结果是否为合法 JSON。</p>
+          </details>
+          <details>
+            <summary>本地构建后 Chrome 加载哪个目录？</summary>
+            <p>运行 <code>npm run build</code> 后，请在 Chrome 扩展页加载 <code>dist/chrome/</code> 目录，不要选择项目根目录。</p>
           </details>
           <details>
             <summary>截图和 API Key 会上传到哪里？</summary>
