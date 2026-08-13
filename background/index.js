@@ -672,6 +672,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.action === 'switchConfigFromShortcut') {
+    return asyncHandler(async function () {
+      var config = await switchActiveConfigFromCommand();
+      await notifyConfigSwitched(config);
+      return { success: true, configName: config.name || '未命名配置' };
+    })(request, sender, sendResponse);
+  }
+
   // ====== 配置管理操作 ======
 
   if (request.action === 'checkApiHostPermission') {

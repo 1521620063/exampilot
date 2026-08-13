@@ -7,12 +7,33 @@
 import { mountPanel } from './ui.js';
 
 var epHost;
+var pendingPanelCommands = [];
+
+function getPanelHost() {
+  return document.getElementById('exmp-container') || window.__exampilotHost;
+}
+
+function runPanelCommand(command) {
+  var host = getPanelHost();
+  if (!host) return false;
+  host.dispatchEvent(new CustomEvent(command.action, { detail: command.detail || {} }));
+  return true;
+}
+
+function flushPendingPanelCommands() {
+  if (!window.__exampilotPanelReady) return;
+  while (pendingPanelCommands.length > 0) {
+    runPanelCommand(pendingPanelCommands.shift());
+  }
+}
 
 function dispatchPanelCommand(action, detail) {
+  var command = { action: action, detail: detail || {} };
+
   function dispatch() {
-    var host = document.getElementById('exmp-container') || window.__exampilotHost;
-    if (!host) return;
-    host.dispatchEvent(new CustomEvent(action, { detail: detail || {} }));
+    if (!runPanelCommand(command)) {
+      pendingPanelCommands.push(command);
+    }
   }
 
   if (window.__exampilotPanelReady) {
@@ -20,11 +41,12 @@ function dispatchPanelCommand(action, detail) {
     return;
   }
 
-  var host = document.getElementById('exmp-container') || window.__exampilotHost;
+  pendingPanelCommands.push(command);
+  var host = getPanelHost();
   if (host) {
-    host.addEventListener('exampilot-panel-ready', dispatch, { once: true });
+    host.addEventListener('exampilot-panel-ready', flushPendingPanelCommands, { once: true });
   } else {
-    document.addEventListener('exampilot-panel-mounted', dispatch, { once: true });
+    document.addEventListener('exampilot-panel-mounted', flushPendingPanelCommands, { once: true });
   }
 }
 
@@ -51,6 +73,7 @@ function createUI() {
   window.__exampilotHost = epHost;
   window.__exampilotMounted = true;
   document.dispatchEvent(new CustomEvent('exampilot-panel-mounted'));
+  flushPendingPanelCommands();
 }
 
 // 后台快捷键先用 ping 判断是否已注入；实际截图动作由面板复用按钮逻辑执行。
@@ -79,6 +102,47 @@ if (!window.__exampilotRuntimeHandlerAttached) {
     }
   });
   window.__exampilotRuntimeHandlerAttached = true;
+}
+
+function isExampilotShortcutEvent(e) {
+  var key = e.key || '';
+  var isNumberKey = key === '1' || key === '2' || key === '3' || key === '4';
+  if (!isNumberKey || !e.shiftKey || e.altKey || e.metaKey) return false;
+  return e.ctrlKey;
+}
+
+// 页面内兜底快捷键：扩展级 commands 被系统/Chrome 占用时，面板注入后仍可使用。
+if (!window.__exampilotPageShortcutHandlerAttached) {
+  document.addEventListener('keydown', function (e) {
+    if (!isExampilotShortcutEvent(e)) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!window.__exampilotMounted) {
+      createUI();
+    }
+
+    if (e.key === '1') {
+      dispatchCaptureCommand('fullscreen');
+      return;
+    }
+
+    if (e.key === '2') {
+      dispatchCaptureCommand('region');
+      return;
+    }
+
+    if (e.key === '3') {
+      chrome.runtime.sendMessage({ action: 'switchConfigFromShortcut' }).catch(function () {});
+      return;
+    }
+
+    if (e.key === '4') {
+      dispatchPanelCommand('clear-results');
+    }
+  }, true);
+  window.__exampilotPageShortcutHandlerAttached = true;
 }
 
 // 双击页面空白处切换面板显示/隐藏

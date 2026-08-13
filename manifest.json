@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ExamPilot - 智能解题引擎",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "基于视觉AI的智能解题系统：一键截图识别网页题目，大模型实时推理，精准获取答案与解析",
   "permissions": ["storage", "activeTab", "scripting", "clipboardWrite"],
   "icons": {
