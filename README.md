@@ -25,7 +25,7 @@ ExamPilot 是一款 Chrome 浏览器扩展，能够在任意网页中**即时截
 | 阶段 | 技术实现 | 说明 |
 |------|---------|------|
 | **📸 截图** | `chrome.tabs.captureVisibleTab` → 可选 `cropImage()` | 捕获当前浏览器视口，支持全屏截图或拖拽选择指定区域（物理像素坐标 × devicePixelRatio） |
-| **🔐 授权** | `optional_host_permissions` + 当前页授权弹层 | 首次使用某个 API 域名时按需授权，避免安装时申请 `<all_urls>` |
+| **🔐 授权** | 双构建权限策略 | 普通版按需授权 API 域名；Full Access 版安装/更新时获得完整网站访问能力 |
 | **🧠 推理** | 视觉大模型（OpenAI 兼容 / Responses API / Anthropic / 自定义模板） | 理解题目内容并推理作答（请求格式可配置） |
 | **🖥️ 展示** | 浮动交互面板 | 页面右下角实时展示识别进度与结果，支持透明度调节 |
 
@@ -46,17 +46,18 @@ npm run build
 #    打开 chrome://extensions → 开启开发者模式 → 加载已解压的扩展 → 选择 dist/chrome 目录
 ```
 
-> 构建产物输出至 `dist/chrome/`。
-> - `npm run build` — 压缩构建，适合本地开发加载
-> - `npm run build:package` — 不压缩构建，适合上架前检查与打包（通过 `cross-env` 设置 `NO_MINIFY`，Windows/macOS/Linux 均可运行）
+> 构建产物输出至 `dist/`。
+> - `npm run build` — 构建普通版到 `dist/chrome/`：点击图标后注入面板，API 域名按需授权
+> - `npm run build:package` — 构建普通版未压缩包到 `dist/chrome/`，适合上架前检查与打包
+> - `npm run build:full` — 构建 Full Access 版到 `dist/chrome-full/`：任意网页自动加载隐藏面板，不再弹 API 域名单独授权
+> - `npm run build:full:package` — 构建 Full Access 未压缩包到 `dist/chrome-full/`，适合本地审查
 > - `npm test` — 使用 Node 内置 `node --test` 运行测试；当前工作区若无测试文件会显示 0 tests
-> - 当前版本使用 `optional_host_permissions` 动态授权 API 域名，不再写死 `host_permissions: ["<all_urls>"]`
 
 ### 🎮 使用方式
 
 | 操作 | 说明 |
 |------|------|
-| 🖱️ 点击扩展工具栏图标 | 呼出浮动面板 |
+| 🖱️ 点击扩展工具栏图标 | 切换浮动面板显示 / 隐藏 |
 | 👆 双击页面空白区域 | 切换面板显示 / 隐藏 |
 | 🎯 点击 **全屏** | 截图整个视口 → AI 推理全流程 |
 | 🖱️ 点击 **区域** | 进入拖拽选择模式，只识别选中的页面区域 |
@@ -72,7 +73,6 @@ npm run build
 | 👁️ 在 ⚙️ 中展开请求预览 | 在发送前预览实际 API 请求的完整 JSON 结构，便于调试 |
 | 💾 在 ⚙️ → 配置迁移中导入/导出 | 将全部模型配置、提示词、静默模式设置和透明度备份为 JSON，或在其他设备恢复 |
 | 🎛️ 在 ⚙️ 中调整界面透明度 | 降低悬浮面板遮挡，偏好保存到本地浏览器 |
-| 🔐 首次使用某个 API 域名 | 当前页面会弹出授权框，点击授权后即可调用该厂商接口 |
 | ◀️ 按 **← 返回** | 从配置管理返回主面板 |
 
 ### ⌨️ 快捷键
@@ -104,15 +104,12 @@ exampilot/
 │   ├── index.js             # 内容脚本入口（esbuild 构建入口）
 │   ├── ui.js                # Preact+htm 浮动面板组件（Shadow DOM）
 │   └── ui-opacity.js        # 界面透明度偏好归一化与应用
-├── permission/
-│   ├── host-permission.html # 当前页 iframe 授权页
-│   └── host-permission.js   # 点击按钮申请 optional host permission
 ├── icons/                   # 扩展图标（16/48/128）
 ├── docs/                    # 营销落地页与隐私政策
-├── dist/chrome/             # 构建输出目录（已 gitignore，加载扩展时选择此目录）
+├── dist/chrome/             # 普通版构建输出目录（已 gitignore，加载扩展时选择此目录）
+├── dist/chrome-full/        # Full Access 版构建输出目录（已 gitignore）
 │   ├── background/index.js
 │   ├── content/bundle/content-bundle.js
-│   ├── permission/
 │   ├── manifest.json
 │   └── icons/
 ├── .claude/                 # Claude Code 配置与记忆
@@ -133,17 +130,12 @@ AI 配置通过面板右下角的 **⚙️ 设置** 按钮管理，支持添加�
 
 新增配置自动设为当前使用（`selected: true`）。
 
-### 🔐 API 域名授权
+### 🔐 访问权限
 
-为了更容易通过 Chrome 应用商店审核，扩展不会在安装时申请 `host_permissions: ["<all_urls>"]`。当前采用按需授权方案：
+项目支持两种构建：
 
-- `manifest.json` 声明 `optional_host_permissions: ["https://*/*"]`
-- 添加配置或点击识别时，扩展会检查当前 API URL 对应的域名权限，例如 `https://ark.cn-beijing.volces.com/*`
-- 如果尚未授权，当前网页会出现一个 ExamPilot 授权弹层，不会新开标签页
-- 在弹层中点击“授权访问该域名”后，扩展后台即可直接调用该接口，避免部分厂商接口因 CORS 被浏览器拦截
-- 如果用户取消授权，配置仍不会绕过权限限制，识别前会继续提示需要授权
-
-> 注意：`chrome.permissions.request()` 必须由用户点击触发，所以授权按钮位于扩展自己的 iframe 页面中。不要把授权申请放到后台异步请求或截图流程里。
+- **普通版**（`npm run build` / `npm run build:package`）：`manifest.json` 保持商店友好的低权限策略，使用 `activeTab` + `scripting` 在点击图标后注入面板，并通过 `optional_host_permissions` 对 API 域名按需授权。
+- **Full Access 版**（`npm run build:full` / `npm run build:full:package`）：构建脚本生成带 `content_scripts` 和 `host_permissions: ["<all_urls>"]` 的清单。进入任意网页后会自动加载隐藏面板，点击扩展图标或双击页面空白区域显示；配置和识别流程不再弹出 API 域名单独授权框。
 
 ### 🔧 自定义请求头与请求体
 

@@ -4,6 +4,8 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:package": "cross-env NO_MINIFY=true node scripts/build.mjs",
+    "build:full": "cross-env BUILD_MODE=full node scripts/build.mjs",
+    "build:full:package": "cross-env BUILD_MODE=full NO_MINIFY=true node scripts/build.mjs",
     "test": "node --test"
   },
   "dependencies": {

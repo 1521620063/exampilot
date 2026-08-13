@@ -100,6 +100,15 @@ if (!window.__exampilotRuntimeHandlerAttached) {
       }
       dispatchPanelCommand('clear-results');
       sendResponse({ success: true });
+      return;
+    }
+
+    if (request.action === 'togglePanelFromAction') {
+      if (!window.__exampilotMounted) {
+        createUI();
+      }
+      dispatchPanelCommand('toggle-panel');
+      sendResponse({ success: true });
     }
   });
   window.__exampilotRuntimeHandlerAttached = true;

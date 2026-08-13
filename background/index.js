@@ -1,6 +1,7 @@
 importScripts('template-engine.js', 'request-overrides.js', 'settings-transfer.js', 'query-ai.js');
 
 var currentAbortController = null;
+var IS_FULL_ACCESS = __EXAMPILOT_FULL_ACCESS__;
 var DEFAULT_SILENT_SCROLL_PIXELS = 5;
 var DEFAULT_PROMPT = '解析图片中的内容。\n\n如果图片中有题目：\n请识别题目并解答。\n\n严格按照下面格式输出：\n\n题目："xxx"\n\n<br/>\n\n<b>答案："xxx"</b>\n\n不要输出多余内容。';
 var DEFAULT_SILENT_PROMPT = '请识别图片中所有完整显示的题目。只返回一个 JSON 对象，不要使用 Markdown 代码块，不要输出多余文字。\n' +
@@ -16,11 +17,27 @@ function normalizeSilentScrollPixels(value) {
   return Math.max(0, Math.min(Math.round(number), 200));
 }
 
-// 点击扩展图标时注入内容脚本（activeTab 策略，不再需要 <all_urls> 权限）
+async function ensureContentScript(tabId) {
+  try {
+    await chrome.tabs.sendMessage(tabId, { action: 'exampilotPing' });
+  } catch (error) {
+    await chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      files: ['content/bundle/content-bundle.js']
+    });
+  }
+}
+
 chrome.action.onClicked.addListener(function (tab) {
-  chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    files: ['content/bundle/content-bundle.js']
+  if (!tab || !tab.id) return;
+  if (IS_FULL_ACCESS) {
+    chrome.tabs.sendMessage(tab.id, { action: 'togglePanelFromAction' }).catch(function (err) {
+      console.error('切换面板失败:', err);
+    });
+    return;
+  }
+  ensureContentScript(tab.id).then(function () {
+    return chrome.tabs.sendMessage(tab.id, { action: 'togglePanelFromAction' });
   }).catch(function (err) {
     console.error('注入内容脚本失败:', err);
   });
@@ -37,13 +54,8 @@ async function startCaptureFromCommand(command) {
     throw new Error('未找到当前标签页');
   }
 
-  try {
-    await chrome.tabs.sendMessage(tab.id, { action: 'exampilotPing' });
-  } catch (error) {
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ['content/bundle/content-bundle.js']
-    });
+  if (!IS_FULL_ACCESS) {
+    await ensureContentScript(tab.id);
   }
 
   await chrome.tabs.sendMessage(tab.id, {
@@ -60,13 +72,8 @@ async function clearResultsFromCommand() {
     throw new Error('未找到当前标签页');
   }
 
-  try {
-    await chrome.tabs.sendMessage(tab.id, { action: 'exampilotPing' });
-  } catch (error) {
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ['content/bundle/content-bundle.js']
-    });
+  if (!IS_FULL_ACCESS) {
+    await ensureContentScript(tab.id);
   }
 
   await chrome.tabs.sendMessage(tab.id, { action: 'clearResultsFromCommand' });
@@ -201,13 +208,16 @@ function apiUrlToPermissionPattern(rawUrl) {
  */
 async function checkApiHostPermission(rawUrl) {
   var origin = apiUrlToPermissionPattern(rawUrl);
+  if (IS_FULL_ACCESS) {
+    return { origin: origin, granted: true };
+  }
   var permission = { origins: [origin] };
   var granted = await chrome.permissions.contains(permission);
   return { origin: origin, granted: granted };
 }
 
 /**
- * 网络请求前只做检查，不在异步流程里申请权限。
+ * 普通版在网络请求前确认 optional host permission；Full Access 版直接放行。
  */
 async function assertApiHostPermission(rawUrl) {
   var status = await checkApiHostPermission(rawUrl);

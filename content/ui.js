@@ -15,6 +15,7 @@ import {
 } from './ui-opacity.js';
 
 const html = htm.bind(h);
+var IS_FULL_ACCESS = __EXAMPILOT_FULL_ACCESS__;
 var __permissionHandler = null;
 var DEFAULT_SILENT_SCROLL_PIXELS = 5;
 var DEFAULT_SILENT_PROMPT = '请识别图片中所有完整显示的题目。只返回一个 JSON 对象，不要使用 Markdown 代码块，不要输出多余文字。\n' +
@@ -894,7 +895,7 @@ export function mountPanel(host) {
       });
     }
 
-    function ensureActiveConfigPermissionBeforeCapture() {
+    function ensureActiveConfigBeforeCapture() {
       return chrome.runtime.sendMessage({ action: 'getConfigs' }).then(function (res) {
         if (!res.success) {
           throw new Error(res.error || '读取配置失败');
@@ -903,6 +904,9 @@ export function mountPanel(host) {
         var selected = list.find(function (cfg) { return cfg.selected; });
         if (!selected) {
           throw new Error('请先点击 ⚙️ 选择 AI 配置');
+        }
+        if (IS_FULL_ACCESS) {
+          return true;
         }
         return checkApiHostPermission(selected.url).then(function (perm) {
           if (!perm.success) {
@@ -1094,20 +1098,27 @@ export function mountPanel(host) {
         ? { action: action, configId: editingId, config: configPayload }
         : { action: action, config: configPayload };
 
-      checkApiHostPermission(formUrl).then(function (res) {
-        if (!res.success) {
-          throw new Error(res.error || '授权检查失败');
-        }
-        if (!res.granted) {
-          setFormError('需要先授权访问 ' + res.origin + '。请在当前页面完成授权。');
-          return showApiHostPermissionFrame(res.origin).then(function (granted) {
-            if (granted) {
-              return saveConfigPayload(payload);
-            }
-          });
-        }
-        return saveConfigPayload(payload);
-      }).catch(function (error) {
+      var savePromise;
+      if (IS_FULL_ACCESS) {
+        savePromise = saveConfigPayload(payload);
+      } else {
+        savePromise = checkApiHostPermission(formUrl).then(function (res) {
+          if (!res.success) {
+            throw new Error(res.error || '授权检查失败');
+          }
+          if (!res.granted) {
+            setFormError('需要先授权访问 ' + res.origin + '。请在当前页面完成授权。');
+            return showApiHostPermissionFrame(res.origin).then(function (granted) {
+              if (granted) {
+                return saveConfigPayload(payload);
+              }
+            });
+          }
+          return saveConfigPayload(payload);
+        });
+      }
+
+      savePromise.catch(function (error) {
         setFormError(error.message || String(error));
       }).then(function () {
         setConfigSaving(false);
@@ -1305,7 +1316,7 @@ export function mountPanel(host) {
       setStatusText('准备中...');
       setShowSpinner(true);
 
-      ensureActiveConfigPermissionBeforeCapture().then(function (ok) {
+      ensureActiveConfigBeforeCapture().then(function (ok) {
         if (!ok) return null;
         return chrome.runtime.sendMessage({
           action: 'captureAndAnalyze',
@@ -1329,7 +1340,7 @@ export function mountPanel(host) {
       setStatusText('准备中...');
       setShowSpinner(true);
 
-      ensureActiveConfigPermissionBeforeCapture().then(function (ok) {
+      ensureActiveConfigBeforeCapture().then(function (ok) {
         if (mySeq !== currentRequestSeqRef.current) return;
         if (!ok) return;
         setCapturing(false);
@@ -1452,7 +1463,7 @@ export function mountPanel(host) {
       setStatusText('准备中...');
       setShowSpinner(true);
 
-      ensureActiveConfigPermissionBeforeCapture().then(function (ok) {
+      ensureActiveConfigBeforeCapture().then(function (ok) {
         if (!ok) return null;
         setStatusText('截图中...');
         return chrome.runtime.sendMessage({
