@@ -58,7 +58,7 @@ function createUI() {
   epHost = document.getElementById('exmp-container');
   if (window.__exampilotMounted && epHost) {
     window.__exampilotHost = epHost;
-    epHost.dispatchEvent(new CustomEvent('toggle-panel'));
+    epHost.dispatchEvent(new CustomEvent('hide-panel'));
     return;
   }
 
@@ -68,6 +68,7 @@ function createUI() {
 
   epHost = document.createElement('div');
   epHost.id = 'exmp-container';
+  epHost.style.display = 'none';
   mountPanel(epHost);
   document.body.appendChild(epHost);
   window.__exampilotHost = epHost;

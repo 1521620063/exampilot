@@ -133,7 +133,8 @@ export function mountPanel(host) {
     var transferBusyState = useState(false), transferBusy = transferBusyState[0], setTransferBusy = transferBusyState[1];
     var transferMessageState = useState(null), transferMessage = transferMessageState[0], setTransferMessage = transferMessageState[1];
     var positionState = useState(null), panelPosition = positionState[0], setPanelPosition = positionState[1];
-    var hiddenByUserRef = useRef(false);
+    var hiddenByUserRef = useRef(host.style.display === 'none');
+    var hiddenForCaptureRef = useRef(false);
     var currentRequestSeqRef = useRef(0);
     var miniDragRef = useRef(null);
     var suppressMiniClickRef = useRef(false);
@@ -203,9 +204,11 @@ export function mountPanel(host) {
         if (request.action === 'status') {
           if (request.message === '截图中...') {
             host.style.display = 'none';
+            hiddenForCaptureRef.current = true;
           } else {
-            if (host.style.display === 'none' && !hiddenByUserRef.current) {
+            if (host.style.display === 'none' && hiddenForCaptureRef.current && !hiddenByUserRef.current) {
               host.style.display = '';
+              hiddenForCaptureRef.current = false;
               setViewState('main');
             }
           }
@@ -434,13 +437,24 @@ export function mountPanel(host) {
         if (host.style.display === 'none') {
           host.style.display = '';
           hiddenByUserRef.current = false;
+          hiddenForCaptureRef.current = false;
         } else {
           host.style.display = 'none';
           hiddenByUserRef.current = true;
+          hiddenForCaptureRef.current = false;
         }
       }
+      function hideHandler() {
+        host.style.display = 'none';
+        hiddenByUserRef.current = true;
+        hiddenForCaptureRef.current = false;
+      }
       host.addEventListener('toggle-panel', handler);
-      return function () { host.removeEventListener('toggle-panel', handler); };
+      host.addEventListener('hide-panel', hideHandler);
+      return function () {
+        host.removeEventListener('toggle-panel', handler);
+        host.removeEventListener('hide-panel', hideHandler);
+      };
     }, []);
 
     // ---- Listen for extension-level clear command ----
@@ -849,6 +863,9 @@ export function mountPanel(host) {
           if (overlay.parentNode) {
             overlay.parentNode.removeChild(overlay);
           }
+          host.style.display = 'none';
+          hiddenByUserRef.current = true;
+          hiddenForCaptureRef.current = false;
           resolve(result);
         }
 
