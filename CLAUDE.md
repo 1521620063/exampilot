@@ -24,7 +24,7 @@ Default build output goes to `dist/chrome/`. Full Access build output goes to `d
 
 ## Architecture
 
-**Data flow:** In the default build, user clicks extension icon → background injects the content script with `chrome.scripting.executeScript()` → panel appears. In the Full Access build, manifest `content_scripts` auto-loads the hidden panel on supported pages → user clicks the extension icon or double-clicks the page to show it. Then user clicks "全屏"/"区域" → content script sends `{action:'captureAndAnalyze'}` → background service worker captures screenshot → sends image as base64 to vision LLM API → returns answer to content script.
+**Data flow:** In the default build, user clicks extension icon → background injects the content script with `chrome.scripting.executeScript()` → hidden panel is mounted; user double-clicks the page to show it. In the Full Access build, manifest `content_scripts` auto-loads the hidden panel on supported pages → user clicks the extension icon or double-clicks the page to show it. Then user clicks "全屏"/"区域" → content script sends `{action:'captureAndAnalyze'}` → background service worker captures screenshot → sends image as base64 to vision LLM API → returns answer to content script.
 
 ```
 Content Script                          Background SW
@@ -64,7 +64,7 @@ Content Script                          Background SW
 | `.gitignore` | Ignores `config.js` (possible local config file), `node_modules/`, `dist/`, `.claude` |
 
 ## Key Patterns & Gotchas
-- **Dual permission builds** — Default build uses `activeTab` + `scripting` and injects the content script on toolbar click. Full Access build is selected with `BUILD_MODE=full`; the build script removes `scripting`, adds `content_scripts`, and adds `host_permissions: ["<all_urls>"]`. Both builds share the same source via `__EXAMPILOT_FULL_ACCESS__`.
+- **Dual permission builds** — Default build uses `activeTab` + `scripting` and injects a hidden content script on toolbar click; users double-click the page to show it. Full Access build is selected with `BUILD_MODE=full`; the build script removes `scripting`, adds `content_scripts`, and adds `host_permissions: ["<all_urls>"]`. Both builds share the same source via `__EXAMPILOT_FULL_ACCESS__`.
 - **Auto-loaded hidden content script in Full Access** — Full Access content script runs at `document_idle` and creates `#exmp-container` with `display: none`, so the panel is present but hidden by default. Clicking the extension icon or double-clicking the page toggles visibility; it does not start screenshot capture.
 - **CSS isolation via Shadow DOM** — Panel is inside `host.attachShadow({mode:'open'})`. CSS uses `:host` pseudo-class for container + scoped class selectors inside shadow root. All styles in `<style>` tag inside the component template.
 - **CSS utility classes** — Use predefined `exmp-*` utility classes for layout/spacing: `exmp-flex`, `exmp-flex-col`, `exmp-items-center`, `exmp-justify-between`, `exmp-gap-6`, `exmp-w-full`, `exmp-p-8-14`, `exmp-p-6-14`, `exmp-text-11`, `exmp-text-12`, `exmp-text-13`, `exmp-rounded-8`. Defined at top of the `<style>` block. Only write dedicated CSS for unique patterns.

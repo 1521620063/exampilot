@@ -47,7 +47,7 @@ npm run build
 ```
 
 > 构建产物输出至 `dist/`。
-> - `npm run build` — 构建普通版到 `dist/chrome/`：点击图标后注入面板，API 域名按需授权
+> - `npm run build` — 构建普通版到 `dist/chrome/`：点击图标后注入隐藏面板，API 域名按需授权
 > - `npm run build:package` — 构建普通版未压缩包到 `dist/chrome/`，适合上架前检查与打包
 > - `npm run build:full` — 构建 Full Access 版到 `dist/chrome-full/`：任意网页自动加载隐藏面板，不再弹 API 域名单独授权
 > - `npm run build:full:package` — 构建 Full Access 未压缩包到 `dist/chrome-full/`，适合本地审查
@@ -57,7 +57,8 @@ npm run build
 
 | 操作 | 说明 |
 |------|------|
-| 🖱️ 点击扩展工具栏图标 | 切换浮动面板显示 / 隐藏 |
+| 🖱️ 普通版点击扩展工具栏图标 | 注入隐藏面板，不直接显示 |
+| 🖱️ Full Access 版点击扩展工具栏图标 | 切换浮动面板显示 / 隐藏 |
 | 👆 双击页面空白区域 | 切换面板显示 / 隐藏 |
 | 🎯 点击 **全屏** | 截图整个视口 → AI 推理全流程 |
 | 🖱️ 点击 **区域** | 进入拖拽选择模式，只识别选中的页面区域 |
@@ -134,7 +135,7 @@ AI 配置通过面板右下角的 **⚙️ 设置** 按钮管理，支持添加�
 
 项目支持两种构建：
 
-- **普通版**（`npm run build` / `npm run build:package`）：`manifest.json` 保持商店友好的低权限策略，使用 `activeTab` + `scripting` 在点击图标后注入面板，并通过 `optional_host_permissions` 对 API 域名按需授权。
+- **普通版**（`npm run build` / `npm run build:package`）：`manifest.json` 保持商店友好的低权限策略，使用 `activeTab` + `scripting` 在点击图标后注入隐藏面板，并通过 `optional_host_permissions` 对 API 域名按需授权。请求权限完成后仍保持隐藏，用户双击页面才显示。
 - **Full Access 版**（`npm run build:full` / `npm run build:full:package`）：构建脚本生成带 `content_scripts` 和 `host_permissions: ["<all_urls>"]` 的清单。进入任意网页后会自动加载隐藏面板，点击扩展图标或双击页面空白区域显示；配置和识别流程不再弹出 API 域名单独授权框。
 
 ### 🔧 自定义请求头与请求体

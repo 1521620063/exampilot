@@ -6,6 +6,7 @@
 
 import { mountPanel } from './ui.js';
 
+var IS_FULL_ACCESS = __EXAMPILOT_FULL_ACCESS__;
 var epHost;
 var pendingPanelCommands = [];
 
@@ -165,9 +166,20 @@ if (!window.__exampilotToggleHandlerAttached) {
   window.__exampilotToggleHandlerAttached = true;
 }
 
-// 确保 DOM 加载完成后再初始化
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', createUI);
-} else {
-  createUI();
+function createHiddenUIWhenReady() {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', createUI, { once: true });
+  } else {
+    createUI();
+  }
+}
+
+// Full Access 版进入页面时自动挂载隐藏面板；普通版只在后台注入后挂载隐藏面板。
+createHiddenUIWhenReady();
+
+if (!IS_FULL_ACCESS && window.__exampilotMounted) {
+  var injectedHost = getPanelHost();
+  if (injectedHost) {
+    injectedHost.style.display = 'none';
+  }
 }

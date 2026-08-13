@@ -36,9 +36,7 @@ chrome.action.onClicked.addListener(function (tab) {
     });
     return;
   }
-  ensureContentScript(tab.id).then(function () {
-    return chrome.tabs.sendMessage(tab.id, { action: 'togglePanelFromAction' });
-  }).catch(function (err) {
+  ensureContentScript(tab.id).catch(function (err) {
     console.error('注入内容脚本失败:', err);
   });
 });
