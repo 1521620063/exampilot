@@ -2,7 +2,8 @@ importScripts('template-engine.js', 'request-overrides.js', 'settings-transfer.j
 
 var currentAbortController = null;
 var IS_FULL_ACCESS = __EXAMPILOT_FULL_ACCESS__;
-var DEFAULT_SILENT_SCROLL_PIXELS = 5;
+var DEFAULT_FAKE_CURSOR_SIZE = 14;
+var DEFAULT_FAKE_CURSOR_STYLE = 'dark-outline';
 var DEFAULT_PROMPT = '解析图片中的内容。\n\n如果图片中有题目：\n请识别题目并解答。\n\n严格按照下面格式输出：\n\n题目："xxx"\n\n<br/>\n\n<b>答案："xxx"</b>\n\n不要输出多余内容。';
 var DEFAULT_SILENT_PROMPT = '请识别图片中所有完整显示的题目。只返回一个 JSON 对象，不要使用 Markdown 代码块，不要输出多余文字。\n' +
   '不要定位到题干空白、横线、输入框、解析区域或未完整显示的题目。\n' +
@@ -11,10 +12,14 @@ var DEFAULT_SILENT_PROMPT = '请识别图片中所有完整显示的题目。只
   '如果编程题已经给定了部分代码、函数签名、类定义、输入输出处理或注释要求，请在已有内容基础上补全，不要重写无关结构，不要删除题目给定的代码。\n' +
   'JSON 格式必须为：{"items":[{"questionNumber":"题号","answer":"正确答案文本","choice":"A/B/C/D 等选项字母","coordinatePercent":{"x":0到1的小数,"y":0到1的小数},"bboxPercent":{"x":0到1的小数,"y":0到1的小数,"width":0到1的小数,"height":0到1的小数}},{"questionNumber":"题号","answer":"简答/编程题答案文本","clipboardOnly":true}]}';
 
-function normalizeSilentScrollPixels(value) {
+function normalizeFakeCursorSize(value) {
   var number = Number(value);
-  if (!Number.isFinite(number)) return DEFAULT_SILENT_SCROLL_PIXELS;
-  return Math.max(0, Math.min(Math.round(number), 200));
+  if (!Number.isFinite(number)) return DEFAULT_FAKE_CURSOR_SIZE;
+  return Math.max(10, Math.min(Math.round(number), 32));
+}
+
+function normalizeFakeCursorStyle(value) {
+  return value === 'light-outline' ? value : DEFAULT_FAKE_CURSOR_STYLE;
 }
 
 async function ensureContentScript(tabId) {
@@ -173,16 +178,19 @@ async function ensurePromptInitialized() {
 
 /** 首次启动时初始化全局静默模式设置 */
 async function ensureSilentModeInitialized() {
-  var data = await chrome.storage.local.get(['silentModeEnabled', 'silentScrollPixels', 'silentDebugFrameEnabled']);
+  var data = await chrome.storage.local.get(['silentModeEnabled', 'silentDebugFrameEnabled', 'fakeCursorSize', 'fakeCursorStyle']);
   var updates = {};
   if (data.silentModeEnabled === undefined) {
     updates.silentModeEnabled = false;
   }
-  if (data.silentScrollPixels === undefined) {
-    updates.silentScrollPixels = DEFAULT_SILENT_SCROLL_PIXELS;
-  }
   if (data.silentDebugFrameEnabled === undefined) {
     updates.silentDebugFrameEnabled = false;
+  }
+  if (data.fakeCursorSize === undefined) {
+    updates.fakeCursorSize = DEFAULT_FAKE_CURSOR_SIZE;
+  }
+  if (data.fakeCursorStyle === undefined) {
+    updates.fakeCursorStyle = DEFAULT_FAKE_CURSOR_STYLE;
   }
   if (Object.keys(updates).length > 0) {
     await chrome.storage.local.set(updates);
@@ -707,15 +715,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   if (request.action === 'exportSettings') {
     return asyncHandler(async function () {
-      var data = await chrome.storage.local.get(['configList', 'customPrompt', 'silentPrompt', 'uiOpacity', 'silentModeEnabled', 'silentScrollPixels', 'silentDebugFrameEnabled']);
+      var data = await chrome.storage.local.get(['configList', 'customPrompt', 'silentPrompt', 'uiOpacity', 'silentModeEnabled', 'silentDebugFrameEnabled', 'fakeCursorSize', 'fakeCursorStyle']);
       var backup = ExamPilotSettingsTransfer.createSettingsBackup({
         configList: data.configList || [],
         customPrompt: data.customPrompt || '',
         silentPrompt: data.silentPrompt || DEFAULT_SILENT_PROMPT,
         uiOpacity: data.uiOpacity === undefined ? 0.95 : data.uiOpacity,
         silentModeEnabled: data.silentModeEnabled === true,
-        silentScrollPixels: normalizeSilentScrollPixels(data.silentScrollPixels),
-        silentDebugFrameEnabled: data.silentDebugFrameEnabled === true
+        silentDebugFrameEnabled: data.silentDebugFrameEnabled === true,
+        fakeCursorSize: normalizeFakeCursorSize(data.fakeCursorSize),
+        fakeCursorStyle: normalizeFakeCursorStyle(data.fakeCursorStyle)
       });
       return { success: true, backup: backup };
     })(request, sender, sendResponse);
@@ -829,11 +838,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === 'getSilentMode') {
-    chrome.storage.local.get(['silentModeEnabled', 'silentScrollPixels', 'silentDebugFrameEnabled']).then(function (data) {
+    chrome.storage.local.get(['silentModeEnabled', 'silentDebugFrameEnabled']).then(function (data) {
       sendResponse({
         success: true,
         silentModeEnabled: data.silentModeEnabled === true,
-        silentScrollPixels: normalizeSilentScrollPixels(data.silentScrollPixels),
         silentDebugFrameEnabled: data.silentDebugFrameEnabled === true
       });
     });
@@ -842,15 +850,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   if (request.action === 'setSilentMode') {
     chrome.storage.local.set({ silentModeEnabled: request.silentModeEnabled === true }).then(function () {
-      sendResponse({ success: true });
-    });
-    return true;
-  }
-
-  if (request.action === 'setSilentScrollPixels') {
-    chrome.storage.local.set({
-      silentScrollPixels: normalizeSilentScrollPixels(request.silentScrollPixels)
-    }).then(function () {
       sendResponse({ success: true });
     });
     return true;

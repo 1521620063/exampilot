@@ -17,19 +17,14 @@ import {
 const html = htm.bind(h);
 var IS_FULL_ACCESS = __EXAMPILOT_FULL_ACCESS__;
 var __permissionHandler = null;
-var DEFAULT_SILENT_SCROLL_PIXELS = 5;
+var DEFAULT_FAKE_CURSOR_SIZE = 14;
+var DEFAULT_FAKE_CURSOR_STYLE = 'dark-outline';
 var DEFAULT_SILENT_PROMPT = '请识别图片中所有完整显示的题目。只返回一个 JSON 对象，不要使用 Markdown 代码块，不要输出多余文字。\n' +
   '不要定位到题干空白、横线、输入框、解析区域或未完整显示的题目。\n' +
   '选择题必须返回正确选项本身的位置：bboxPercent 要框住正确选项行，至少包含选项字母圆圈和选项文本；coordinatePercent 要落在这个 bboxPercent 内。\n' +
   '简答题、填空题、编程题等没有可悬浮正确选项的题目，不要编造坐标，只返回答案文本，并设置 "clipboardOnly": true。\n' +
   '如果编程题已经给定了部分代码、函数签名、类定义、输入输出处理或注释要求，请在已有内容基础上补全，不要重写无关结构，不要删除题目给定的代码。\n' +
   'JSON 格式必须为：{"items":[{"questionNumber":"题号","answer":"正确答案文本","choice":"A/B/C/D 等选项字母","coordinatePercent":{"x":0到1的小数,"y":0到1的小数},"bboxPercent":{"x":0到1的小数,"y":0到1的小数,"width":0到1的小数,"height":0到1的小数}},{"questionNumber":"题号","answer":"简答/编程题答案文本","clipboardOnly":true}]}';
-
-function normalizeSilentScrollPixels(value) {
-  var number = Number(value);
-  if (!Number.isFinite(number)) return DEFAULT_SILENT_SCROLL_PIXELS;
-  return Math.max(0, Math.min(Math.round(number), 200));
-}
 
 function getApiUrlPlaceholder(apiMode) {
   var placeholders = {
@@ -39,6 +34,16 @@ function getApiUrlPlaceholder(apiMode) {
     'custom-template': 'https://api.example.com/v1/analyze'
   };
   return placeholders[apiMode] || placeholders['chat-completions'];
+}
+
+function normalizeFakeCursorSize(value) {
+  var number = Number(value);
+  if (!Number.isFinite(number)) return DEFAULT_FAKE_CURSOR_SIZE;
+  return Math.max(10, Math.min(Math.round(number), 32));
+}
+
+function normalizeFakeCursorStyle(value) {
+  return value === 'light-outline' ? value : DEFAULT_FAKE_CURSOR_STYLE;
 }
 
 function sanitizeAnswerHtml(value) {
@@ -128,8 +133,9 @@ export function mountPanel(host) {
     var _u = useState(''), formError = _u[0], setFormError = _u[1];
     var _v = useState(false), configSaving = _v[0], setConfigSaving = _v[1];
     var opacityState = useState(DEFAULT_UI_OPACITY), uiOpacity = opacityState[0], setUiOpacity = opacityState[1];
+    var fakeCursorSizeState = useState(DEFAULT_FAKE_CURSOR_SIZE), fakeCursorSize = fakeCursorSizeState[0], setFakeCursorSize = fakeCursorSizeState[1];
+    var fakeCursorStyleState = useState(DEFAULT_FAKE_CURSOR_STYLE), fakeCursorStyle = fakeCursorStyleState[0], setFakeCursorStyle = fakeCursorStyleState[1];
     var silentModeState = useState(false), silentModeEnabled = silentModeState[0], setSilentModeEnabled = silentModeState[1];
-    var silentScrollState = useState(DEFAULT_SILENT_SCROLL_PIXELS), silentScrollPixels = silentScrollState[0], setSilentScrollPixels = silentScrollState[1];
     var silentDebugFrameState = useState(false), silentDebugFrameEnabled = silentDebugFrameState[0], setSilentDebugFrameEnabled = silentDebugFrameState[1];
     var transferBusyState = useState(false), transferBusy = transferBusyState[0], setTransferBusy = transferBusyState[1];
     var transferMessageState = useState(null), transferMessage = transferMessageState[0], setTransferMessage = transferMessageState[1];
@@ -143,15 +149,20 @@ export function mountPanel(host) {
     var silentTargetRef = useRef(null);
     var silentHoverTimerRef = useRef(null);
     var silentHoverTargetRef = useRef(null);
-    var silentScrollPixelsRef = useRef(DEFAULT_SILENT_SCROLL_PIXELS);
+    var silentModeEnabledRef = useRef(false);
     var silentDebugFrameEnabledRef = useRef(false);
+    var fakeCursorRef = useRef(null);
+    var fakeCursorSizeRef = useRef(DEFAULT_FAKE_CURSOR_SIZE);
+    var fakeCursorStyleRef = useRef(DEFAULT_FAKE_CURSOR_STYLE);
 
     // 区域选择相关状态
     var _w = useState(false), selectingRegion = _w[0], setSelectingRegion = _w[1];
     var overlayElRef = useRef(null);
 
-    silentScrollPixelsRef.current = silentScrollPixels;
+    silentModeEnabledRef.current = silentModeEnabled;
     silentDebugFrameEnabledRef.current = silentDebugFrameEnabled;
+    fakeCursorSizeRef.current = fakeCursorSize;
+    fakeCursorStyleRef.current = fakeCursorStyle;
 
     function handleCaptureResponse(response, mySeq) {
       if (mySeq !== currentRequestSeqRef.current) return;
@@ -163,8 +174,12 @@ export function mountPanel(host) {
         setStatusText('识别完成');
         setShowSpinner(false);
         if (response.result && response.result.mode === 'silent') {
+          // The mode may have been turned off while the AI request was in flight.
+          if (!silentModeEnabledRef.current) {
+            setStatusText('静默模式已关闭');
+            return;
+          }
           installSilentTarget(response.result);
-          window.scrollBy(0, silentScrollPixelsRef.current);
           copySilentClipboardText(response.result.clipboardText).then(function (copied) {
             if (mySeq !== currentRequestSeqRef.current) return;
             if (copied) {
@@ -432,6 +447,156 @@ export function mountPanel(host) {
       };
     }, []);
 
+    // ---- Global fake cursor preference ----
+    useEffect(function () {
+      var active = true;
+      var style = document.createElement('style');
+      style.textContent = 'html.exmp-global-fake-cursor, html.exmp-global-fake-cursor * { cursor: none !important; }';
+
+      var cursor = document.createElement('div');
+      cursor.setAttribute('aria-hidden', 'true');
+      cursor.style.cssText = [
+        'position: fixed',
+        'left: 0',
+        'top: 0',
+        'z-index: 2147483647',
+        'pointer-events: none',
+        'background-repeat: no-repeat',
+        'background-size: 100% 100%',
+        'filter: drop-shadow(0 1px 1px rgba(0,0,0,0.45))',
+        'transform: translate3d(-9999px, -9999px, 0)',
+        'transition: transform 120ms cubic-bezier(.2,.8,.2,1)',
+        'will-change: transform'
+      ].join(';');
+
+      document.head.appendChild(style);
+      document.body.appendChild(cursor);
+      cursor.style.display = 'none';
+
+      fakeCursorRef.current = {
+        cursor: cursor,
+        clientX: -9999,
+        clientY: -9999,
+        offsetX: 0,
+        hasPointer: false,
+        visible: false,
+        enabled: false
+      };
+
+      function updateSize(value) {
+        if (!active || !fakeCursorRef.current) return;
+        var normalized = normalizeFakeCursorSize(value);
+        setFakeCursorSize(normalized);
+        fakeCursorSizeRef.current = normalized;
+        applyFakeCursorSize(cursor, normalized);
+      }
+
+      function updateStyle(value) {
+        if (!active || !fakeCursorRef.current) return;
+        var normalized = normalizeFakeCursorStyle(value);
+        setFakeCursorStyle(normalized);
+        fakeCursorStyleRef.current = normalized;
+        applyFakeCursorStyle(cursor, normalized);
+      }
+
+      function handlePointerMove(event) {
+        var state = fakeCursorRef.current;
+        if (!state) return;
+        state.clientX = event.clientX;
+        state.clientY = event.clientY;
+        state.hasPointer = true;
+        if (state.enabled) {
+          state.visible = true;
+          state.cursor.style.display = '';
+          updateFakeCursorPosition();
+        }
+      }
+
+      function hideFakeCursor() {
+        var state = fakeCursorRef.current;
+        if (!state || !state.cursor) return;
+        resetSilentHoverState();
+        state.visible = false;
+        state.hasPointer = false;
+        state.cursor.style.display = 'none';
+      }
+
+      function handleMouseOut(event) {
+        var relatedTarget = event.relatedTarget;
+        var enteredIframe = relatedTarget && relatedTarget.nodeType === Node.ELEMENT_NODE &&
+          (relatedTarget.tagName === 'IFRAME' || (relatedTarget.closest && relatedTarget.closest('iframe')));
+        if (!relatedTarget || enteredIframe) hideFakeCursor();
+      }
+
+      function handleVisibilityChange() {
+        if (document.hidden) hideFakeCursor();
+      }
+
+      chrome.storage.local.get(['fakeCursorSize', 'fakeCursorStyle', 'silentModeEnabled']).then(function (data) {
+        if (!active) return;
+        updateSize(data.fakeCursorSize);
+        updateStyle(data.fakeCursorStyle);
+        silentModeEnabledRef.current = data.silentModeEnabled === true;
+        setSilentModeEnabled(silentModeEnabledRef.current);
+      }).catch(function () {
+        updateSize(DEFAULT_FAKE_CURSOR_SIZE);
+        updateStyle(DEFAULT_FAKE_CURSOR_STYLE);
+      });
+
+      function storageHandler(changes, areaName) {
+        if (areaName !== 'local') return;
+        if (changes.fakeCursorSize) updateSize(changes.fakeCursorSize.newValue);
+        if (changes.fakeCursorStyle) updateStyle(changes.fakeCursorStyle.newValue);
+        if (changes.silentModeEnabled) {
+          silentModeEnabledRef.current = changes.silentModeEnabled.newValue === true;
+          if (!silentModeEnabledRef.current) removeSilentTarget();
+          setSilentModeEnabled(silentModeEnabledRef.current);
+        }
+      }
+
+      document.addEventListener('mousemove', handlePointerMove, true);
+      document.addEventListener('mouseout', handleMouseOut, true);
+      window.addEventListener('blur', hideFakeCursor, true);
+      document.addEventListener('visibilitychange', handleVisibilityChange, true);
+      chrome.storage.onChanged.addListener(storageHandler);
+
+      return function () {
+        active = false;
+        document.removeEventListener('mousemove', handlePointerMove, true);
+        document.removeEventListener('mouseout', handleMouseOut, true);
+        window.removeEventListener('blur', hideFakeCursor, true);
+        document.removeEventListener('visibilitychange', handleVisibilityChange, true);
+        chrome.storage.onChanged.removeListener(storageHandler);
+        document.documentElement.classList.remove('exmp-global-fake-cursor');
+        host.classList.remove('exmp-fake-cursor-active');
+        if (cursor.parentNode) cursor.parentNode.removeChild(cursor);
+        if (style.parentNode) style.parentNode.removeChild(style);
+        fakeCursorRef.current = null;
+      };
+    }, []);
+
+    // The fake cursor only replaces the system cursor while silent mode is active.
+    useEffect(function () {
+      var state = fakeCursorRef.current;
+      if (!state || !state.cursor) return;
+
+      var fakeCursorEnabled = silentModeEnabled && !selectingRegion;
+      state.enabled = fakeCursorEnabled;
+      state.offsetX = 0;
+      if (fakeCursorEnabled) {
+        document.documentElement.classList.add('exmp-global-fake-cursor');
+        host.classList.add('exmp-fake-cursor-active');
+        state.cursor.style.display = 'none';
+      } else {
+        document.documentElement.classList.remove('exmp-global-fake-cursor');
+        host.classList.remove('exmp-fake-cursor-active');
+        state.hasPointer = false;
+        state.visible = false;
+        state.cursor.style.display = 'none';
+      }
+      if (!silentModeEnabled) removeSilentTarget();
+    }, [silentModeEnabled, selectingRegion]);
+
     // ---- Listen for toggle-panel custom event ----
     useEffect(function () {
       function handler() {
@@ -579,11 +744,35 @@ export function mountPanel(host) {
       });
     }
 
+    function saveFakeCursorSize(value) {
+      var normalized = normalizeFakeCursorSize(value);
+      setFakeCursorSize(normalized);
+      fakeCursorSizeRef.current = normalized;
+      if (fakeCursorRef.current && fakeCursorRef.current.cursor) {
+        applyFakeCursorSize(fakeCursorRef.current.cursor, normalized);
+      }
+      chrome.storage.local.set({ fakeCursorSize: normalized }).catch(function () {
+        // Keep the locally applied value if persistence is temporarily unavailable.
+      });
+    }
+
+    function saveFakeCursorStyle(value) {
+      var normalized = normalizeFakeCursorStyle(value);
+      setFakeCursorStyle(normalized);
+      fakeCursorStyleRef.current = normalized;
+      if (fakeCursorRef.current && fakeCursorRef.current.cursor) {
+        applyFakeCursorStyle(fakeCursorRef.current.cursor, normalized);
+      }
+      chrome.storage.local.set({ fakeCursorStyle: normalized }).catch(function () {
+        // Keep the locally applied value if persistence is temporarily unavailable.
+      });
+    }
+
     function loadSilentMode() {
       chrome.runtime.sendMessage({ action: 'getSilentMode' }).then(function (res) {
         if (res && res.success) {
+          silentModeEnabledRef.current = res.silentModeEnabled === true;
           setSilentModeEnabled(res.silentModeEnabled === true);
-          setSilentScrollPixels(normalizeSilentScrollPixels(res.silentScrollPixels));
           setSilentDebugFrameEnabled(res.silentDebugFrameEnabled === true);
         }
       }).catch(function () {});
@@ -591,23 +780,15 @@ export function mountPanel(host) {
 
     function saveSilentMode(value) {
       var enabled = value === true;
+      silentModeEnabledRef.current = enabled;
       setSilentModeEnabled(enabled);
+      if (!enabled) removeSilentTarget();
       chrome.runtime.sendMessage({
         action: 'setSilentMode',
         silentModeEnabled: enabled
       }).catch(function () {
+        silentModeEnabledRef.current = !enabled;
         setSilentModeEnabled(!enabled);
-      });
-    }
-
-    function saveSilentScrollPixels(value) {
-      var normalized = normalizeSilentScrollPixels(value);
-      setSilentScrollPixels(normalized);
-      chrome.runtime.sendMessage({
-        action: 'setSilentScrollPixels',
-        silentScrollPixels: normalized
-      }).catch(function () {
-        loadSilentMode();
       });
     }
 
@@ -1177,8 +1358,57 @@ export function mountPanel(host) {
       silentHoverTargetRef.current = null;
     }
 
-    function removeSilentTarget() {
+    function resetSilentHoverState() {
       clearSilentHoverTimer();
+      var state = silentTargetRef.current;
+      var states = Array.isArray(state) ? state : (state ? [state] : []);
+      states.forEach(function (item) {
+        if (!item) return;
+        item.isHovering = false;
+        item.hoverTriggered = false;
+      });
+      resetSilentCursorFeedback();
+    }
+
+    function applyFakeCursorSize(cursor, value) {
+      var size = normalizeFakeCursorSize(value);
+      var height = Math.round(size * 20 / 14);
+      cursor.style.width = size + 'px';
+      cursor.style.height = height + 'px';
+      cursor.style.clipPath = '';
+      applyFakeCursorStyle(cursor, fakeCursorStyleRef.current);
+    }
+
+    function applyFakeCursorStyle(cursor, value) {
+      var style = normalizeFakeCursorStyle(value);
+      var fill = style === 'light-outline' ? '%23fff' : '%23000';
+      var stroke = style === 'light-outline' ? '%23000' : '%23fff';
+      var strokeWidth = style === 'light-outline' ? '1.1' : '1.5';
+      cursor.style.backgroundImage = 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 14 20\'%3E%3Cpath d=\'M1 1v16l4.2-4.1 3.3 6.4 2.5-1.3-3.3-6.4H13L1 1Z\' fill=\'' + fill + '\' stroke=\'' + stroke + '\' stroke-width=\'' + strokeWidth + '\' stroke-linejoin=\'round\'/%3E%3C/svg%3E")';
+    }
+
+    function updateFakeCursorPosition() {
+      var state = fakeCursorRef.current;
+      if (!state || !state.cursor || !state.hasPointer) return;
+      state.cursor.style.transform = 'translate3d(' + Math.round(state.clientX + state.offsetX) + 'px, ' + Math.round(state.clientY) + 'px, 0)';
+    }
+
+    function triggerSilentCursorFeedback() {
+      var state = fakeCursorRef.current;
+      if (!state) return;
+      state.offsetX = 5;
+      updateFakeCursorPosition();
+    }
+
+    function resetSilentCursorFeedback() {
+      var state = fakeCursorRef.current;
+      if (!state || state.offsetX === 0) return;
+      state.offsetX = 0;
+      updateFakeCursorPosition();
+    }
+
+    function removeSilentTarget() {
+      resetSilentHoverState();
       var state = silentTargetRef.current;
       var states = Array.isArray(state) ? state : (state ? [state] : []);
       states.forEach(function (item) {
@@ -1243,6 +1473,8 @@ export function mountPanel(host) {
         height: Math.max(8, height),
         isHovering: false,
         hoverTriggered: false,
+        lastClientX: null,
+        lastClientY: null,
         center: center,
         updateVisualState: function (enabled) {
           el.style.border = enabled ? '2px solid ' + color : '2px solid transparent';
@@ -1270,8 +1502,15 @@ export function mountPanel(host) {
             if (silentHoverTargetRef.current === state) {
               clearSilentHoverTimer();
             }
+            var allStates = silentTargetRef.current;
+            var stillInsideTarget = Array.isArray(allStates) && allStates.some(function (item) {
+              return item && item !== state && item.containsPoint(event.clientX, event.clientY);
+            });
+            if (!stillInsideTarget) resetSilentCursorFeedback();
             return;
           }
+          state.lastClientX = event.clientX;
+          state.lastClientY = event.clientY;
           if (state.isHovering && state.hoverTriggered) return;
           if (silentHoverTimerRef.current && silentHoverTargetRef.current === state) return;
           state.isHovering = true;
@@ -1282,7 +1521,7 @@ export function mountPanel(host) {
             silentHoverTargetRef.current = null;
             if (!state.isHovering || state.hoverTriggered) return;
             state.hoverTriggered = true;
-            window.scrollBy(0, silentScrollPixelsRef.current);
+            triggerSilentCursorFeedback(state.lastClientX, state.lastClientY);
             setStatusText('静默模式已触发');
           }, 350);
         }
@@ -1527,6 +1766,10 @@ export function mountPanel(host) {
           line-height: 1.6 !important;
           color: #213547 !important;
           pointer-events: none !important;
+        }
+        :host(.exmp-fake-cursor-active),
+        :host(.exmp-fake-cursor-active) * {
+          cursor: none !important;
         }
         * {
           pointer-events: auto !important;
@@ -1922,6 +2165,23 @@ export function mountPanel(host) {
           border-color: #4f6ef7;
           box-shadow: 0 0 0 2px rgba(79,110,247,0.14);
         }
+        .exmp-cursor-style-select {
+          background: #fff;
+          border: 1px solid #d0d5dd;
+          border-radius: 6px;
+          box-sizing: border-box;
+          color: #344054;
+          font: inherit;
+          font-size: 12px;
+          height: 28px;
+          max-width: 148px;
+          outline: none;
+          padding: 4px 26px 4px 8px;
+        }
+        .exmp-cursor-style-select:focus {
+          border-color: #4f6ef7;
+          box-shadow: 0 0 0 2px rgba(79,110,247,0.14);
+        }
         .exmp-input-suffix {
           color: #667085;
           font-size: 12px;
@@ -2173,46 +2433,6 @@ ${function () {
                   value=${uiOpacity}
                   onInput=${function (e) { saveUiOpacity(e.target.value); }}
                 />
-                <div class="exmp-switch-row">
-                  <span>静默模式</span>
-                  <button
-                    type="button"
-                    class="exmp-switch${silentModeEnabled ? ' active' : ''}"
-                    aria-pressed=${silentModeEnabled ? 'true' : 'false'}
-                    title="开启后使用答案坐标进行悬停反馈"
-                    onClick=${function () { saveSilentMode(!silentModeEnabled); }}
-                  >
-                    <span class="exmp-switch-knob"></span>
-                  </button>
-                </div>
-                <label class="exmp-switch-row" for="exmp-silent-scroll-pixels">
-                  <span>静默滚动距离</span>
-                  <span class="exmp-flex exmp-items-center">
-                    <input
-                      id="exmp-silent-scroll-pixels"
-                      class="exmp-number-input"
-                      type="number"
-                      min="0"
-                      max="200"
-                      step="1"
-                      value=${silentScrollPixels}
-                      onChange=${function (e) { saveSilentScrollPixels(e.target.value); }}
-                    />
-                    <span class="exmp-input-suffix">px</span>
-                  </span>
-                </label>
-                <div class="exmp-switch-row">
-                  <span>显示静默框</span>
-                  <button
-                    type="button"
-                    class="exmp-switch${silentDebugFrameEnabled ? ' active' : ''}"
-                    aria-pressed=${silentDebugFrameEnabled ? 'true' : 'false'}
-                    title="开启后在页面上显示 AI 返回的答案区域"
-                    onClick=${function () { saveSilentDebugFrame(!silentDebugFrameEnabled); }}
-                  >
-                    <span class="exmp-switch-knob"></span>
-                  </button>
-                </div>
               </div>
               <div style="border-top: 1px solid #f0f1f3; margin-top: 10px; padding-top: 10px;">
                 <div style="font-size: 12px; font-weight: 600; color: #667085; letter-spacing: 0.3px; margin-bottom: 6px;">📝 普通提示词</div>
@@ -2226,19 +2446,78 @@ ${function () {
                   <button class="exmp-config-save-btn" disabled=${promptSaving} onClick=${savePrompt}>${promptSaving ? '保存中...' : '保存提示词'}</button>
                 </div>
               </div>
-              <div style="border-top: 1px solid #f0f1f3; margin-top: 10px; padding-top: 10px;">
-                <div style="font-size: 12px; font-weight: 600; color: #667085; letter-spacing: 0.3px; margin-bottom: 6px;">静默提示词</div>
-                <textarea
-                  value=${silentPrompt}
-                  onInput=${function (e) { setSilentPrompt(e.target.value); }}
-                  style="width: 100%; padding: 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 12px; outline: none; resize: vertical; min-height: 150px; box-sizing: border-box; font-family: inherit; line-height: 1.5;"
-                  placeholder=${DEFAULT_SILENT_PROMPT}
-                ></textarea>
-                <div class="exmp-config-form-actions exmp-flex exmp-gap-6" style="margin-top: 6px;">
-                  <button class="exmp-config-save-btn" disabled=${silentPromptSaving} onClick=${saveSilentPrompt}>${silentPromptSaving ? '保存中...' : '保存静默提示词'}</button>
-                  <button class="exmp-config-cancel-btn" type="button" disabled=${silentPromptSaving} onClick=${function () { setSilentPrompt(DEFAULT_SILENT_PROMPT); }}>恢复默认</button>
+              <div class="exmp-ui-settings">
+                <div class="exmp-ui-settings-title">静默设置</div>
+                <div class="exmp-switch-row">
+                  <span>静默模式</span>
+                  <button
+                    type="button"
+                    class="exmp-switch${silentModeEnabled ? ' active' : ''}"
+                    aria-pressed=${silentModeEnabled ? 'true' : 'false'}
+                    title="开启后使用答案坐标进行悬停反馈"
+                    onClick=${function () { saveSilentMode(!silentModeEnabled); }}
+                  >
+                    <span class="exmp-switch-knob"></span>
+                  </button>
                 </div>
+                ${silentModeEnabled ? html`
+                  <label class="exmp-switch-row" for="exmp-fake-cursor-size">
+                    <span>仿光标大小</span>
+                    <span class="exmp-flex exmp-items-center">
+                      <input
+                        id="exmp-fake-cursor-size"
+                        class="exmp-number-input"
+                        type="number"
+                        min="10"
+                        max="32"
+                        step="1"
+                        value=${fakeCursorSize}
+                        onChange=${function (e) { saveFakeCursorSize(e.target.value); }}
+                      />
+                      <span class="exmp-input-suffix">px</span>
+                    </span>
+                  </label>
+                  <label class="exmp-switch-row" for="exmp-fake-cursor-style">
+                    <span>仿光标样式</span>
+                    <select
+                      id="exmp-fake-cursor-style"
+                      class="exmp-cursor-style-select"
+                      value=${fakeCursorStyle}
+                      onChange=${function (e) { saveFakeCursorStyle(e.target.value); }}
+                    >
+                      <option value="dark-outline">黑色填充 · 白边</option>
+                      <option value="light-outline">Windows · 白色黑边</option>
+                    </select>
+                  </label>
+                  <div class="exmp-switch-row">
+                    <span>显示静默框</span>
+                    <button
+                      type="button"
+                      class="exmp-switch${silentDebugFrameEnabled ? ' active' : ''}"
+                      aria-pressed=${silentDebugFrameEnabled ? 'true' : 'false'}
+                      title="开启后在页面上显示 AI 返回的答案区域"
+                      onClick=${function () { saveSilentDebugFrame(!silentDebugFrameEnabled); }}
+                    >
+                      <span class="exmp-switch-knob"></span>
+                    </button>
+                  </div>
+                ` : ''}
               </div>
+              ${silentModeEnabled ? html`
+                <div style="border-top: 1px solid #f0f1f3; margin-top: 10px; padding-top: 10px;">
+                  <div style="font-size: 12px; font-weight: 600; color: #667085; letter-spacing: 0.3px; margin-bottom: 6px;">静默提示词</div>
+                  <textarea
+                    value=${silentPrompt}
+                    onInput=${function (e) { setSilentPrompt(e.target.value); }}
+                    style="width: 100%; padding: 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 12px; outline: none; resize: vertical; min-height: 150px; box-sizing: border-box; font-family: inherit; line-height: 1.5;"
+                    placeholder=${DEFAULT_SILENT_PROMPT}
+                  ></textarea>
+                  <div class="exmp-config-form-actions exmp-flex exmp-gap-6" style="margin-top: 6px;">
+                    <button class="exmp-config-save-btn" disabled=${silentPromptSaving} onClick=${saveSilentPrompt}>${silentPromptSaving ? '保存中...' : '保存静默提示词'}</button>
+                    <button class="exmp-config-cancel-btn" type="button" disabled=${silentPromptSaving} onClick=${function () { setSilentPrompt(DEFAULT_SILENT_PROMPT); }}>恢复默认</button>
+                  </div>
+                </div>
+              ` : ''}
             </div>
           ` : html`
             <div class="exmp-content" key="content">

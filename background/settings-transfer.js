@@ -2,6 +2,8 @@
   var BACKUP_FORMAT = 'exampilot-settings-backup';
   var BACKUP_VERSION = 1;
   var MAX_CONFIGS = 100;
+  var DEFAULT_FAKE_CURSOR_SIZE = 14;
+  var DEFAULT_FAKE_CURSOR_STYLE = 'dark-outline';
   var DEFAULT_SILENT_PROMPT = '请识别图片中所有完整显示的题目。只返回一个 JSON 对象，不要使用 Markdown 代码块，不要输出多余文字。\n' +
     '不要定位到题干空白、横线、输入框、解析区域或未完整显示的题目。\n' +
     '选择题必须返回正确选项本身的位置：bboxPercent 要框住正确选项行，至少包含选项字母圆圈和选项文本；coordinatePercent 要落在这个 bboxPercent 内。\n' +
@@ -33,6 +35,16 @@
       throw new Error(label + ' 必须是' + (allowEmpty ? '字符串' : '非空字符串'));
     }
     return value;
+  }
+
+  function normalizeFakeCursorSize(value) {
+    var number = Number(value);
+    if (!Number.isFinite(number)) return DEFAULT_FAKE_CURSOR_SIZE;
+    return Math.max(10, Math.min(Math.round(number), 32));
+  }
+
+  function normalizeFakeCursorStyle(value) {
+    return value === 'light-outline' ? value : DEFAULT_FAKE_CURSOR_STYLE;
   }
 
   function validateConfigUrl(value, index) {
@@ -117,10 +129,6 @@
     if (!Number.isFinite(uiOpacity)) {
       throw new Error('界面透明度格式无效');
     }
-    var silentScrollPixels = backup.settings.silentScrollPixels === undefined ? 5 : Number(backup.settings.silentScrollPixels);
-    if (!Number.isFinite(silentScrollPixels)) {
-      throw new Error('静默模式滚动距离格式无效');
-    }
 
     return {
       configList: configList,
@@ -128,8 +136,9 @@
       silentPrompt: silentPrompt,
       uiOpacity: Math.max(0.01, Math.min(uiOpacity, 1)),
       silentModeEnabled: backup.settings.silentModeEnabled === true,
-      silentScrollPixels: Math.max(0, Math.min(Math.round(silentScrollPixels), 200)),
-      silentDebugFrameEnabled: backup.settings.silentDebugFrameEnabled === true
+      silentDebugFrameEnabled: backup.settings.silentDebugFrameEnabled === true,
+      fakeCursorSize: normalizeFakeCursorSize(backup.settings.fakeCursorSize),
+      fakeCursorStyle: normalizeFakeCursorStyle(backup.settings.fakeCursorStyle)
     };
   }
 
