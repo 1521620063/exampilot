@@ -149,6 +149,8 @@ export function mountPanel(host) {
     var silentTargetRef = useRef(null);
     var silentHoverTimerRef = useRef(null);
     var silentHoverTargetRef = useRef(null);
+    var silentActiveTargetRef = useRef(null);
+    var silentMouseMoveHandlerRef = useRef(null);
     var silentModeEnabledRef = useRef(false);
     var silentDebugFrameEnabledRef = useRef(false);
     var fakeCursorRef = useRef(null);
@@ -166,6 +168,7 @@ export function mountPanel(host) {
 
     function handleCaptureResponse(response, mySeq) {
       if (mySeq !== currentRequestSeqRef.current) return;
+      resumeFakeCursorAfterCapture();
       if (!response.success) {
         setStatusText('处理失败');
         setShowSpinner(false);
@@ -202,6 +205,7 @@ export function mountPanel(host) {
 
     function handleCaptureError(error, mySeq) {
       if (mySeq !== currentRequestSeqRef.current) return;
+      resumeFakeCursorAfterCapture();
       removeSilentTarget();
       setStatusText('处理失败');
       setShowSpinner(false);
@@ -210,8 +214,18 @@ export function mountPanel(host) {
 
     function handleCaptureFinally(mySeq) {
       if (mySeq === currentRequestSeqRef.current) {
+        resumeFakeCursorAfterCapture();
         setCapturing(false);
       }
+    }
+
+    function resumeFakeCursorAfterCapture() {
+      var state = fakeCursorRef.current;
+      if (!state) return;
+      state.suspended = false;
+      state.hasPointer = false;
+      state.visible = false;
+      if (state.cursor) state.cursor.style.setProperty('display', 'none', 'important');
     }
 
     // ---- Listen for status messages from background ----
@@ -221,7 +235,17 @@ export function mountPanel(host) {
           if (request.message === '截图中...') {
             host.style.display = 'none';
             hiddenForCaptureRef.current = true;
+            var cursorState = fakeCursorRef.current;
+            if (cursorState && cursorState.cursor) {
+              resetSilentHoverState();
+              cursorState.suspended = true;
+              cursorState.hasPointer = false;
+              cursorState.visible = false;
+              cursorState.cursor.style.setProperty('display', 'none', 'important');
+            }
           } else {
+            var activeCursorState = fakeCursorRef.current;
+            if (activeCursorState) activeCursorState.suspended = false;
             if (host.style.display === 'none' && hiddenForCaptureRef.current && !hiddenByUserRef.current) {
               host.style.display = '';
               hiddenForCaptureRef.current = false;
@@ -451,36 +475,63 @@ export function mountPanel(host) {
     useEffect(function () {
       var active = true;
       var style = document.createElement('style');
-      style.textContent = 'html.exmp-global-fake-cursor, html.exmp-global-fake-cursor * { cursor: none !important; }';
+      style.textContent = '';
 
       var cursor = document.createElement('div');
       cursor.setAttribute('aria-hidden', 'true');
-      cursor.style.cssText = [
-        'position: fixed',
-        'left: 0',
-        'top: 0',
-        'z-index: 2147483647',
-        'pointer-events: none',
-        'background-repeat: no-repeat',
-        'background-size: 100% 100%',
-        'filter: drop-shadow(0 1px 1px rgba(0,0,0,0.45))',
-        'transform: translate3d(-9999px, -9999px, 0)',
+      cursor.style.setProperty('position', 'fixed', 'important');
+      cursor.style.setProperty('left', '0', 'important');
+      cursor.style.setProperty('top', '0', 'important');
+      cursor.style.setProperty('width', '14px', 'important');
+      cursor.style.setProperty('height', '20px', 'important');
+      cursor.style.setProperty('display', 'none', 'important');
+      cursor.style.setProperty('z-index', '2147483647', 'important');
+      cursor.style.setProperty('pointer-events', 'none', 'important');
+      cursor.style.setProperty('margin', '0', 'important');
+      cursor.style.setProperty('padding', '0', 'important');
+      cursor.style.setProperty('border', '0', 'important');
+      cursor.style.setProperty('background', 'transparent', 'important');
+      cursor.style.setProperty('filter', 'drop-shadow(0 1px 1px rgba(0,0,0,0.45))', 'important');
+      cursor.style.setProperty('overflow', 'visible', 'important');
+      cursor.style.setProperty('transform', 'translate3d(-9999px, -9999px, 0)', 'important');
+      cursor.style.setProperty('will-change', 'transform', 'important');
+
+      var cursorShadow = cursor.attachShadow({ mode: 'closed' });
+
+      var cursorSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      cursorSvg.setAttribute('viewBox', '0 0 14 20');
+      cursorSvg.setAttribute('width', '100%');
+      cursorSvg.setAttribute('height', '100%');
+      cursorSvg.setAttribute('focusable', 'false');
+      cursorSvg.style.cssText = [
+        'display: block',
+        'overflow: visible',
+        'transform: translate3d(0,0,0)',
         'transition: transform 120ms cubic-bezier(.2,.8,.2,1)',
         'will-change: transform'
       ].join(';');
 
+      var cursorPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      cursorPath.setAttribute('d', 'M1 1v16l4.2-4.1 3.3 6.4 2.5-1.3-3.3-6.4H13L1 1Z');
+      cursorPath.setAttribute('stroke-linejoin', 'round');
+      cursorSvg.appendChild(cursorPath);
+      cursorShadow.appendChild(cursorSvg);
+
       document.head.appendChild(style);
       document.body.appendChild(cursor);
-      cursor.style.display = 'none';
 
       fakeCursorRef.current = {
         cursor: cursor,
+        style: style,
+        svg: cursorSvg,
+        path: cursorPath,
         clientX: -9999,
         clientY: -9999,
         offsetX: 0,
         hasPointer: false,
         visible: false,
-        enabled: false
+        enabled: false,
+        suspended: false
       };
 
       function updateSize(value) {
@@ -505,9 +556,9 @@ export function mountPanel(host) {
         state.clientX = event.clientX;
         state.clientY = event.clientY;
         state.hasPointer = true;
-        if (state.enabled) {
+        if (state.enabled && !state.suspended) {
           state.visible = true;
-          state.cursor.style.display = '';
+          state.cursor.style.setProperty('display', 'block', 'important');
           updateFakeCursorPosition();
         }
       }
@@ -518,7 +569,7 @@ export function mountPanel(host) {
         resetSilentHoverState();
         state.visible = false;
         state.hasPointer = false;
-        state.cursor.style.display = 'none';
+        state.cursor.style.setProperty('display', 'none', 'important');
       }
 
       function handleMouseOut(event) {
@@ -583,16 +634,19 @@ export function mountPanel(host) {
       var fakeCursorEnabled = silentModeEnabled && !selectingRegion;
       state.enabled = fakeCursorEnabled;
       state.offsetX = 0;
+      if (state.svg) state.svg.style.transform = 'translate3d(0,0,0)';
       if (fakeCursorEnabled) {
+        state.style.textContent = 'html.exmp-global-fake-cursor, html.exmp-global-fake-cursor * { cursor: none !important; }';
         document.documentElement.classList.add('exmp-global-fake-cursor');
         host.classList.add('exmp-fake-cursor-active');
-        state.cursor.style.display = 'none';
+        state.cursor.style.setProperty('display', 'none', 'important');
       } else {
+        state.style.textContent = '';
         document.documentElement.classList.remove('exmp-global-fake-cursor');
         host.classList.remove('exmp-fake-cursor-active');
         state.hasPointer = false;
         state.visible = false;
-        state.cursor.style.display = 'none';
+        state.cursor.style.setProperty('display', 'none', 'important');
       }
       if (!silentModeEnabled) removeSilentTarget();
     }, [silentModeEnabled, selectingRegion]);
@@ -786,9 +840,10 @@ export function mountPanel(host) {
       chrome.runtime.sendMessage({
         action: 'setSilentMode',
         silentModeEnabled: enabled
+      }).then(function (res) {
+        if (!res || !res.success) loadSilentMode();
       }).catch(function () {
-        silentModeEnabledRef.current = !enabled;
-        setSilentModeEnabled(!enabled);
+        loadSilentMode();
       });
     }
 
@@ -1367,44 +1422,93 @@ export function mountPanel(host) {
         item.isHovering = false;
         item.hoverTriggered = false;
       });
+      silentActiveTargetRef.current = null;
       resetSilentCursorFeedback();
+    }
+
+    function scheduleSilentHover(state) {
+      if (!state || state.hoverTriggered || silentHoverTimerRef.current) return;
+      silentHoverTargetRef.current = state;
+      silentHoverTimerRef.current = window.setTimeout(function () {
+        silentHoverTimerRef.current = null;
+        silentHoverTargetRef.current = null;
+        if (silentActiveTargetRef.current !== state || !state.isHovering || state.hoverTriggered) return;
+        state.hoverTriggered = true;
+        triggerSilentCursorFeedback();
+        setStatusText('静默模式已触发');
+      }, 350);
+    }
+
+    function handleSilentTargetsMouseMove(event) {
+      var states = Array.isArray(silentTargetRef.current) ? silentTargetRef.current : [];
+      var nextState = states.find(function (item) {
+        return item && item.containsPoint(event.clientX, event.clientY);
+      }) || null;
+      var activeState = silentActiveTargetRef.current;
+
+      if (activeState !== nextState) {
+        clearSilentHoverTimer();
+        if (activeState) {
+          activeState.isHovering = false;
+          activeState.hoverTriggered = false;
+        }
+        resetSilentCursorFeedback();
+        silentActiveTargetRef.current = nextState;
+        if (nextState) {
+          nextState.isHovering = true;
+          nextState.hoverTriggered = false;
+        }
+      }
+
+      if (!nextState) return;
+      nextState.lastClientX = event.clientX;
+      nextState.lastClientY = event.clientY;
+      scheduleSilentHover(nextState);
     }
 
     function applyFakeCursorSize(cursor, value) {
       var size = normalizeFakeCursorSize(value);
       var height = Math.round(size * 20 / 14);
-      cursor.style.width = size + 'px';
-      cursor.style.height = height + 'px';
-      cursor.style.clipPath = '';
+      cursor.style.setProperty('width', size + 'px', 'important');
+      cursor.style.setProperty('height', height + 'px', 'important');
       applyFakeCursorStyle(cursor, fakeCursorStyleRef.current);
     }
 
     function applyFakeCursorStyle(cursor, value) {
       var style = normalizeFakeCursorStyle(value);
-      var fill = style === 'light-outline' ? '%23fff' : '%23000';
-      var stroke = style === 'light-outline' ? '%23000' : '%23fff';
+      var fill = style === 'light-outline' ? '#fff' : '#000';
+      var stroke = style === 'light-outline' ? '#000' : '#fff';
       var strokeWidth = style === 'light-outline' ? '1.1' : '1.5';
-      cursor.style.backgroundImage = 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 14 20\'%3E%3Cpath d=\'M1 1v16l4.2-4.1 3.3 6.4 2.5-1.3-3.3-6.4H13L1 1Z\' fill=\'' + fill + '\' stroke=\'' + stroke + '\' stroke-width=\'' + strokeWidth + '\' stroke-linejoin=\'round\'/%3E%3C/svg%3E")';
+      var state = fakeCursorRef.current;
+      var path = state && state.cursor === cursor ? state.path : cursor.querySelector('path');
+      if (!path) return;
+      path.setAttribute('fill', fill);
+      path.setAttribute('stroke', stroke);
+      path.setAttribute('stroke-width', strokeWidth);
     }
 
     function updateFakeCursorPosition() {
       var state = fakeCursorRef.current;
       if (!state || !state.cursor || !state.hasPointer) return;
-      state.cursor.style.transform = 'translate3d(' + Math.round(state.clientX + state.offsetX) + 'px, ' + Math.round(state.clientY) + 'px, 0)';
+      state.cursor.style.setProperty(
+        'transform',
+        'translate3d(' + Math.round(state.clientX) + 'px, ' + Math.round(state.clientY) + 'px, 0)',
+        'important'
+      );
     }
 
     function triggerSilentCursorFeedback() {
       var state = fakeCursorRef.current;
       if (!state) return;
       state.offsetX = 5;
-      updateFakeCursorPosition();
+      if (state.svg) state.svg.style.transform = 'translate3d(5px,0,0)';
     }
 
     function resetSilentCursorFeedback() {
       var state = fakeCursorRef.current;
       if (!state || state.offsetX === 0) return;
       state.offsetX = 0;
-      updateFakeCursorPosition();
+      if (state.svg) state.svg.style.transform = 'translate3d(0,0,0)';
     }
 
     function removeSilentTarget() {
@@ -1415,11 +1519,14 @@ export function mountPanel(host) {
         if (!item) return;
         window.removeEventListener('scroll', item.updatePosition, true);
         window.removeEventListener('resize', item.updatePosition, true);
-        document.removeEventListener('mousemove', item.handleMouseMove, true);
         if (item.el && item.el.parentNode) {
           item.el.parentNode.removeChild(item.el);
         }
       });
+      if (silentMouseMoveHandlerRef.current) {
+        document.removeEventListener('mousemove', silentMouseMoveHandlerRef.current, true);
+        silentMouseMoveHandlerRef.current = null;
+      }
       silentTargetRef.current = null;
     }
 
@@ -1494,36 +1601,6 @@ export function mountPanel(host) {
             clientX <= left + state.width &&
             clientY >= top &&
             clientY <= top + state.height;
-        },
-        handleMouseMove: function (event) {
-          if (!state.containsPoint(event.clientX, event.clientY)) {
-            state.isHovering = false;
-            state.hoverTriggered = false;
-            if (silentHoverTargetRef.current === state) {
-              clearSilentHoverTimer();
-            }
-            var allStates = silentTargetRef.current;
-            var stillInsideTarget = Array.isArray(allStates) && allStates.some(function (item) {
-              return item && item !== state && item.containsPoint(event.clientX, event.clientY);
-            });
-            if (!stillInsideTarget) resetSilentCursorFeedback();
-            return;
-          }
-          state.lastClientX = event.clientX;
-          state.lastClientY = event.clientY;
-          if (state.isHovering && state.hoverTriggered) return;
-          if (silentHoverTimerRef.current && silentHoverTargetRef.current === state) return;
-          state.isHovering = true;
-          clearSilentHoverTimer();
-          silentHoverTargetRef.current = state;
-          silentHoverTimerRef.current = window.setTimeout(function () {
-            silentHoverTimerRef.current = null;
-            silentHoverTargetRef.current = null;
-            if (!state.isHovering || state.hoverTriggered) return;
-            state.hoverTriggered = true;
-            triggerSilentCursorFeedback(state.lastClientX, state.lastClientY);
-            setStatusText('静默模式已触发');
-          }, 350);
         }
       };
 
@@ -1532,7 +1609,6 @@ export function mountPanel(host) {
       state.updatePosition();
       window.addEventListener('scroll', state.updatePosition, true);
       window.addEventListener('resize', state.updatePosition, true);
-      document.addEventListener('mousemove', state.handleMouseMove, true);
       return state;
     }
 
@@ -1545,6 +1621,10 @@ export function mountPanel(host) {
         if (state) states.push(state);
       });
       silentTargetRef.current = states;
+      if (states.length > 0) {
+        silentMouseMoveHandlerRef.current = handleSilentTargetsMouseMove;
+        document.addEventListener('mousemove', silentMouseMoveHandlerRef.current, true);
+      }
     }
 
     function handleFullscreenCapture() {
@@ -1597,6 +1677,7 @@ export function mountPanel(host) {
 
     function cancelCapture() {
       currentRequestSeqRef.current++;
+      resumeFakeCursorAfterCapture();
       removeSilentTarget();
       setCapturing(false);
       setShowSpinner(false);
