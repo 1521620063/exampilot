@@ -843,6 +843,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.action === 'resetPrompt') {
+    chrome.storage.local.set({ customPrompt: DEFAULT_PROMPT }).then(function () {
+      sendResponse({ success: true, prompt: DEFAULT_PROMPT });
+    });
+    return true;
+  }
+
   if (request.action === 'setSilentPrompt') {
     chrome.storage.local.set({ silentPrompt: request.prompt }).then(function () {
       sendResponse({ success: true });

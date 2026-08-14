@@ -1004,6 +1004,16 @@ export function mountPanel(host) {
       });
     }
 
+    function resetPrompt() {
+      setPromptSaving(true);
+      chrome.runtime.sendMessage({ action: 'resetPrompt' }).then(function (res) {
+        if (res && res.success) setCustomPrompt(res.prompt);
+        setPromptSaving(false);
+      }).catch(function () {
+        setPromptSaving(false);
+      });
+    }
+
     function saveSilentPrompt() {
       setSilentPromptSaving(true);
       chrome.runtime.sendMessage({ action: 'setSilentPrompt', prompt: silentPrompt }).then(function () {
@@ -2674,6 +2684,7 @@ ${function () {
                 ></textarea>
                 <div class="exmp-config-form-actions exmp-flex exmp-gap-6" style="margin-top: 6px;">
                   <button class="exmp-config-save-btn" disabled=${promptSaving} onClick=${savePrompt}>${promptSaving ? '保存中...' : '保存提示词'}</button>
+                  <button class="exmp-config-cancel-btn" type="button" disabled=${promptSaving} onClick=${resetPrompt}>恢复默认</button>
                 </div>
               </div>
               <div class="exmp-ui-settings">
