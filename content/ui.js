@@ -17,6 +17,7 @@ import {
 const html = htm.bind(h);
 var IS_FULL_ACCESS = __EXAMPILOT_FULL_ACCESS__;
 var __permissionHandler = null;
+var __permissionRequest = null;
 var DEFAULT_FAKE_CURSOR_SIZE = 14;
 var DEFAULT_FAKE_CURSOR_STYLE = 'dark-outline';
 var DEFAULT_SILENT_PROMPT = '请识别图片中所有完整显示的题目。只返回一个 JSON 对象，不要使用 Markdown 代码块，不要输出多余文字。\n' +
@@ -565,9 +566,9 @@ export function mountPanel(host) {
 
       function handleFramePointerMove(event) {
         var data = event.data;
-        if (!data || data.source !== '__exampilotFrameCursor' || data.type !== 'top-move') return;
+        if (event.source !== window || !data || data.source !== '__exampilotFrameCursor' || data.type !== 'top-move') return;
         var state = fakeCursorRef.current;
-        if (!state) return;
+        if (!state || !state.enabled) return;
         state.clientX = Number(data.clientX);
         state.clientY = Number(data.clientY);
         if (!Number.isFinite(state.clientX) || !Number.isFinite(state.clientY)) return;
@@ -888,6 +889,50 @@ export function mountPanel(host) {
       });
     }
 
+    useEffect(function () {
+      if (IS_FULL_ACCESS || !silentModeEnabled) return;
+      var timer = null;
+
+      function scheduleFramePermissionCheck() {
+        if (timer !== null) window.clearTimeout(timer);
+        timer = window.setTimeout(function () {
+          timer = null;
+          ensureSilentFramePermissions().catch(function () {});
+        }, 150);
+      }
+
+      function containsFrame(node) {
+        if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
+        if (node.tagName === 'IFRAME' || node.tagName === 'FRAME') return true;
+        return !!(node.querySelector && node.querySelector('iframe, frame'));
+      }
+
+      var observer = new MutationObserver(function (mutations) {
+        var needsCheck = mutations.some(function (mutation) {
+          if (mutation.type === 'attributes') return containsFrame(mutation.target);
+          return Array.prototype.some.call(mutation.addedNodes, containsFrame);
+        });
+        if (needsCheck) scheduleFramePermissionCheck();
+      });
+      observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['src']
+      });
+
+      function handleFrameLoad(event) {
+        if (containsFrame(event.target)) scheduleFramePermissionCheck();
+      }
+
+      document.addEventListener('load', handleFrameLoad, true);
+      return function () {
+        if (timer !== null) window.clearTimeout(timer);
+        observer.disconnect();
+        document.removeEventListener('load', handleFrameLoad, true);
+      };
+    }, [silentModeEnabled]);
+
     function persistSilentMode(enabled) {
       silentModeEnabledRef.current = enabled;
       setSilentModeEnabled(enabled);
@@ -1104,6 +1149,34 @@ export function mountPanel(host) {
     }
 
     function showApiHostPermissionFrame(origin, purpose) {
+      var requestPurpose = purpose || 'api';
+      if (__permissionRequest && __permissionRequest.origin === origin &&
+          __permissionRequest.purpose === requestPurpose) {
+        return __permissionRequest.promise;
+      }
+
+      var previousRequest = __permissionRequest ? __permissionRequest.promise : Promise.resolve();
+      var queuedRequest = previousRequest.catch(function () {
+        return false;
+      }).then(function () {
+        return createApiHostPermissionFrame(origin, requestPurpose);
+      });
+      var requestRecord = {
+        origin: origin,
+        purpose: requestPurpose,
+        promise: queuedRequest
+      };
+      __permissionRequest = requestRecord;
+      queuedRequest.then(clearQueuedRequest, clearQueuedRequest);
+
+      function clearQueuedRequest() {
+        if (__permissionRequest === requestRecord) __permissionRequest = null;
+      }
+
+      return queuedRequest;
+    }
+
+    function createApiHostPermissionFrame(origin, purpose) {
       return new Promise(function (resolve) {
         if (__permissionHandler) {
           window.removeEventListener('message', __permissionHandler);

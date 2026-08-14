@@ -67,7 +67,7 @@ npm run build
 | ⚙️ 点击 **⚙️ 设置** | 管理 AI 配置：添加/编辑/删除/切换视觉大模型 |
 | ➖ 点击 **—** | 折叠为迷你 ⚡ 按钮；拖动按钮可调整面板位置，点击可重新展开 |
 | ✏️ 在 ⚙️ 中编辑提示词 | 自定义发送给 AI 的指令，支持多行文本，自动保存 |
-| 🕶️ 在 ⚙️ 中开启静默模式 | AI 返回答案与百分比坐标，页面创建透明命中区，鼠标悬停后以仿光标轻微位移反馈 |
+| 🕶️ 在 ⚙️ 中开启静默模式 | AI 返回答案与百分比坐标，页面创建透明命中区，鼠标悬停后以仿光标轻微位移反馈；跨域 iframe 首次使用时会请求该 iframe 域名授权 |
 | 📋 静默模式遇到简答/编程题 | 无可悬浮选项时自动把 AI 返回答案复制到剪切板 |
 | 🎯 在 ⚙️ 中开启显示静默框 | 调试时用红色框显示 AI 返回的百分比命中区；关闭后仅保留悬浮触发 |
 | 🔧 在 ⚙️ 中配置请求覆盖/模板 | 为每个 AI 配置添加 HTTP 请求头、请求体字段，或完整自定义模板，满足不同 API 的个性化需求 |
@@ -103,6 +103,7 @@ exampilot/
 │   └── template-engine.js   # 自定义模板渲染与响应提取
 ├── content/
 │   ├── index.js             # 内容脚本入口（esbuild 构建入口）
+│   ├── frame-cursor.js      # iframe 光标桥接：隐藏子 frame 原生光标并逐层上报坐标
 │   ├── ui.js                # Preact+htm 浮动面板组件（Shadow DOM）
 │   └── ui-opacity.js        # 界面透明度偏好归一化与应用
 ├── icons/                   # 扩展图标（16/48/128）
@@ -111,6 +112,7 @@ exampilot/
 ├── dist/chrome-full/        # Full Access 版构建输出目录（已 gitignore）
 │   ├── background/index.js
 │   ├── content/bundle/content-bundle.js
+│   ├── content/bundle/frame-cursor-bundle.js
 │   ├── manifest.json
 │   └── icons/
 ├── .claude/                 # Claude Code 配置与记忆
@@ -135,8 +137,8 @@ AI 配置通过面板右下角的 **⚙️ 设置** 按钮管理，支持添加�
 
 项目支持两种构建：
 
-- **普通版**（`npm run build` / `npm run build:package`）：`manifest.json` 保持商店友好的低权限策略，使用 `activeTab` + `scripting` 在点击图标后注入隐藏面板，并通过 `optional_host_permissions` 对 API 域名按需授权。请求权限完成后仍保持隐藏，用户双击页面才显示。
-- **Full Access 版**（`npm run build:full` / `npm run build:full:package`）：构建脚本生成带 `content_scripts` 和 `host_permissions: ["<all_urls>"]` 的清单。进入任意网页后会自动加载隐藏面板，点击扩展图标或双击页面空白区域显示；配置和识别流程不再弹出 API 域名单独授权框。
+- **普通版**（`npm run build` / `npm run build:package`）：`manifest.json` 保持商店友好的低权限策略，使用 `activeTab` + `scripting` 在点击图标后注入隐藏面板，并通过 `optional_host_permissions` 对 API 域名按需授权。静默模式检测到跨域 iframe（包括开启后动态加载或换址的 iframe）时，也会单独请求该 iframe 的 HTTPS 域名授权，以便持续隐藏原生光标和跟踪仿光标坐标。请求权限完成后仍保持隐藏，用户双击页面才显示。
+- **Full Access 版**（`npm run build:full` / `npm run build:full:package`）：构建脚本生成带 `content_scripts` 和 `host_permissions: ["<all_urls>"]` 的清单。进入任意网页后会自动加载隐藏面板，并在所有 frame 中自动加载光标桥接脚本；点击扩展图标或双击页面空白区域显示，配置、识别和跨域 iframe 静默模式流程均不再弹出域名单独授权框。
 
 ### 🔧 自定义请求头与请求体
 
@@ -176,6 +178,7 @@ AI 配置通过面板右下角的 **⚙️ 设置** 按钮管理，支持添加�
 - 选择题返回 `items` 数组，每一项包含答案文本，以及 `coordinatePercent` 或 `bboxPercent` 百分比坐标（0 到 1）
 - 全屏截图时百分比基于当前视口；区域截图时百分比基于裁剪后的选区，后台会转换回页面视口坐标
 - 页面会为每个答案创建透明命中区；鼠标进入并短暂停留后，会以仿光标轻微位移提供触发反馈
+- 目标位于跨域 iframe 时，普通版会显示“授权 iframe 域名”窗口；授权后子 frame 会隐藏原生光标并把坐标传回顶层仿光标。刷新扩展后还需刷新网页，才能替换已注入的旧脚本
 - “显示静默框”只控制是否画出红色调试框；关闭后命中区和悬浮反馈仍然有效
 - 简答题、填空题、编程题等没有可悬浮选项时，AI 不应编造坐标，而应返回 `clipboardOnly: true`，扩展会把答案复制到剪切板
 
@@ -183,7 +186,7 @@ AI 配置通过面板右下角的 **⚙️ 设置** 按钮管理，支持添加�
 
 ### 🎛️ 界面透明度
 
-在 ⚙️ 设置页面的 **🎨 界面设置** 中可调节悬浮面板透明度、仿光标大小与样式、静默模式开关和静默调试框显示。仿光标提供黑色填充白边与 Windows 风格白色黑边两种样式，仅在静默模式下接管系统光标。界面偏好存储在 `chrome.storage.local`，仅影响本地显示与交互，不会发送给 AI API 或任何第三方服务。
+在 ⚙️ 设置页面的 **🎨 界面设置** 中可调节悬浮面板透明度、仿光标大小与样式、静默模式开关和静默调试框显示。仿光标提供 MacOS 黑色白边与 Windows 风格白色黑边两种样式，仅在静默模式下接管系统光标；Windows 样式会移除阴影以保持边缘清晰。界面偏好存储在 `chrome.storage.local`，仅影响本地显示与交互，不会发送给 AI API 或任何第三方服务。
 
 ### 💾 配置迁移
 

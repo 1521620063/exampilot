@@ -633,8 +633,8 @@
           <article class="card permission-card">
             <div class="shield">◆</div>
             <h3>首次访问需要授权</h3>
-            <p>保存配置或开始识别时，ExamPilot 会检查 API 域名权限。如果尚未授权，当前页面会显示授权弹层。</p>
-            <div class="permission-button">授权访问该 API 域名</div>
+            <p>保存配置或开始识别时，ExamPilot 会检查 API 域名权限。静默模式遇到跨域 iframe 时，也会检查该 iframe 域名；未授权时，当前页面会显示授权弹层。</p>
+            <div class="permission-button">授权访问该域名</div>
           </article>
         </div>
         <div class="callout">
@@ -751,6 +751,10 @@
           <span aria-hidden="true">⚙️</span>
           <div><strong>可配置项</strong>在设置里可以开启静默模式、开关红色调试框、调整仿光标大小与两种样式，并单独编辑静默提示词。鼠标悬停命中区后会以仿光标轻微位移提供触发反馈。</div>
         </div>
+        <div class="callout">
+          <span aria-hidden="true">🔐</span>
+          <div><strong>跨域 iframe</strong>普通版检测到跨域 iframe 时会请求该 iframe 域名授权，开启静默模式后动态加载或换址的 iframe 也会重新检查。授权后，子页面会隐藏原生光标并把坐标传给页面上的仿光标；刷新扩展后请同时刷新网页。Full Access 版已包含所有网站访问权限，无需逐个授权。</div>
+        </div>
         <div class="callout warning">
           <span aria-hidden="true">🧪</span>
           <div><strong>自定义模板注意</strong>自定义模板也能配合静默模式，但响应模板最终提取出的文本必须是约定 JSON；解析失败、缺坐标或坐标越界都会显示错误。</div>
@@ -849,6 +853,10 @@
           <details>
             <summary>静默模式里的红框是什么？</summary>
             <p>红框是“显示静默框”开启后的调试视图，用来查看 AI 返回的百分比坐标是否对齐正确选项。关闭后红框不显示，但透明命中区和仿光标悬浮反馈仍会工作。</p>
+          </details>
+          <details>
+            <summary>仿光标进入 iframe 后停住或又显示原生光标</summary>
+            <p>这是跨域 iframe 的浏览器权限限制。普通版会显示“授权 iframe 域名”窗口，请授权对应 HTTPS 域名后刷新网页；扩展更新后仅刷新扩展还不够，已注入页面的脚本也需要通过刷新网页更新。Full Access 版可直接覆盖所有可访问的 iframe。</p>
           </details>
           <details>
             <summary>静默模式提示坐标越界或 JSON 错误</summary>

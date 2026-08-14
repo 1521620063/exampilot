@@ -52,19 +52,21 @@ if (!window.__exampilotFrameCursorBridgeAttached) {
     var rect = frame.getBoundingClientRect();
     var viewportWidth = Number(data.viewportWidth) || frame.clientWidth || rect.width;
     var viewportHeight = Number(data.viewportHeight) || frame.clientHeight || rect.height;
-    var contentWidth = frame.clientWidth || rect.width;
-    var contentHeight = frame.clientHeight || rect.height;
+    var renderedScaleX = frame.offsetWidth > 0 ? rect.width / frame.offsetWidth : 1;
+    var renderedScaleY = frame.offsetHeight > 0 ? rect.height / frame.offsetHeight : 1;
+    var contentWidth = (frame.clientWidth || rect.width) * renderedScaleX;
+    var contentHeight = (frame.clientHeight || rect.height) * renderedScaleY;
     var scaleX = viewportWidth > 0 ? contentWidth / viewportWidth : 1;
     var scaleY = viewportHeight > 0 ? contentHeight / viewportHeight : 1;
     return {
-      clientX: rect.left + frame.clientLeft + Number(data.clientX) * scaleX,
-      clientY: rect.top + frame.clientTop + Number(data.clientY) * scaleY
+      clientX: rect.left + frame.clientLeft * renderedScaleX + Number(data.clientX) * scaleX,
+      clientY: rect.top + frame.clientTop * renderedScaleY + Number(data.clientY) * scaleY
     };
   }
 
   function handleChildFrameMessage(event) {
     var data = event.data;
-    if (!data || data.source !== FRAME_CURSOR_MESSAGE || data.type !== 'move') return;
+    if (!frameCursorEnabled || !data || data.source !== FRAME_CURSOR_MESSAGE || data.type !== 'move') return;
     var frame = findSourceFrame(event.source);
     if (!frame) return;
     var point = translateFramePoint(frame, data);
