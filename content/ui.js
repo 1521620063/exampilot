@@ -1478,13 +1478,18 @@ export function mountPanel(host) {
       var style = normalizeFakeCursorStyle(value);
       var fill = style === 'light-outline' ? '#fff' : '#000';
       var stroke = style === 'light-outline' ? '#000' : '#fff';
-      var strokeWidth = style === 'light-outline' ? '1.1' : '1.5';
+      var strokeWidth = style === 'light-outline' ? '0.65' : '1.5';
       var state = fakeCursorRef.current;
       var path = state && state.cursor === cursor ? state.path : cursor.querySelector('path');
       if (!path) return;
       path.setAttribute('fill', fill);
       path.setAttribute('stroke', stroke);
       path.setAttribute('stroke-width', strokeWidth);
+      cursor.style.setProperty(
+        'filter',
+        style === 'light-outline' ? 'none' : 'drop-shadow(0 1px 1px rgba(0,0,0,0.45))',
+        'important'
+      );
     }
 
     function updateFakeCursorPosition() {
@@ -2566,7 +2571,7 @@ ${function () {
                       value=${fakeCursorStyle}
                       onChange=${function (e) { saveFakeCursorStyle(e.target.value); }}
                     >
-                      <option value="dark-outline">黑色填充 · 白边</option>
+                      <option value="dark-outline">MacOS 黑色白边</option>
                       <option value="light-outline">Windows · 白色黑边</option>
                     </select>
                   </label>
