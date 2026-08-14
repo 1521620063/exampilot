@@ -2,12 +2,20 @@
   var params = new URLSearchParams(window.location.search);
   var origin = params.get('origin') || '';
   var embedded = params.get('embed') === '1';
+  var purpose = params.get('purpose') || 'api';
   var originEl = document.getElementById('origin');
   var statusEl = document.getElementById('status');
   var authorizeBtn = document.getElementById('authorize');
+  var titleEl = document.getElementById('permission-title');
+  var descriptionEl = document.getElementById('permission-description');
 
   if (embedded) {
     document.body.className = 'embedded';
+  }
+
+  if (purpose === 'frame') {
+    titleEl.textContent = '授权 iframe 域名';
+    descriptionEl.textContent = 'ExamPilot 需要访问下面这个 iframe 域名，才能在静默模式下隐藏原生光标并持续跟踪仿光标。';
   }
 
   function setStatus(message, type) {
@@ -49,7 +57,7 @@
 
       if (!granted) {
         authorizeBtn.disabled = false;
-        setStatus('你取消了授权。需要授权后才能调用该接口。', 'error');
+        setStatus(purpose === 'frame' ? '你取消了授权，仿光标无法进入该 iframe。' : '你取消了授权。需要授权后才能调用该接口。', 'error');
         notifyParent(false);
         return;
       }

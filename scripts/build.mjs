@@ -20,6 +20,10 @@ execSync(
   `npx esbuild content/index.js --bundle ${minifyCli} ${fullAccessDefine} --outfile=dist/${distDirName}/content/bundle/content-bundle.js`,
   { cwd: root, stdio: 'inherit' }
 );
+execSync(
+  `npx esbuild content/frame-cursor.js --bundle ${minifyCli} --outfile=dist/${distDirName}/content/bundle/frame-cursor-bundle.js`,
+  { cwd: root, stdio: 'inherit' }
+);
 
 // 3. Build background files
 execSync(
@@ -55,6 +59,12 @@ if (fullAccess) {
   delete manifest.optional_host_permissions;
   delete manifest.web_accessible_resources;
   manifest.content_scripts = [{
+    matches: ['<all_urls>'],
+    js: ['content/bundle/frame-cursor-bundle.js'],
+    run_at: 'document_start',
+    all_frames: true,
+    match_about_blank: true
+  }, {
     matches: ['<all_urls>'],
     js: ['content/bundle/content-bundle.js'],
     run_at: 'document_idle'

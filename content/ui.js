@@ -563,6 +563,23 @@ export function mountPanel(host) {
         }
       }
 
+      function handleFramePointerMove(event) {
+        var data = event.data;
+        if (!data || data.source !== '__exampilotFrameCursor' || data.type !== 'top-move') return;
+        var state = fakeCursorRef.current;
+        if (!state) return;
+        state.clientX = Number(data.clientX);
+        state.clientY = Number(data.clientY);
+        if (!Number.isFinite(state.clientX) || !Number.isFinite(state.clientY)) return;
+        state.hasPointer = true;
+        handleSilentTargetsMouseMove({ clientX: state.clientX, clientY: state.clientY });
+        if (state.enabled && !state.suspended) {
+          state.visible = true;
+          state.cursor.style.setProperty('display', 'block', 'important');
+          updateFakeCursorPosition();
+        }
+      }
+
       function hideFakeCursor() {
         var state = fakeCursorRef.current;
         if (!state || !state.cursor) return;
@@ -574,9 +591,7 @@ export function mountPanel(host) {
 
       function handleMouseOut(event) {
         var relatedTarget = event.relatedTarget;
-        var enteredIframe = relatedTarget && relatedTarget.nodeType === Node.ELEMENT_NODE &&
-          (relatedTarget.tagName === 'IFRAME' || (relatedTarget.closest && relatedTarget.closest('iframe')));
-        if (!relatedTarget || enteredIframe) hideFakeCursor();
+        if (!relatedTarget) hideFakeCursor();
       }
 
       function handleVisibilityChange() {
@@ -589,6 +604,11 @@ export function mountPanel(host) {
         updateStyle(data.fakeCursorStyle);
         silentModeEnabledRef.current = data.silentModeEnabled === true;
         setSilentModeEnabled(silentModeEnabledRef.current);
+        if (silentModeEnabledRef.current && !IS_FULL_ACCESS) {
+          window.setTimeout(function () {
+            ensureSilentFramePermissions().catch(function () {});
+          }, 0);
+        }
       }).catch(function () {
         updateSize(DEFAULT_FAKE_CURSOR_SIZE);
         updateStyle(DEFAULT_FAKE_CURSOR_STYLE);
@@ -607,6 +627,7 @@ export function mountPanel(host) {
 
       document.addEventListener('mousemove', handlePointerMove, true);
       document.addEventListener('mouseout', handleMouseOut, true);
+      window.addEventListener('message', handleFramePointerMove, true);
       window.addEventListener('blur', hideFakeCursor, true);
       document.addEventListener('visibilitychange', handleVisibilityChange, true);
       chrome.storage.onChanged.addListener(storageHandler);
@@ -615,6 +636,7 @@ export function mountPanel(host) {
         active = false;
         document.removeEventListener('mousemove', handlePointerMove, true);
         document.removeEventListener('mouseout', handleMouseOut, true);
+        window.removeEventListener('message', handleFramePointerMove, true);
         window.removeEventListener('blur', hideFakeCursor, true);
         document.removeEventListener('visibilitychange', handleVisibilityChange, true);
         chrome.storage.onChanged.removeListener(storageHandler);
@@ -832,8 +854,41 @@ export function mountPanel(host) {
       }).catch(function () {});
     }
 
-    function saveSilentMode(value) {
-      var enabled = value === true;
+    function getCrossOriginIframeUrls() {
+      var seen = {};
+      return Array.prototype.map.call(document.querySelectorAll('iframe[src], frame[src]'), function (frame) {
+        try {
+          var url = new URL(frame.getAttribute('src'), document.baseURI);
+          if (url.protocol !== 'https:' || url.origin === window.location.origin || seen[url.origin]) return null;
+          seen[url.origin] = true;
+          return url.href;
+        } catch (error) {
+          return null;
+        }
+      }).filter(Boolean);
+    }
+
+    function ensureSilentFramePermissions() {
+      if (IS_FULL_ACCESS) return Promise.resolve(true);
+      var urls = getCrossOriginIframeUrls();
+      return urls.reduce(function (chain, url) {
+        return chain.then(function (grantedSoFar) {
+          if (!grantedSoFar) return false;
+          return checkApiHostPermission(url).then(function (permission) {
+            if (!permission || !permission.success) return false;
+            if (permission.granted) return true;
+            return showApiHostPermissionFrame(permission.origin, 'frame');
+          });
+        });
+      }, Promise.resolve(true)).then(function (granted) {
+        if (!granted) return false;
+        return chrome.runtime.sendMessage({ action: 'injectFrameCursorBridge' }).then(function (response) {
+          return !!(response && response.success);
+        });
+      });
+    }
+
+    function persistSilentMode(enabled) {
       silentModeEnabledRef.current = enabled;
       setSilentModeEnabled(enabled);
       if (!enabled) removeSilentTarget();
@@ -842,6 +897,19 @@ export function mountPanel(host) {
         silentModeEnabled: enabled
       }).then(function (res) {
         if (!res || !res.success) loadSilentMode();
+      }).catch(function () {
+        loadSilentMode();
+      });
+    }
+
+    function saveSilentMode(value) {
+      var enabled = value === true;
+      if (!enabled) {
+        persistSilentMode(false);
+        return;
+      }
+      ensureSilentFramePermissions().then(function (granted) {
+        if (granted) persistSilentMode(true);
       }).catch(function () {
         loadSilentMode();
       });
@@ -1035,7 +1103,7 @@ export function mountPanel(host) {
       return chrome.runtime.sendMessage({ action: 'checkApiHostPermission', url: url });
     }
 
-    function showApiHostPermissionFrame(origin) {
+    function showApiHostPermissionFrame(origin, purpose) {
       return new Promise(function (resolve) {
         if (__permissionHandler) {
           window.removeEventListener('message', __permissionHandler);
@@ -1090,7 +1158,10 @@ export function mountPanel(host) {
         ].join(';');
 
         var iframe = document.createElement('iframe');
-        iframe.src = chrome.runtime.getURL('permission/host-permission.html?embed=1&origin=' + encodeURIComponent(origin));
+        iframe.src = chrome.runtime.getURL(
+          'permission/host-permission.html?embed=1&origin=' + encodeURIComponent(origin) +
+          '&purpose=' + encodeURIComponent(purpose || 'api')
+        );
         iframe.style.cssText = 'width: 100%; height: 100%; border: 0; display: block;';
         iframe.setAttribute('title', 'ExamPilot API 域名授权');
 

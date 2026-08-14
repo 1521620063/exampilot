@@ -22,7 +22,20 @@ function normalizeFakeCursorStyle(value) {
   return value === 'light-outline' ? value : DEFAULT_FAKE_CURSOR_STYLE;
 }
 
+async function ensureFrameCursorBridge(tabId) {
+  if (IS_FULL_ACCESS) return;
+  await chrome.scripting.executeScript({
+    target: { tabId: tabId, allFrames: true },
+    files: ['content/bundle/frame-cursor-bundle.js']
+  });
+}
+
 async function ensureContentScript(tabId) {
+  if (!IS_FULL_ACCESS) {
+    ensureFrameCursorBridge(tabId).catch(function () {
+      // The panel still works when Chrome denies access to an unapproved frame.
+    });
+  }
   try {
     await chrome.tabs.sendMessage(tabId, { action: 'exampilotPing' });
   } catch (error) {
@@ -849,8 +862,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === 'setSilentMode') {
-    chrome.storage.local.set({ silentModeEnabled: request.silentModeEnabled === true }).then(function () {
+    var silentModeEnabled = request.silentModeEnabled === true;
+    chrome.storage.local.set({ silentModeEnabled: silentModeEnabled }).then(function () {
+      if (!silentModeEnabled || IS_FULL_ACCESS || !sender.tab || !sender.tab.id) return;
+      return ensureFrameCursorBridge(sender.tab.id);
+    }).then(function () {
       sendResponse({ success: true });
+    }).catch(function (error) {
+      sendResponse({ success: false, error: error.message || String(error) });
+    });
+    return true;
+  }
+
+  if (request.action === 'injectFrameCursorBridge') {
+    if (IS_FULL_ACCESS || !sender.tab || !sender.tab.id) {
+      sendResponse({ success: true });
+      return;
+    }
+    ensureFrameCursorBridge(sender.tab.id).then(function () {
+      sendResponse({ success: true });
+    }).catch(function (error) {
+      sendResponse({ success: false, error: error.message || String(error) });
     });
     return true;
   }
