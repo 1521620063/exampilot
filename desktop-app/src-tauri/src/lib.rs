@@ -17,10 +17,13 @@ use serde_json::Value;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::utils::config::Color;
+#[cfg(not(target_os = "macos"))]
+use tauri::PhysicalSize;
 use tauri::{
-    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewUrl,
-    WebviewWindowBuilder,
+    AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewUrl, WebviewWindowBuilder,
 };
+#[cfg(target_os = "macos")]
+use tauri::{LogicalPosition, LogicalSize};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, ShortcutState};
 use tokio_util::sync::CancellationToken;
 use xcap::Monitor;
@@ -189,10 +192,15 @@ fn current_monitor() -> Result<Monitor, String> {
     Monitor::from_point(x, y).map_err(error)
 }
 
-fn physical_crop_rect(rect: &Rect, monitor: &MonitorInfo) -> (u32, u32, u32, u32) {
+fn physical_crop_rect(
+    rect: &Rect,
+    monitor: &MonitorInfo,
+    image_width: u32,
+    image_height: u32,
+) -> (u32, u32, u32, u32) {
     let scale = f64::from(monitor.scale_factor.max(1.0));
-    let max_width = f64::from(monitor.width);
-    let max_height = f64::from(monitor.height);
+    let max_width = f64::from(image_width);
+    let max_height = f64::from(image_height);
     let x = (rect.x * scale).round().clamp(0.0, max_width - 1.0) as u32;
     let y = (rect.y * scale).round().clamp(0.0, max_height - 1.0) as u32;
     let width = (rect.width * scale)
@@ -202,6 +210,69 @@ fn physical_crop_rect(rect: &Rect, monitor: &MonitorInfo) -> (u32, u32, u32, u32
         .round()
         .clamp(1.0, max_height - f64::from(y)) as u32;
     (x, y, width, height)
+}
+
+#[cfg(target_os = "macos")]
+fn capture_rect_from_physical(
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+    monitor: &MonitorInfo,
+) -> Rect {
+    let scale = f64::from(monitor.scale_factor.max(1.0));
+    Rect {
+        x: f64::from(x) / scale,
+        y: f64::from(y) / scale,
+        width: f64::from(width) / scale,
+        height: f64::from(height) / scale,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn capture_rect_from_physical(
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+    _monitor: &MonitorInfo,
+) -> Rect {
+    Rect {
+        x: f64::from(x),
+        y: f64::from(y),
+        width: f64::from(width),
+        height: f64::from(height),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn window_logical_value(value: i32, _monitor: &MonitorInfo) -> f64 {
+    f64::from(value)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn window_logical_value(value: i32, monitor: &MonitorInfo) -> f64 {
+    f64::from(value) / f64::from(monitor.scale_factor.max(1.0))
+}
+
+#[cfg(target_os = "macos")]
+fn overlay_window_position(monitor: &MonitorInfo) -> LogicalPosition<i32> {
+    LogicalPosition::new(monitor.x, monitor.y)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn overlay_window_position(monitor: &MonitorInfo) -> PhysicalPosition<i32> {
+    PhysicalPosition::new(monitor.x, monitor.y)
+}
+
+#[cfg(target_os = "macos")]
+fn overlay_window_size(monitor: &MonitorInfo) -> LogicalSize<u32> {
+    LogicalSize::new(monitor.width, monitor.height)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn overlay_window_size(monitor: &MonitorInfo) -> PhysicalSize<u32> {
+    PhysicalSize::new(monitor.width, monitor.height)
 }
 
 #[tauri::command]
@@ -239,14 +310,14 @@ async fn capture_region(
         .ok_or("没有可用的区域截图")?;
     tauri::async_runtime::spawn_blocking(move || {
         let info = selection.monitor;
-        let (x, y, width, height) = physical_crop_rect(&rect, &info);
+        let (x, y, width, height) = physical_crop_rect(
+            &rect,
+            &info,
+            selection.image.width(),
+            selection.image.height(),
+        );
         let image = image::imageops::crop_imm(&selection.image, x, y, width, height).to_image();
-        let capture_rect = Rect {
-            x: f64::from(x),
-            y: f64::from(y),
-            width: f64::from(width),
-            height: f64::from(height),
-        };
+        let capture_rect = capture_rect_from_physical(x, y, width, height, &info);
         Ok(CaptureResult {
             data_url: image_data_url(image)?,
             monitor: info,
@@ -387,14 +458,13 @@ async fn jitter_mouse(point: MousePoint, offset: Option<i32>) -> Result<(), Stri
 fn create_overlay(app: &AppHandle, monitor: &MonitorInfo) -> Result<tauri::WebviewWindow, String> {
     if let Some(window) = app.get_webview_window("overlay") {
         window
-            .set_position(PhysicalPosition::new(monitor.x, monitor.y))
+            .set_position(overlay_window_position(monitor))
             .map_err(error)?;
         window
-            .set_size(PhysicalSize::new(monitor.width, monitor.height))
+            .set_size(overlay_window_size(monitor))
             .map_err(error)?;
         return Ok(window);
     }
-    let scale = f64::from(monitor.scale_factor.max(1.0));
     let window = WebviewWindowBuilder::new(
         app,
         "overlay",
@@ -409,10 +479,13 @@ fn create_overlay(app: &AppHandle, monitor: &MonitorInfo) -> Result<tauri::Webvi
     .focused(false)
     .visible_on_all_workspaces(true)
     .visible(false)
-    .position(f64::from(monitor.x) / scale, f64::from(monitor.y) / scale)
+    .position(
+        window_logical_value(monitor.x, monitor),
+        window_logical_value(monitor.y, monitor),
+    )
     .inner_size(
-        f64::from(monitor.width) / scale,
-        f64::from(monitor.height) / scale,
+        window_logical_value(monitor.width as i32, monitor),
+        window_logical_value(monitor.height as i32, monitor),
     )
     .build()
     .map_err(error)?;
@@ -599,7 +672,6 @@ fn show_debug_windows(
     for (index, target) in targets.iter().enumerate() {
         let rect = mouse_target(target, monitor);
         let label = format!("debug-target-{}", index);
-        let scale = f64::from(monitor.scale_factor.max(1.0));
         let window = WebviewWindowBuilder::new(
             app,
             &label,
@@ -616,10 +688,13 @@ fn show_debug_windows(
         .shadow(false)
         .visible_on_all_workspaces(true)
         .visible(true)
-        .position(f64::from(rect.x) / scale, f64::from(rect.y) / scale)
+        .position(
+            window_logical_value(rect.x, monitor),
+            window_logical_value(rect.y, monitor),
+        )
         .inner_size(
-            f64::from(rect.width.max(8)) / scale,
-            f64::from(rect.height.max(8)) / scale,
+            window_logical_value(rect.width.max(8), monitor),
+            window_logical_value(rect.height.max(8), monitor),
         )
         .build()
         .map_err(error)?;
@@ -957,7 +1032,8 @@ fn start_hover_monitor(app: AppHandle) {
                         .map(|value| *value)
                         .unwrap_or(DEFAULT_SILENT_CURSOR_OFFSET);
                     let _ =
-                        tauri::async_runtime::spawn_blocking(move || perform_jitter(point, offset)).await;
+                        tauri::async_runtime::spawn_blocking(move || perform_jitter(point, offset))
+                            .await;
                     let _ = app.emit("silent-triggered", ());
                 }
             }
@@ -1150,7 +1226,9 @@ mod tests {
                     width: 400.0,
                     height: 300.0
                 },
-                &monitor
+                &monitor,
+                3840,
+                2160
             ),
             (200, 100, 800, 600)
         );
@@ -1162,10 +1240,47 @@ mod tests {
                     width: 400.0,
                     height: 300.0
                 },
-                &monitor
+                &monitor,
+                3840,
+                2160
             ),
             (3800, 2000, 40, 160)
         );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_uses_logical_screen_coordinates_for_overlays() {
+        let monitor = MonitorInfo {
+            id: 1,
+            x: -1512,
+            y: 0,
+            width: 1512,
+            height: 982,
+            scale_factor: 2.0,
+        };
+        assert_eq!(window_logical_value(756, &monitor), 756.0);
+        assert_eq!(overlay_window_position(&monitor).x, -1512);
+        assert_eq!(overlay_window_size(&monitor).width, 1512);
+        assert_eq!(
+            physical_crop_rect(
+                &Rect {
+                    x: 756.0,
+                    y: 491.0,
+                    width: 100.0,
+                    height: 50.0,
+                },
+                &monitor,
+                3024,
+                1964,
+            ),
+            (1512, 982, 200, 100)
+        );
+        let rect = capture_rect_from_physical(1512, 982, 200, 100, &monitor);
+        assert_eq!(rect.x, 756.0);
+        assert_eq!(rect.y, 491.0);
+        assert_eq!(rect.width, 100.0);
+        assert_eq!(rect.height, 50.0);
     }
 
     #[test]
