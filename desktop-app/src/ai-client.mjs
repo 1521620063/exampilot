@@ -1,5 +1,5 @@
-import * as templateEngine from './shared/template-engine.js';
-import * as requestOverrides from './shared/request-overrides.js';
+import * as templateEngine from './shared/template-engine.mjs';
+import * as requestOverrides from './shared/request-overrides.mjs';
 
 Object.assign(globalThis, templateEngine, requestOverrides);
 

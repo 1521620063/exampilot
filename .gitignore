@@ -1,26 +1,28 @@
 # Dependencies
 node_modules/
-desktop/node_modules/
 
 # Frontend build output and tool caches
-dist/
-desktop/dist/
+chrome-extension/dist/
+desktop-app/dist/
 .vite/
-desktop/.vite/
+desktop-app/.vite/
 *.tsbuildinfo
 
 # Rust and Tauri build output
-desktop/src-tauri/target/
-desktop/src-tauri/target-*/
-desktop/src-tauri/gen/
+desktop-app/src-tauri/target/
+desktop-app/src-tauri/target-*/
+desktop-app/src-tauri/gen/
 
 # Local configuration and secrets
 .env
 .env.*
 !.env.example
-desktop/.env
-desktop/.env.*
-!desktop/.env.example
+chrome-extension/.env
+chrome-extension/.env.*
+!chrome-extension/.env.example
+desktop-app/.env
+desktop-app/.env.*
+!desktop-app/.env.example
 
 # Logs and local diagnostics
 *.log

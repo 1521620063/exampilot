@@ -1,4 +1,4 @@
-import { DEFAULT_SILENT_PROMPT } from '../defaults.js';
+import { DEFAULT_SILENT_PROMPT } from '../defaults.mjs';
 
 var VALID_API_MODES = { 'chat-completions': true, 'responses-api': true, anthropic: true, 'custom-template': true };
 var CONFIG_STRING_FIELDS = ['model', 'apiKey', 'customHeadersJson', 'customBodyJson', 'templateHeadersJson', 'templateBodyJson', 'templateResponseText'];

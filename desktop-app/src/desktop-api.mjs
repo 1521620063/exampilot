@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { load } from '@tauri-apps/plugin-store';
 import { open, save } from '@tauri-apps/plugin-dialog';
-import { createDefaultSettings } from './defaults.js';
+import { createDefaultSettings } from './defaults.mjs';
 
 var storePromise = null;
 var pendingSettings = null;

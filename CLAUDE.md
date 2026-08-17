@@ -1,3 +1,5 @@
-# ExamPilot Desktop
+# ExamPilot
 
-See `AGENTS.md` for repository conventions and commands. This is a Tauri 2 desktop-only repository; browser extension code is intentionally not included.
+Follow the repository instructions in `AGENTS.md`.
+
+The Chrome extension is in `chrome-extension/`, the Tauri desktop application is in `desktop-app/`, and all Node.js dependencies and npm scripts are managed by the root `package.json`.

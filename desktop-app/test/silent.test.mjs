@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mapTargetsToMonitor, normalizeSilentResult } from '../src/silent.js';
+import { mapTargetsToMonitor, normalizeSilentResult } from '../src/silent.mjs';
 
 test('normalizes percent targets and clipboard-only answers', function () {
   var result = normalizeSilentResult(JSON.stringify({

@@ -7,12 +7,12 @@ import {
   applySilentSettings, beginRegionSelection, cancelRequest, captureCurrentMonitor, captureRegion, clearOverlayTargets,
   copyText, exportSettings, finishRegionSelection, getOverlayState, getShortcutErrors, hideAnswerWindow, hideCaptureUi, importSettings, loadSettings, overlayReady,
   loadLastModelResponse, postJson, saveLastModelResponse, saveSettings, setAnswerOpacity, setOverlayTargets, showAnswerWindow
-} from './desktop-api.js';
-import { buildRequest, extractAnswer } from './ai-client.js';
-import { createDefaultSettings, DEFAULT_PROMPT, DEFAULT_SILENT_PROMPT } from './defaults.js';
-import { buildSilentPrompt, mapTargetsToMonitor, normalizeSilentResult } from './silent.js';
-import { getDefaultTemplateBodyJson, getDefaultTemplateHeadersJson, getDefaultTemplateResponseText } from './shared/template-engine.js';
-import * as settingsTransfer from './shared/settings-transfer.js';
+} from './desktop-api.mjs';
+import { buildRequest, extractAnswer } from './ai-client.mjs';
+import { createDefaultSettings, DEFAULT_PROMPT, DEFAULT_SILENT_PROMPT } from './defaults.mjs';
+import { buildSilentPrompt, mapTargetsToMonitor, normalizeSilentResult } from './silent.mjs';
+import { getDefaultTemplateBodyJson, getDefaultTemplateHeadersJson, getDefaultTemplateResponseText } from './shared/template-engine.mjs';
+import * as settingsTransfer from './shared/settings-transfer.mjs';
 import './styles.css';
 
 var html = htm.bind(h);

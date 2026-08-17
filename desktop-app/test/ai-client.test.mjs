@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildRequest, extractAnswer } from '../src/ai-client.js';
+import { buildRequest, extractAnswer } from '../src/ai-client.mjs';
 
 var base = { url: 'https://api.example.com/v1/chat/completions', model: 'vision', apiKey: 'key', apiMode: 'chat-completions', customHeadersJson: '', customBodyJson: '' };
 

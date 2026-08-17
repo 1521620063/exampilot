@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeSettingsBackup } from '../src/shared/settings-transfer.js';
+import { normalizeSettingsBackup } from '../src/shared/settings-transfer.mjs';
 
 function backup(overrides) {
   return { format: 'exampilot-settings-backup', version: 1, settings: Object.assign({ configList: [], customPrompt: '', silentPrompt: '', uiOpacity: 0.95, silentModeEnabled: true, silentDebugFrameEnabled: false }, overrides || {}) };

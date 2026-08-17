@@ -1,4 +1,4 @@
-import { cloneJson, isPlainObject } from './template-engine.js';
+import { cloneJson, isPlainObject } from './template-engine.mjs';
 
 export function validateHttpsUrl(rawUrl) {
   var url;

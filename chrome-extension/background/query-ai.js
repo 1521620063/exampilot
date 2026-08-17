@@ -1,0 +1,282 @@
+/**
+ * 调用视觉大模型识别图片中的题目并求解
+ *
+ * 支持多种 API 模式（通过 config.apiMode 切换）：
+ *   - chat-completions: OpenAI 兼容的 /v1/chat/completions 接口
+ *   - responses-api: OpenAI Responses API (/v1/responses)
+ *   - anthropic: Anthropic Messages API (/v1/messages)
+ *   - custom-template: 用户自定义 Headers/Body/响应模板
+ *
+ * @param {string} imageUrl - 图片 URL（HTTP 地址或 data:image/... base64 均可）
+ * @param {string} prompt - 系统提示词（来自用户配置）
+ * @returns {Promise<string>} 模型返回的格式化解题内容（含 HTML 标记）
+ */
+async function queryAI(imageUrl, prompt, signal) {
+  const config = await getActiveConfig();
+  await assertApiHostPermission(config.url);
+  const mode = config.apiMode || 'chat-completions';
+
+  if (mode === 'responses-api') {
+    return callResponsesAPI(config, imageUrl, prompt, signal);
+  }
+  if (mode === 'anthropic') {
+    return callAnthropicAPI(config, imageUrl, prompt, signal);
+  }
+  if (mode === 'custom-template') {
+    return callCustomTemplateAPI(config, imageUrl, prompt, signal);
+  }
+  return callChatCompletions(config, imageUrl, prompt, signal);
+}
+
+/**
+ * 包装 fetch 调用，捕获网络/跨域错误并输出更清晰的提示
+ */
+async function apiFetch(url, options) {
+  try {
+    return await fetch(validateHttpsUrl(url).toString(), options);
+  } catch (err) {
+    if (err.name === 'TypeError') {
+      throw new Error('网络请求失败，请检查接口地址是否正确以及是否存在跨域限制 (CORS)。详情: ' + (err.message || err));
+    }
+    throw err;
+  }
+}
+
+/**
+ * 从 API 错误响应体中提取详细错误信息
+ * 支持 OpenAI、Anthropic 等多种格式
+ */
+async function buildApiError(resp, prefix) {
+  var detail = '';
+  try {
+    var errBody = await resp.clone().json();
+    // OpenAI 兼容格式: { error: { message: '...' } }
+    if (errBody.error) {
+      if (typeof errBody.error === 'string') {
+        detail = errBody.error;
+      } else {
+        detail = errBody.error.message || errBody.error.code || JSON.stringify(errBody.error);
+      }
+    } else if (errBody.message) {
+      // Anthropic / 通用格式: { message: '...', type: '...' }
+      detail = errBody.message;
+    } else {
+      detail = JSON.stringify(errBody).slice(0, 300);
+    }
+  } catch (_) {
+    try {
+      detail = (await resp.clone().text()).slice(0, 200);
+    } catch (_) {}
+  }
+  if (detail && detail.length > 0) {
+    return new Error(prefix + ' (' + resp.status + '): ' + detail);
+  }
+  return new Error(prefix + ' (' + resp.status + ')');
+}
+
+function parseImageDataUrl(imageUrl) {
+  var match = String(imageUrl || '').match(/^data:([^;]+);base64,([\s\S]*)$/);
+  return {
+    imageUrl: imageUrl,
+    imageBase64: match ? match[2] : imageUrl,
+    imageMimeType: match ? match[1] : 'image/jpeg'
+  };
+}
+
+function buildCustomTemplateContext(config, imageUrl, prompt) {
+  var image = parseImageDataUrl(imageUrl);
+  return {
+    model: config.model || '',
+    apiKey: config.apiKey || '',
+    apiKeyBearer: config.apiKey ? 'Bearer ' + config.apiKey : '',
+    prompt: prompt || '',
+    imageUrl: image.imageUrl,
+    imageBase64: image.imageBase64,
+    base64Image: image.imageBase64,
+    imageMimeType: image.imageMimeType,
+    mimeType: image.imageMimeType
+  };
+}
+
+function normalizeTemplateHeaders(headers) {
+  var normalized = {};
+  Object.keys(headers || {}).forEach(function (key) {
+    var value = headers[key];
+    if (value === null || value === undefined) return;
+    normalized[key] = String(value);
+  });
+  return normalized;
+}
+
+/**
+ * 自定义模板调用
+ * Headers/Body 使用 JSON 模板，响应使用 {{path.to.value[0]}} 模板提取。
+ */
+async function callCustomTemplateAPI(config, imageUrl, prompt, signal) {
+  var context = buildCustomTemplateContext(config, imageUrl, prompt);
+  var headers = normalizeTemplateHeaders(renderJsonObjectTemplate(
+    config.templateHeadersJson || getDefaultTemplateHeadersJson(),
+    context,
+    'Headers 模板'
+  ));
+  var body = renderJsonTemplate(
+    config.templateBodyJson || getDefaultTemplateBodyJson(),
+    context,
+    'Body 模板'
+  );
+
+  const resp = await apiFetch(config.url, {
+    method: 'POST',
+    headers: headers,
+    body: JSON.stringify(body),
+    signal: signal
+  });
+
+  if (!resp.ok) {
+    throw await buildApiError(resp, 'API调用失败');
+  }
+
+  var data;
+  try {
+    data = await resp.json();
+  } catch (err) {
+    throw new Error('自定义模板响应不是有效的 JSON: ' + (err.message || String(err)));
+  }
+
+  var content = renderResponseTemplate(
+    config.templateResponseText || getDefaultTemplateResponseText(),
+    data,
+    '响应模板'
+  );
+  if (!content || !String(content).trim()) {
+    throw new Error('AI返回内容为空');
+  }
+  return content;
+}
+
+/**
+ * OpenAI 兼容的 Chat Completions 调用
+ * POST /v1/chat/completions
+ */
+async function callChatCompletions(config, imageUrl, prompt, signal) {
+  var headers = {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + config.apiKey
+  };
+
+  var body = {
+    model: config.model,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image_url', image_url: { url: imageUrl } },
+        { type: 'text', text: prompt }
+      ]
+    }]
+  };
+  var requestOverrides = applyRequestOverrides(headers, body, config);
+
+  const resp = await apiFetch(config.url, {
+    method: 'POST',
+    headers: requestOverrides.headers,
+    body: JSON.stringify(requestOverrides.body),
+    signal: signal
+  });
+
+  if (!resp.ok) {
+    throw await buildApiError(resp, 'API调用失败');
+  }
+
+  const data = await resp.json();
+  const content = data?.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error('AI返回内容为空');
+  }
+  return content;
+}
+
+/**
+ * OpenAI Responses API 调用
+ * POST /v1/responses
+ */
+async function callResponsesAPI(config, imageUrl, prompt, signal) {
+  var headers = {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + config.apiKey
+  };
+
+  var body = {
+    model: config.model,
+    input: [{
+      role: 'user',
+      content: [
+        { type: 'input_image', image_url: imageUrl },
+        { type: 'input_text', text: prompt }
+      ]
+    }]
+  };
+  var requestOverrides = applyRequestOverrides(headers, body, config);
+
+  const resp = await apiFetch(config.url, {
+    method: 'POST',
+    headers: requestOverrides.headers,
+    body: JSON.stringify(requestOverrides.body),
+    signal: signal
+  });
+
+  if (!resp.ok) {
+    throw await buildApiError(resp, 'API调用失败');
+  }
+
+  const data = await resp.json();
+  const messageOutput = data?.output?.find(function (item) { return item.type === 'message'; });
+  const content = messageOutput?.content?.[0]?.text;
+  if (!content) {
+    throw new Error('AI返回内容为空');
+  }
+  return content;
+}
+
+/**
+ * Anthropic Messages API 调用
+ * POST /v1/messages
+ */
+async function callAnthropicAPI(config, imageUrl, prompt, signal) {
+  const base64Data = imageUrl.replace(/^data:image\/jpeg;base64,/, '');
+
+  var headers = {
+    'Content-Type': 'application/json',
+    'x-api-key': config.apiKey
+  };
+
+  var body = {
+    model: config.model,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64Data } },
+        { type: 'text', text: prompt }
+      ]
+    }]
+  };
+  var requestOverrides = applyRequestOverrides(headers, body, config);
+
+  const resp = await apiFetch(config.url, {
+    method: 'POST',
+    headers: requestOverrides.headers,
+    body: JSON.stringify(requestOverrides.body),
+    signal: signal
+  });
+
+  if (!resp.ok) {
+    throw await buildApiError(resp, 'API调用失败');
+  }
+
+  const data = await resp.json();
+  const textBlock = data?.content?.find(function (item) { return item.type === 'text'; });
+  const content = textBlock?.text;
+  if (!content) {
+    throw new Error('AI返回内容为空');
+  }
+  return content;
+}
