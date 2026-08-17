@@ -108,6 +108,7 @@ struct OverlayStateData {
 
 struct OverlayState(Mutex<OverlayStateData>);
 struct ShortcutErrors(Mutex<Vec<String>>);
+#[cfg(windows)]
 struct NativeDebugWindows(Mutex<Vec<isize>>);
 
 const DEFAULT_SILENT_CURSOR_OFFSET: i32 = 5;
@@ -965,7 +966,7 @@ fn start_hover_monitor(app: AppHandle) {
 }
 
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .manage(RequestState {
             next_id: AtomicU64::new(1),
             active: Mutex::new(None),
@@ -974,8 +975,10 @@ pub fn run() {
         .manage(SilentCursorOffset(Mutex::new(DEFAULT_SILENT_CURSOR_OFFSET)))
         .manage(SelectionState(Mutex::new(None)))
         .manage(OverlayState(Mutex::new(OverlayStateData::default())))
-        .manage(ShortcutErrors(Mutex::new(Vec::new())))
-        .manage(NativeDebugWindows(Mutex::new(Vec::new())))
+        .manage(ShortcutErrors(Mutex::new(Vec::new())));
+    #[cfg(windows)]
+    let builder = builder.manage(NativeDebugWindows(Mutex::new(Vec::new())));
+    builder
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(
