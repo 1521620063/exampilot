@@ -38,16 +38,10 @@ npm install
 
 插件支持全屏截图、区域截图、普通模式、静默模式、多 AI 配置、自定义提示词、自定义请求模板以及设置导入导出。
 
-构建默认的按需授权版本：
+同时构建默认的按需授权版本和 Full Access 版本：
 
 ```powershell
 npm run chrome:build
-```
-
-构建预先拥有全部网页访问权限的 Full Access 版本：
-
-```powershell
-npm run chrome:build:full
 ```
 
 构建产物：
@@ -61,7 +55,6 @@ npm run chrome:build:full
 
 ```powershell
 npm run chrome:build:package
-npm run chrome:build:full:package
 ```
 
 ## 桌面应用
@@ -134,10 +127,9 @@ cargo clippy --manifest-path desktop-app/src-tauri/Cargo.toml --all-targets -- -
 
 | 命令 | 说明 |
 | --- | --- |
-| `npm run build` | 构建 Chrome 默认版和桌面前端 |
+| `npm run build` | 构建两个 Chrome 版本和桌面前端 |
 | `npm test` | 运行两端 Node.js 测试 |
-| `npm run chrome:build` | 构建 Chrome 默认版 |
-| `npm run chrome:build:full` | 构建 Chrome Full Access 版 |
+| `npm run chrome:build` | 构建 Chrome 默认版和 Full Access 版 |
 | `npm run desktop:build` | 构建桌面前端 |
 | `npm run tauri:dev` | 启动 Tauri 开发模式 |
 | `npm run tauri:build` | 构建桌面安装包 |

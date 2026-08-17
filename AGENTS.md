@@ -20,10 +20,9 @@ ExamPilot contains two independent applications that share Node.js dependencies 
 | Task | Command |
 | --- | --- |
 | Install dependencies | `npm install` |
-| Build the extension and desktop frontend | `npm run build` |
+| Build both Chrome extension variants and the desktop frontend | `npm run build` |
 | Run all Node.js tests | `npm test` |
-| Build the Chrome extension | `npm run chrome:build` |
-| Build the Chrome Full Access variant | `npm run chrome:build:full` |
+| Build both Chrome extension variants | `npm run chrome:build` |
 | Run extension tests | `npm run chrome:test` |
 | Build desktop frontend | `npm run desktop:build` |
 | Run desktop frontend tests | `npm run desktop:test` |
@@ -31,7 +30,7 @@ ExamPilot contains two independent applications that share Node.js dependencies 
 | Build a desktop installer | `npm run tauri:build` |
 | Run Rust tests | `cargo test --manifest-path desktop-app/src-tauri/Cargo.toml` |
 
-Load `chrome-extension/dist/chrome/` or `chrome-extension/dist/chrome-full/` as an unpacked extension. Never load `chrome-extension/` source directly.
+Both Chrome build commands generate the optional-permission variant in `chrome-extension/dist/chrome/` and the Full Access variant in `chrome-extension/dist/chrome-full/`. Load one of those directories as an unpacked extension, never `chrome-extension/` source directly.
 
 The desktop frontend is built to `desktop-app/dist/`. Tauri configuration and Rust sources are under `desktop-app/src-tauri/`.
 

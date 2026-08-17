@@ -5,10 +5,8 @@
   "scripts": {
     "build": "npm run chrome:build && npm run desktop:build",
     "test": "npm run chrome:test && npm run desktop:test",
-    "chrome:build": "node chrome-extension/scripts/build.mjs",
-    "chrome:build:package": "cross-env NO_MINIFY=true node chrome-extension/scripts/build.mjs",
-    "chrome:build:full": "cross-env BUILD_MODE=full node chrome-extension/scripts/build.mjs",
-    "chrome:build:full:package": "cross-env BUILD_MODE=full NO_MINIFY=true node chrome-extension/scripts/build.mjs",
+    "chrome:build": "node chrome-extension/scripts/build.mjs && cross-env BUILD_MODE=full node chrome-extension/scripts/build.mjs",
+    "chrome:build:package": "cross-env NO_MINIFY=true node chrome-extension/scripts/build.mjs && cross-env BUILD_MODE=full NO_MINIFY=true node chrome-extension/scripts/build.mjs",
     "chrome:test": "node --test chrome-extension/background/*.test.js",
     "desktop:dev": "vite --config desktop-app/vite.config.mjs",
     "desktop:build": "vite build --config desktop-app/vite.config.mjs",
