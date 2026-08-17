@@ -1,0 +1,32 @@
+[package]
+name = "exampilot-desktop"
+version = "0.1.0"
+description = "ExamPilot desktop client"
+authors = ["ExamPilot"]
+edition = "2021"
+
+[lib]
+name = "exampilot_desktop_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5.2", features = [] }
+
+[dependencies]
+base64 = "0.22.1"
+arboard = "3.6.1"
+enigo = "0.6.1"
+image = { version = "0.25.9", default-features = false, features = ["jpeg"] }
+reqwest = { version = "0.12.28", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tauri = { version = "2.11.5", features = ["tray-icon"] }
+tauri-plugin-dialog = "2.4.0"
+tauri-plugin-global-shortcut = "2.3.2"
+tauri-plugin-store = "2.4.4"
+tokio = { version = "1", features = ["time"] }
+tokio-util = "0.7.19"
+xcap = "0.9.8"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_UI_WindowsAndMessaging"] }

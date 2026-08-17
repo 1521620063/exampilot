@@ -1,19 +1,11 @@
 {
-  "name": "exampilot-extension",
+  "name": "exampilot-desktop-workspace",
   "private": true,
   "scripts": {
-    "build": "node scripts/build.mjs",
-    "build:package": "cross-env NO_MINIFY=true node scripts/build.mjs",
-    "build:full": "cross-env BUILD_MODE=full node scripts/build.mjs",
-    "build:full:package": "cross-env BUILD_MODE=full NO_MINIFY=true node scripts/build.mjs",
-    "test": "node --test"
-  },
-  "dependencies": {
-    "preact": "^10.26.0",
-    "htm": "^3.1.1"
-  },
-  "devDependencies": {
-    "cross-env": "^7.0.3",
-    "esbuild": "^0.28.0"
+    "dev": "npm --prefix desktop run dev",
+    "build": "npm --prefix desktop run build",
+    "test": "npm --prefix desktop run test",
+    "tauri:dev": "npm --prefix desktop run tauri:dev",
+    "tauri:build": "npm --prefix desktop run tauri:build"
   }
 }
