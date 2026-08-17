@@ -12,6 +12,7 @@ desktop-app/.vite/
 desktop-app/src-tauri/target/
 desktop-app/src-tauri/target-*/
 desktop-app/src-tauri/gen/
+.cargo/
 
 # Local configuration and secrets
 .env

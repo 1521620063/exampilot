@@ -11,8 +11,8 @@
     "desktop:dev": "vite --config desktop-app/vite.config.mjs",
     "desktop:build": "vite build --config desktop-app/vite.config.mjs",
     "desktop:test": "node --test desktop-app/test/*.test.mjs",
-    "tauri:dev": "tauri dev --config desktop-app/src-tauri/tauri.conf.json",
-    "tauri:build": "tauri build --config desktop-app/src-tauri/tauri.conf.json"
+    "tauri:dev": "node scripts/tauri-with-local-cargo.mjs dev",
+    "tauri:build": "node scripts/tauri-with-local-cargo.mjs build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
