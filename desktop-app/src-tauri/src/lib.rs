@@ -419,10 +419,6 @@ fn perform_jitter(point: MousePoint, offset: i32) -> Result<(), String> {
             original_y.clamp(point.y, point.y + point.height - 1),
             Coordinate::Abs,
         )
-        .map_err(error)?;
-    std::thread::sleep(Duration::from_millis(120));
-    enigo
-        .move_mouse(original_x, original_y, Coordinate::Abs)
         .map_err(error)
 }
 
