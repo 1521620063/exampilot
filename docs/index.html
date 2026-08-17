@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="ExamPilot Chrome 扩展完整使用说明：安装、配置视觉 AI、普通识别、静默模式、快捷键、配置迁移、自定义请求和常见问题。">
+  <meta name="description" content="ExamPilot Chrome 插件与 Tauri 桌面应用使用说明：安装、配置视觉 AI、截图识别、静默模式、快捷键、配置迁移和常见问题。">
   <meta name="theme-color" content="#f8f6f2">
   <title>ExamPilot 使用说明</title>
   <style>
@@ -476,7 +476,7 @@
         <a href="#silent-mode">静默</a>
         <a href="#migration">迁移</a>
         <a href="#faq">常见问题</a>
-        <a class="nav-cta" href="https://chromewebstore.google.com/detail/exampilot-%E6%99%BA%E8%83%BD%E8%A7%A3%E9%A2%98%E5%BC%95%E6%93%8E/cekiablfmjeejkgfklapmifkcmeipnnf" target="_blank" rel="noopener noreferrer">安装扩展</a>
+        <a class="nav-cta" href="#install">获取应用</a>
       </div>
     </nav>
   </header>
@@ -485,9 +485,10 @@
   <section class="hero" aria-labelledby="hero-title">
     <div class="hero-copy">
       <h1 id="hero-title">看见题目，<span>马上分析</span></h1>
-      <p>ExamPilot 是一款浏览器视觉 AI 助手。截取当前页面或框选题目区域，即可把图片发送到你配置的视觉模型；普通模式在面板展示解析，静默模式可用悬浮命中区和剪切板反馈答案。</p>
+      <p>ExamPilot 同时提供 Chrome 插件与 Tauri 桌面应用。截取当前页面、显示器或框选题目区域，即可把图片发送到你配置的视觉模型；普通模式展示解析，静默模式通过悬浮命中区和剪切板反馈答案。</p>
       <div class="hero-actions">
         <a class="button button-primary" href="https://chromewebstore.google.com/detail/exampilot-%E6%99%BA%E8%83%BD%E8%A7%A3%E9%A2%98%E5%BC%95%E6%93%8E/cekiablfmjeejkgfklapmifkcmeipnnf" target="_blank" rel="noopener noreferrer">安装 Chrome 扩展 <span aria-hidden="true">→</span></a>
+        <a class="button button-secondary" href="#desktop">查看桌面应用</a>
         <a class="button button-secondary" href="#quick-start">查看快速上手</a>
       </div>
       <div class="hero-note"><strong>✓</strong> 1.7.5 同时提供 Chrome 插件与 Tauri 桌面应用，并保留静默模式、百分比坐标和剪切板答案能力</div>
@@ -514,6 +515,7 @@
       <strong>使用指南</strong>
       <a href="#quick-start">快速上手</a>
       <a href="#install">安装扩展</a>
+      <a href="#desktop">桌面应用</a>
       <a href="#configure">配置模型</a>
       <a href="#api-modes">接口模式</a>
       <a href="#capture">开始识别</a>
@@ -527,13 +529,13 @@
       <section class="section" id="quick-start">
         <div class="section-heading">
           <h2>三步开始使用</h2>
-          <p>首次使用只需安装扩展、添加 API 配置，然后在任意网页上开始截图识别。</p>
+          <p>选择 Chrome 扩展或桌面应用，添加 API 配置后即可开始截图识别。两端配置彼此独立，也可以通过备份文件迁移。</p>
         </div>
         <div class="quick-grid">
           <article class="card quick-card">
             <div class="number">1</div>
-            <h3>安装并固定</h3>
-            <p>从 Chrome 应用商店安装 ExamPilot，并将图标固定到浏览器工具栏。</p>
+            <h3>选择使用方式</h3>
+            <p>安装 Chrome 扩展并固定到工具栏，或安装桌面应用并确认 ExamPilot 出现在系统托盘。</p>
           </article>
           <article class="card quick-card">
             <div class="number">2</div>
@@ -543,7 +545,7 @@
           <article class="card quick-card">
             <div class="number">3</div>
             <h3>截图并分析</h3>
-            <p>点击“全屏”或“区域”，普通模式查看面板答案；静默模式使用悬浮命中区、仿光标反馈或剪切板答案。</p>
+            <p>扩展可点击“全屏”或“区域”；桌面端使用全局快捷键。普通模式查看答案，静默模式通过命中区或剪切板反馈。</p>
           </article>
         </div>
         <div class="callout">
@@ -614,10 +616,103 @@
         </div>
       </section>
 
+      <section class="section" id="desktop">
+        <div class="section-heading">
+          <h2>桌面应用使用说明</h2>
+          <p>桌面端支持 Windows 与 macOS，通过系统级截图和真实鼠标位置工作，不依赖浏览器扩展。答案窗口可在浏览器全屏时保持置顶。</p>
+        </div>
+        <div class="install-list">
+          <article class="card install-step">
+            <div class="step-copy">
+              <div class="step-number">1</div>
+              <h3>启动应用并打开设置</h3>
+              <p>启动 ExamPilot 后，答案窗口默认位于屏幕右下角，系统托盘会出现 ExamPilot 图标。右键托盘图标并选择“打开设置”，即可进入独立设置窗口。</p>
+              <p>答案窗口始终置顶、背景透明且不会抢走当前应用焦点。按住窗口顶部的透明拖动区域可以调整位置。</p>
+            </div>
+            <div class="step-visual">
+              <div class="panel-mock" aria-hidden="true">
+                <div class="panel-answer">AI 返回的答案会显示在这里</div>
+              </div>
+            </div>
+          </article>
+
+          <article class="card install-step">
+            <div class="step-copy">
+              <div class="step-number">2</div>
+              <h3>添加并保存 AI 配置</h3>
+              <p>在设置窗口点击“添加配置”，填写配置名称、API 地址、模型名称和 API Key，再选择与服务商匹配的接口模式并保存。列表中高亮的配置就是当前使用的配置。</p>
+              <p>普通提示词、静默提示词、答案窗口透明度和静默模式开关都在“识别与界面”中设置；提示词可以随时恢复默认值。</p>
+            </div>
+            <div class="step-visual">
+              <div class="config-card" aria-hidden="true">
+                <div class="field"><label>配置名称</label><div class="input">我的视觉模型</div></div>
+                <div class="field"><label>接口模式</label><div class="input">Chat Completions</div></div>
+                <div class="save-bar">保存配置</div>
+              </div>
+            </div>
+          </article>
+
+          <article class="card install-step">
+            <div class="step-copy">
+              <div class="step-number">3</div>
+              <h3>使用全局快捷键识别</h3>
+              <p>把鼠标移到题目所在显示器，按 <code>Ctrl+Shift+1</code> 截取整个显示器；按 <code>Ctrl+Shift+2</code> 后拖动鼠标框选题目，松开即可识别，按 <code>Esc</code> 可取消框选。</p>
+              <p>截图时答案窗和静默命中层会暂时隐藏，完成后自动恢复。普通模式下，模型答案会直接显示在右下角的置顶透明窗口中。</p>
+            </div>
+            <div class="step-visual">
+              <div class="button-guide" aria-hidden="true">
+                <div class="guide-item"><div class="guide-key">1</div><div><strong>整屏识别</strong><p>Ctrl+Shift+1</p></div></div>
+                <div class="guide-item"><div class="guide-key">2</div><div><strong>区域识别</strong><p>Ctrl+Shift+2</p></div></div>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div class="section-heading" style="margin-top: 36px; margin-bottom: 18px;">
+          <h2 style="font-size: 25px;">桌面端快捷键</h2>
+        </div>
+        <div class="button-guide">
+          <div class="guide-item"><div class="guide-key">1</div><div><strong>截取鼠标所在显示器</strong><p><code>Ctrl+Shift+1</code>，完成截图后立即发送给当前 AI 配置。</p></div></div>
+          <div class="guide-item"><div class="guide-key">2</div><div><strong>框选屏幕区域</strong><p><code>Ctrl+Shift+2</code>，拖动选择范围；按 <code>Esc</code> 退出选区。</p></div></div>
+          <div class="guide-item"><div class="guide-key">3</div><div><strong>切换 AI 配置</strong><p><code>Ctrl+Shift+3</code>，按配置列表顺序切换到下一个配置。</p></div></div>
+          <div class="guide-item"><div class="guide-key">4</div><div><strong>取消或清除</strong><p><code>Ctrl+Shift+4</code>，识别中取消任务，空闲时清除答案和命中区域。</p></div></div>
+        </div>
+
+        <div class="usage-tabs" style="margin-top: 24px;">
+          <article class="card usage-card">
+            <div class="usage-copy">
+              <h3>桌面端普通模式</h3>
+              <p>关闭“静默模式”后，答案窗口会显示在桌面右下角并保持置顶。识别完成后窗口只显示模型答案，可拖动到其他位置；设置中的透明度按 0% 到 100% 生效。</p>
+              <ul><li>可覆盖 Chrome 等应用的全屏窗口</li><li>点击或拖动答案窗口不会让当前应用失焦</li><li>切换配置后，答案窗口会同步使用当前配置</li></ul>
+            </div>
+          </article>
+          <article class="card usage-card">
+            <div class="usage-copy">
+              <h3>桌面端静默模式</h3>
+              <p>开启“静默模式”后，普通答案窗口会隐藏。模型返回坐标时，桌面端会创建原生透明命中区域；真实鼠标进入正确选项并短暂停留后，会执行一次轻微反馈。</p>
+              <ul><li>开启“显示静默命中框”可用红框检查命中位置</li><li>没有坐标的简答或编程答案会复制到系统剪切板</li><li>取消静默模式后，普通答案窗口会重新按需显示</li></ul>
+            </div>
+          </article>
+        </div>
+
+        <div class="callout">
+          <span aria-hidden="true">📋</span>
+          <div><strong>查看模型返回和错误</strong>打开设置窗口底部的“最近一次模型返回 / 错误”，可以查看模型原始正文、请求错误、解析错误和命中框数量，也可以复制或清空记录。</div>
+        </div>
+        <div class="callout warning">
+          <span aria-hidden="true">⚠️</span>
+          <div><strong>首次运行与权限</strong>macOS 需要为 ExamPilot 授予“屏幕录制”权限；静默鼠标反馈还需要“辅助功能”权限。若启动后快捷键没有反应，请先查看答案窗口或设置窗口中的快捷键占用提示，并关闭占用相同组合键的软件后重启 ExamPilot。</div>
+        </div>
+        <div class="callout">
+          <span aria-hidden="true">⌘</span>
+          <div><strong>从源码运行</strong>先安装 Node.js、Rust stable 和对应平台的 Tauri 依赖，再在仓库根目录运行 <code>npm install</code> 和 <code>npm run tauri:dev</code>。构建安装包使用 <code>npm run tauri:build</code>。</div>
+        </div>
+      </section>
+
       <section class="section" id="configure">
         <div class="section-heading">
           <h2>配置视觉模型</h2>
-          <p>点击面板右下角的 ⚙️，添加你的 API 配置。API 地址必须使用 HTTPS。</p>
+          <p>Chrome 扩展点击面板右下角的 ⚙️；桌面应用从系统托盘选择“打开设置”。添加 API 配置后，选择当前要使用的配置。</p>
         </div>
         <div class="config-layout">
           <article class="card config-card">
@@ -639,7 +734,7 @@
         </div>
         <div class="callout">
           <span aria-hidden="true">🔐</span>
-          <div><strong>按域名授权</strong>扩展只申请你正在使用的 API 域名，不会在安装时申请访问所有网站。配置与 API Key 存储在本地浏览器中。</div>
+          <div><strong>配置保存在本机</strong>Chrome 扩展按需申请 API 域名权限，并把配置存入浏览器本地存储；桌面端由 Rust 后端发起请求，配置保存在本机 Tauri Store 中，不受 WebView CORS 限制。</div>
         </div>
       </section>
 
@@ -662,7 +757,7 @@
       <section class="section" id="capture">
         <div class="section-heading">
           <h2>开始截图识别</h2>
-          <p>根据页面内容选择“全屏”或“区域”。区域识别通常更快，也能减少无关内容对模型判断的干扰。</p>
+          <p>Chrome 扩展使用面板按钮，桌面应用使用全局快捷键。区域识别通常更快，也能减少无关内容对模型判断的干扰。</p>
         </div>
         <div class="usage-tabs">
           <article class="card usage-card">
@@ -672,8 +767,8 @@
             </div>
             <div class="usage-copy">
               <h3>全屏识别</h3>
-              <p>截取浏览器当前可见区域，适合内容集中、题目完整显示在一屏内的页面。</p>
-              <ul><li>点击“全屏”后面板会暂时隐藏</li><li>长页面只会截取当前可见视口</li></ul>
+              <p>扩展点击“全屏”截取浏览器当前视口；桌面端按 <code>Ctrl+Shift+1</code> 截取鼠标所在的整个显示器。</p>
+              <ul><li>截图前答案面板会暂时隐藏</li><li>使用桌面端前，先把鼠标移到题目所在显示器</li></ul>
             </div>
           </article>
           <article class="card usage-card">
@@ -682,7 +777,7 @@
             </div>
             <div class="usage-copy">
               <h3>区域识别</h3>
-              <p>点击“区域”后按住鼠标拖拽，只选择题目和必要的上下文，再松开鼠标开始分析。</p>
+              <p>扩展点击“区域”，桌面端按 <code>Ctrl+Shift+2</code>；随后按住鼠标拖拽，只选择题目和必要上下文，松开鼠标开始分析。</p>
               <ul><li>按 ESC 可退出区域选择</li><li>尽量包含完整题干、选项和图表</li></ul>
             </div>
           </article>
@@ -711,7 +806,7 @@
       <section class="section" id="silent-mode">
         <div class="section-heading">
           <h2>静默模式</h2>
-          <p>静默模式是全局开关，默认关闭。关闭时仍按普通模式在面板里展示答案；开启后会要求 AI 返回结构化 JSON，用于页面内悬浮反馈。</p>
+          <p>静默模式是全局开关，默认关闭。关闭时按普通模式展示答案；开启后会要求 AI 返回结构化 JSON，用于创建悬浮命中区域。</p>
         </div>
         <div class="usage-tabs">
           <article class="card usage-card">
@@ -728,7 +823,7 @@
             </div>
             <div class="usage-copy">
               <h3>选择题命中区</h3>
-              <p>AI 返回每道题正确答案的百分比坐标。扩展会在当前页面创建透明命中区，鼠标进入并短暂停留后按配置距离向下滚动。</p>
+              <p>AI 返回每道题正确答案的百分比坐标。Chrome 扩展会在当前页面创建透明命中区并使用仿光标反馈；桌面端会创建原生命中层并检测真实鼠标悬停。</p>
               <ul><li>支持一次截图识别多道题</li><li>区域截图会自动把选区内百分比换算回视口位置</li><li>调试框只用于查看位置，关闭后悬浮触发仍保留</li></ul>
             </div>
           </article>
@@ -742,14 +837,14 @@
             </div>
             <div class="usage-copy">
               <h3>无选项题复制答案</h3>
-              <p>简答题、填空题、编程题没有可靠的悬浮目标时，提示词要求 AI 不编造坐标，而是返回 <code>clipboardOnly</code>，扩展会把答案写入剪切板。</p>
+              <p>简答题、填空题、编程题没有可靠的悬浮目标时，提示词要求 AI 不编造坐标，而是返回 <code>clipboardOnly</code>，Chrome 扩展和桌面应用都会把答案写入系统剪切板。</p>
               <ul><li>编程题如果已有代码内容，默认提示词要求在已有内容上补全</li><li>静默提示词可编辑，也可以恢复默认后再保存</li></ul>
             </div>
           </article>
         </div>
         <div class="callout">
           <span aria-hidden="true">⚙️</span>
-          <div><strong>可配置项</strong>在设置里可以开启静默模式、开关红色调试框、调整仿光标大小与两种样式，并单独编辑静默提示词。鼠标悬停命中区后会以仿光标轻微位移提供触发反馈。</div>
+          <div><strong>可配置项</strong>两端都可以开启静默模式、显示红色调试框并单独编辑静默提示词。仿光标大小和样式只适用于 Chrome 扩展；桌面端直接使用真实鼠标和原生命中区域。</div>
         </div>
         <div class="callout">
           <span aria-hidden="true">🔐</span>
@@ -769,11 +864,11 @@
         <div class="config-layout">
           <article class="card config-card">
             <h3>↓ 导出配置</h3>
-            <p>点击后浏览器会下载 <code>exampilot-settings-YYYY-MM-DD.json</code>。文件包含全部模型配置、当前选中项、自定义提示词、静默提示词、静默模式设置和界面透明度。</p>
+            <p>Chrome 会下载 <code>exampilot-settings-YYYY-MM-DD.json</code>，桌面端会打开文件保存对话框。备份包含全部模型配置、当前选中项、提示词、静默模式设置和界面透明度。</p>
           </article>
           <article class="card config-card">
             <h3>↑ 导入配置</h3>
-            <p>选择 ExamPilot JSON 备份并确认后，扩展会校验文件内容，再替换当前浏览器中的全部配置、提示词、静默模式设置与透明度。</p>
+            <p>选择 ExamPilot JSON 备份并确认后，应用会校验内容，再替换当前端的全部配置、提示词、静默模式设置与透明度。桌面端兼容扩展导出的 v1 备份。</p>
           </article>
         </div>
         <div class="callout warning">
@@ -782,7 +877,7 @@
         </div>
         <div class="callout">
           <span aria-hidden="true">📍</span>
-          <div><strong>面板位置单独保存在本机</strong>拖动迷你 ⚡ 按钮后，位置会自动保存并适配窗口尺寸；面板位置与 API 域名授权不会写入导出文件。</div>
+          <div><strong>面板位置单独保存在本机</strong>扩展面板位置和桌面答案窗口位置分别保存在对应设备中，不会写入导出文件；Chrome 的 API 域名授权也不会随配置迁移。</div>
         </div>
       </section>
 
@@ -827,6 +922,26 @@
         </div>
         <div class="faq-list">
           <details>
+            <summary>桌面应用启动后在哪里打开设置？</summary>
+            <p>在 Windows 通知区域或 macOS 菜单栏找到 ExamPilot 托盘图标，打开菜单后选择“打开设置”。退出应用也需要使用托盘菜单中的“退出”。</p>
+          </details>
+          <details>
+            <summary>桌面端全局快捷键没有反应</summary>
+            <p>先查看答案窗口或设置窗口是否提示“快捷键被占用”。关闭占用 <code>Ctrl+Shift+1/2/3/4</code> 的其他软件后重启 ExamPilot；macOS 还需确认已授予屏幕录制权限。</p>
+          </details>
+          <details>
+            <summary>桌面端区域截图出现遮盖层但无法框选</summary>
+            <p>区域截图会临时显示全屏选区层，这是正常行为。按住鼠标拖动后松开即可提交选区，按 <code>Esc</code> 可取消；如果选区层呈不透明白色或无法操作，请记录系统版本并反馈，该状态不应持续存在。</p>
+          </details>
+          <details>
+            <summary>桌面端为什么没有显示答案或红色命中框？</summary>
+            <p>普通模式的答案显示在置顶透明窗口中；静默模式会隐藏该窗口。静默模式只有在模型返回有效选项坐标后才会创建命中区域，并且需要开启“显示静默命中框”才会看到红框。原始返回和解析错误可在设置底部查看。</p>
+          </details>
+          <details>
+            <summary>桌面端如何查看大模型原始返回和错误？</summary>
+            <p>打开设置窗口，查看底部的“最近一次模型返回 / 错误”。这里会保留最近一次模型正文、请求错误、解析错误和命中框数量，并提供复制与清空按钮。</p>
+          </details>
+          <details>
             <summary>点击扩展图标后没有出现面板</summary>
             <p>请确认当前是普通网页，而不是 <code>chrome://</code> 页面、Chrome 应用商店或浏览器内置 PDF 页面。刷新普通网页后再次点击扩展图标。</p>
           </details>
@@ -868,7 +983,7 @@
           </details>
           <details>
             <summary>截图和 API Key 会上传到哪里？</summary>
-            <p>截图只会发送到你配置的 API 地址，API Key 与配置保存在 Chrome 本地存储。ExamPilot 本身不提供中转服务。详情请查看隐私政策。</p>
+            <p>截图只会发送到你配置的 API 地址。Chrome 扩展把 API Key 与配置保存在浏览器本地存储，桌面端保存在本机 Tauri Store；ExamPilot 本身不提供中转服务。详情请查看隐私政策。</p>
           </details>
           <details>
             <summary>导入配置后为什么仍然提示域名授权？</summary>
@@ -881,9 +996,9 @@
         </div>
       </section>
 
-      <section class="final-cta" aria-label="安装 ExamPilot">
-        <div><h2>准备好开始了吗？</h2><p>安装扩展，添加你的视觉模型配置，然后在网页中一键分析。</p></div>
-        <a class="button" href="https://chromewebstore.google.com/detail/exampilot-%E6%99%BA%E8%83%BD%E8%A7%A3%E9%A2%98%E5%BC%95%E6%93%8E/cekiablfmjeejkgfklapmifkcmeipnnf" target="_blank" rel="noopener noreferrer">前往 Chrome 应用商店</a>
+      <section class="final-cta" aria-label="获取 ExamPilot">
+        <div><h2>准备好开始了吗？</h2><p>选择 Chrome 扩展或桌面应用，添加你的视觉模型配置，然后开始截图分析。</p></div>
+        <a class="button" href="#install">查看安装与使用说明</a>
       </section>
     </main>
   </div>

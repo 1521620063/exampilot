@@ -4,6 +4,8 @@ This repository contains two ExamPilot applications with shared Node.js dependen
 
 - `chrome-extension/`: Chrome Manifest V3 extension.
 - `desktop-app/`: Tauri 2 desktop application for Windows and macOS.
+- `docs/`: shared project website and privacy policy.
+- `assets/branding/`: shared high-resolution brand source assets.
 
 Keep the root `package.json`, `package-lock.json`, and `node_modules/` as the single Node.js dependency installation. Do not add app-local npm manifests or `node_modules` directories.
 

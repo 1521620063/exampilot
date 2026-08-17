@@ -8,6 +8,8 @@ ExamPilot 是一个基于视觉大模型的截图识别工具。本仓库同时�
 
 ```text
 exampilot/
+├─ assets/branding/       品牌原始图
+├─ docs/                  项目主页、隐私政策和官网图片
 ├─ chrome-extension/   Chrome Manifest V3 插件源码
 ├─ desktop-app/       Tauri 2 桌面应用源码
 │  ├─ src/            Preact 前端

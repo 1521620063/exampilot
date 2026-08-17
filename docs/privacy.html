@@ -251,32 +251,32 @@ footer {
 
   <div class="card">
     <h1>隐私政策</h1>
-    <p class="updated">最后更新：2026 年 8 月 12 日</p>
+    <p class="updated">最后更新：2026 年 8 月 17 日</p>
 
     <h2>概述</h2>
-    <p>ExamPilot（以下简称"本扩展"）是一款基于视觉 AI 的智能解题工具。本隐私政策说明了本扩展处理用户数据的方式。使用本扩展即表示您同意本政策所述的数据处理方式。</p>
+    <p>ExamPilot 是一款基于视觉 AI 的智能解题工具，同时提供 Chrome 插件和 Tauri 桌面应用。本隐私政策说明两种应用处理用户数据的方式。使用 ExamPilot 即表示您同意本政策所述的数据处理方式。</p>
 
-    <h2>本扩展收集和处理的数据</h2>
+    <h2>ExamPilot 收集和处理的数据</h2>
 
     <h3>1. 网页截图</h3>
     <ul>
-      <li><strong>收集方式</strong>：当您在扩展面板中点击"全屏"或"区域"按钮时，Chrome 会截取当前浏览器视口或您框选区域的截图。双击页面仅用于显示或隐藏扩展面板，不会触发截图。</li>
+      <li><strong>收集方式</strong>：Chrome 插件会在您主动触发时截取当前浏览器视口或框选区域；桌面应用会在您使用全局快捷键时截取鼠标所在显示器或您选择的屏幕区域。显示面板、打开设置或移动答案窗口不会触发截图。</li>
       <li><strong>使用目的</strong>：截图被发送到您自行配置的 AI 大模型 API，用于识别图片中的题目并生成解答。</li>
       <li><strong>传输方式</strong>：截图以 base64 编码直接嵌入 API 请求，不经过任何中间服务器。</li>
-      <li><strong>存储与保留</strong>：截图不会持久存储在您的设备或本扩展的开发者服务器上。AI API 处理完成后，截图仅存在于 API 提供方的系统中，其保留政策请参阅相应 API 提供方的隐私政策。</li>
+      <li><strong>存储与保留</strong>：截图不会由 ExamPilot 持久存储在您的设备或开发者服务器上。AI API 处理完成后，截图仅可能存在于 API 提供方的系统中，其保留政策请参阅相应 API 提供方的隐私政策。</li>
     </ul>
 
     <h3>2. AI 配置信息</h3>
     <ul>
-      <li><strong>收集方式</strong>：您在扩展设置页面（⚙️）中填写的配置信息，包括 API 地址、模型名称、API 密钥、自定义请求头/请求体、请求模板、响应模板和自定义提示词。</li>
-      <li><strong>存储位置</strong>：所有配置信息仅存储在浏览器的 <code>chrome.storage.local</code> 中，不会传输到开发者服务器。</li>
+      <li><strong>收集方式</strong>：您在 Chrome 插件或桌面应用设置中填写的配置信息，包括 API 地址、模型名称、API 密钥、自定义请求头/请求体、请求模板、响应模板和自定义提示词。</li>
+      <li><strong>存储位置</strong>：Chrome 插件使用 <code>chrome.storage.local</code>，桌面应用使用 Tauri Store 将配置保存在本机应用数据目录；两端配置彼此独立，不会自动同步或传输到开发者服务器。</li>
       <li><strong>使用目的</strong>：仅用于向您指定的 AI API 发送请求；发起请求时，API 密钥及必要的自定义请求内容会直接发送给该 API 服务商。</li>
     </ul>
 
     <h3>3. 静默模式数据</h3>
     <ul>
       <li><strong>收集方式</strong>：当您主动开启静默模式并发起识别时，AI API 会被要求返回结构化答案，包括答案文本、题号、选择题答案区域的百分比坐标，或在简答题、填空题、编程题中返回仅复制到剪切板的答案文本。</li>
-      <li><strong>使用目的</strong>：选择题坐标仅用于在当前网页创建本地透明命中区域；鼠标悬停命中区后，扩展会以仿光标轻微位移提供本地触发反馈。若开启“显示静默框”，扩展会在当前页面本地绘制红色调试框，帮助您确认 AI 返回坐标是否对齐。对于经您授权的跨域 iframe，扩展仅在该 iframe 内隐藏原生光标并将本地鼠标坐标传回当前标签页的仿光标，不读取或上传 iframe 内容。</li>
+      <li><strong>使用目的</strong>：选择题坐标仅用于创建本地透明命中区域。Chrome 插件在当前网页中提供仿光标反馈；桌面应用通过原生置顶命中层检测真实鼠标悬停并执行短暂反馈。调试红框、命中区域和鼠标坐标都只在本机处理，不会上传给开发者服务器。</li>
       <li><strong>剪切板写入</strong>：对于没有可悬浮选项的题型，扩展可能会把 AI 返回的答案文本写入系统剪切板。该行为仅发生在您主动开启静默模式并完成识别后，剪切板内容不会发送给开发者服务器。</li>
       <li><strong>存储与保留</strong>：静默模式的命中区域、调试框和悬停监听仅存在于当前页面会话中；清除结果、取消、新一轮识别或页面卸载时会移除。</li>
     </ul>
@@ -284,7 +284,7 @@ footer {
     <h3>4. 界面偏好设置</h3>
     <ul>
       <li><strong>收集方式</strong>：您在扩展设置页面中调整的界面透明度、仿光标大小与样式、静默模式开关、是否显示静默框，以及拖动迷你面板后保存的相对位置等本地偏好。</li>
-      <li><strong>存储位置</strong>：仅存储在浏览器的 <code>chrome.storage.local</code> 中。</li>
+      <li><strong>存储位置</strong>：Chrome 插件存储在 <code>chrome.storage.local</code>，桌面应用存储在本机 Tauri Store 中。</li>
       <li><strong>使用目的</strong>：仅用于恢复扩展面板的本地显示效果和静默模式本地交互行为，不会发送给 AI API 或开发者服务器。</li>
     </ul>
 
@@ -296,7 +296,7 @@ footer {
     </ul>
 
     <h3>6. 不收集的数据</h3>
-    <p>本扩展<strong>不</strong>收集以下数据：</p>
+    <p>ExamPilot <strong>不</strong>收集以下数据：</p>
     <ul>
       <li>个人身份信息（姓名、邮箱、电话等）</li>
       <li>浏览历史、书签、密码</li>
@@ -307,16 +307,16 @@ footer {
     </ul>
 
     <h2>数据的共享与披露</h2>
-    <p>本扩展的开发者不会收集、存储或分享您的任何个人数据。数据仅按以下方式与您指定的第三方服务交互：</p>
+    <p>ExamPilot 的开发者不会收集、存储或分享您的任何个人数据。数据仅按以下方式与您指定的第三方服务交互：</p>
     <ul>
       <li><strong>AI API 服务商</strong>：截图内容、API 密钥及完成请求所需的自定义请求内容会直接发送到您自行配置的 AI 服务 API。API 服务商对数据的处理受其自身隐私政策的约束。</li>
     </ul>
-    <p>本扩展不会将您的数据出售、出租或共享给任何其他第三方。</p>
+    <p>ExamPilot 不会将您的数据出售、出租或共享给任何其他第三方。</p>
 
     <h2>数据安全</h2>
-    <p>本扩展采取以下安全措施：</p>
+    <p>ExamPilot 采取以下安全措施：</p>
     <ul>
-      <li>API 密钥等敏感信息仅存储在浏览器的本地存储中</li>
+      <li>API 密钥等敏感信息仅存储在浏览器本地存储或桌面应用的本机 Store 中</li>
       <li>配置备份仅在用户主动操作时于本地生成或读取，不经过开发者服务器</li>
       <li>所有 API 请求均使用 HTTPS 加密传输</li>
       <li>普通版使用按需 API 域名授权；静默模式需要跨域 iframe 光标跟踪时，会单独请求该 iframe 域名授权。Full Access 版使用所有网站访问权限，以便在任意网页及其 frame 中自动加载隐藏面板和光标桥接脚本，并从后台调用用户配置的 HTTPS API</li>
@@ -326,7 +326,7 @@ footer {
     </ul>
 
     <h2>第三方链接</h2>
-    <p>本扩展的配置页面允许您输入自定义的 API 地址，这些地址对应的服务由第三方独立运营，其隐私实践不在本政策的覆盖范围内。</p>
+    <p>ExamPilot 的配置页面允许您输入自定义 API 地址，这些服务由第三方独立运营，其隐私实践不在本政策的覆盖范围内。</p>
 
     <h2>政策更新</h2>
     <p>本隐私政策可能会不时更新。更新后的政策将在本页面公布，并更新页面顶部的"最后更新"日期。</p>
@@ -340,24 +340,24 @@ footer {
     <hr>
 
     <h2 id="english">Privacy Policy (English)</h2>
-    <p class="en updated">Last updated: August 12, 2026</p>
+    <p class="en updated">Last updated: August 17, 2026</p>
 
     <h3 class="en">Overview</h3>
-    <p class="en">ExamPilot is an AI-powered problem-solving tool that captures screenshots of web pages and sends them to user-configured AI vision API for analysis. This privacy policy explains how the extension handles user data.</p>
+    <p class="en">ExamPilot is an AI-powered screenshot analysis tool available as a Chrome extension and a Tauri desktop application. This privacy policy explains how both applications handle user data.</p>
 
     <h3 class="en">Data Collected and Processed</h3>
 
-    <p class="en"><strong>1. Screenshots.</strong> When you click "全屏" or "区域" on the panel, Chrome captures a screenshot of the viewport or your selected region. Double-clicking the page only shows or hides the extension panel and does not trigger screenshot capture. Screenshots are sent to the AI API you have configured for problem recognition and solving. Screenshots are not stored persistently on your device or on the developer's servers. They exist only transiently during processing through the AI API you selected.</p>
+    <p class="en"><strong>1. Screenshots.</strong> The Chrome extension captures the current viewport or a selected region only when you trigger capture. The desktop application captures the display under the pointer or a selected screen region only when you use its global shortcuts. Screenshots are sent directly to the AI API you configured and are not stored persistently by ExamPilot or on the developer's servers.</p>
 
-    <p class="en"><strong>2. AI Configuration.</strong> API endpoint URLs, model names, API keys, custom headers/bodies, request templates, response templates, and custom prompts that you enter in the settings panel (⚙️) are stored exclusively in <code>chrome.storage.local</code> on your device. This information is used solely to make requests to the AI API of your choice and is never transmitted to the developer's servers.</p>
+    <p class="en"><strong>2. AI Configuration.</strong> API endpoint URLs, model names, API keys, custom requests, templates, and prompts are stored locally. The Chrome extension uses <code>chrome.storage.local</code>; the desktop application uses Tauri Store in the local application data directory. Settings are not automatically synchronized or transmitted to the developer's servers.</p>
 
-    <p class="en"><strong>3. Silent Mode Data.</strong> When you enable Silent Mode and start recognition, the AI API is asked to return structured answers, including answer text and percentage coordinates for selectable answers, or clipboard-only answer text for short-answer, fill-in-the-blank, or coding questions. Coordinates are used locally to create transparent hover targets on the current page. If debug frames are enabled, red frames are drawn locally to help verify alignment. For questions without hoverable choices, the extension may write the AI answer to your system clipboard after recognition. Clipboard contents are not sent to the developer's servers.</p>
+    <p class="en"><strong>3. Silent Mode Data.</strong> Silent Mode may return answer text and percentage coordinates. Coordinates are processed locally to create hover targets. The Chrome extension provides in-page feedback; the desktop application uses native always-on-top targets and the real mouse position. Clipboard-only answers may be written to the system clipboard. These local interaction details are not sent to the developer's servers.</p>
 
-    <p class="en"><strong>4. UI Preferences.</strong> Local display preferences such as panel opacity, Silent Mode state, debug frame visibility, and the relative position saved after dragging the mini panel are stored exclusively in <code>chrome.storage.local</code>. They are used only to restore local panel behavior and are not sent to AI APIs or developer servers.</p>
+    <p class="en"><strong>4. UI Preferences.</strong> Display preferences such as opacity, Silent Mode state, debug frame visibility, and window position are stored locally in <code>chrome.storage.local</code> or Tauri Store, depending on the application. They are used only to restore local behavior and are not sent to AI APIs or developer servers.</p>
 
     <p class="en"><strong>5. Settings Import and Export.</strong> A JSON backup is created locally only when you click “Export Settings.” It contains model configurations, API keys, custom request data, custom prompts, Silent Mode prompt and settings, and panel opacity, but not the panel position or Chrome API host permissions. The browser downloads the file directly and it is never uploaded to the developer's servers. API keys in the file are not encrypted. An import file is read, validated, and stored locally only after you select it and confirm the import.</p>
 
-    <p class="en"><strong>6. No Data Collection.</strong> This extension does <strong>not</strong> collect personal information, browsing history, bookmarks, passwords, cookies, device identifiers, location data, usage analytics, or any tracking data.</p>
+    <p class="en"><strong>6. No Data Collection.</strong> ExamPilot does <strong>not</strong> collect personal information, browsing history, bookmarks, passwords, cookies, device identifiers, location data, usage analytics, or tracking data.</p>
 
     <h3 class="en">Data Sharing</h3>
     <p class="en">The developer does not collect, store, or share any personal data. The only data sharing is with third-party services you explicitly configure: the AI API provider you specify receives the screenshot, API key, and any custom request data required to process the request. No data is sold, rented, or shared with any other third party.</p>
