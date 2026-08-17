@@ -14,7 +14,7 @@ async function getStore() {
 
 export async function loadSettings() {
   var store = await getStore();
-  return (await store.get('settings')) || createDefaultSettings();
+  return Object.assign(createDefaultSettings(), (await store.get('settings')) || {});
 }
 
 export async function saveSettings(settings) {
@@ -71,8 +71,10 @@ export function setOverlayTargets(targets, monitor, debug) {
   return invoke('set_overlay_targets', { targets: targets, monitor: monitor, debug: debug });
 }
 export function setOverlayDebug(debug) { return invoke('set_overlay_debug', { debug: debug }); }
-export function applySilentSettings(silentModeEnabled, silentDebugFrameEnabled) {
-  return invoke('apply_silent_settings', { silentModeEnabled: silentModeEnabled, silentDebugFrameEnabled: silentDebugFrameEnabled });
+export function applySilentSettings(silentModeEnabled, silentDebugFrameEnabled, silentCursorOffset) {
+  var offset = Number(silentCursorOffset);
+  offset = Number.isFinite(offset) ? Math.max(1, Math.min(Math.round(offset), 20)) : 5;
+  return invoke('apply_silent_settings', { silentModeEnabled: silentModeEnabled, silentDebugFrameEnabled: silentDebugFrameEnabled, silentCursorOffset: offset });
 }
 export function getOverlayState() { return invoke('get_overlay_state'); }
 export function getShortcutErrors() { return invoke('get_shortcut_errors'); }

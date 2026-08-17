@@ -20,6 +20,7 @@ var __permissionHandler = null;
 var __permissionRequest = null;
 var DEFAULT_FAKE_CURSOR_SIZE = 14;
 var DEFAULT_FAKE_CURSOR_STYLE = 'dark-outline';
+var DEFAULT_SILENT_CURSOR_OFFSET = 5;
 var DEFAULT_SILENT_PROMPT = '请识别图片中所有完整显示的题目。只返回一个 JSON 对象，不要使用 Markdown 代码块，不要输出多余文字。\n' +
   '不要定位到题干空白、横线、输入框、解析区域或未完整显示的题目。\n' +
   '选择题必须返回正确选项本身的位置：bboxPercent 要框住正确选项行，至少包含选项字母圆圈和选项文本；coordinatePercent 要落在这个 bboxPercent 内。\n' +
@@ -45,6 +46,12 @@ function normalizeFakeCursorSize(value) {
 
 function normalizeFakeCursorStyle(value) {
   return value === 'light-outline' ? value : DEFAULT_FAKE_CURSOR_STYLE;
+}
+
+function normalizeSilentCursorOffset(value) {
+  var number = Number(value);
+  if (!Number.isFinite(number)) return DEFAULT_SILENT_CURSOR_OFFSET;
+  return Math.max(1, Math.min(Math.round(number), 20));
 }
 
 function sanitizeAnswerHtml(value) {
@@ -136,6 +143,7 @@ export function mountPanel(host) {
     var opacityState = useState(DEFAULT_UI_OPACITY), uiOpacity = opacityState[0], setUiOpacity = opacityState[1];
     var fakeCursorSizeState = useState(DEFAULT_FAKE_CURSOR_SIZE), fakeCursorSize = fakeCursorSizeState[0], setFakeCursorSize = fakeCursorSizeState[1];
     var fakeCursorStyleState = useState(DEFAULT_FAKE_CURSOR_STYLE), fakeCursorStyle = fakeCursorStyleState[0], setFakeCursorStyle = fakeCursorStyleState[1];
+    var silentCursorOffsetState = useState(DEFAULT_SILENT_CURSOR_OFFSET), silentCursorOffset = silentCursorOffsetState[0], setSilentCursorOffset = silentCursorOffsetState[1];
     var silentModeState = useState(false), silentModeEnabled = silentModeState[0], setSilentModeEnabled = silentModeState[1];
     var silentDebugFrameState = useState(false), silentDebugFrameEnabled = silentDebugFrameState[0], setSilentDebugFrameEnabled = silentDebugFrameState[1];
     var transferBusyState = useState(false), transferBusy = transferBusyState[0], setTransferBusy = transferBusyState[1];
@@ -157,6 +165,7 @@ export function mountPanel(host) {
     var fakeCursorRef = useRef(null);
     var fakeCursorSizeRef = useRef(DEFAULT_FAKE_CURSOR_SIZE);
     var fakeCursorStyleRef = useRef(DEFAULT_FAKE_CURSOR_STYLE);
+    var silentCursorOffsetRef = useRef(DEFAULT_SILENT_CURSOR_OFFSET);
 
     // 区域选择相关状态
     var _w = useState(false), selectingRegion = _w[0], setSelectingRegion = _w[1];
@@ -166,6 +175,7 @@ export function mountPanel(host) {
     silentDebugFrameEnabledRef.current = silentDebugFrameEnabled;
     fakeCursorSizeRef.current = fakeCursorSize;
     fakeCursorStyleRef.current = fakeCursorStyle;
+    silentCursorOffsetRef.current = silentCursorOffset;
 
     function handleCaptureResponse(response, mySeq) {
       if (mySeq !== currentRequestSeqRef.current) return;
@@ -599,10 +609,13 @@ export function mountPanel(host) {
         if (document.hidden) hideFakeCursor();
       }
 
-      chrome.storage.local.get(['fakeCursorSize', 'fakeCursorStyle', 'silentModeEnabled']).then(function (data) {
+      chrome.storage.local.get(['fakeCursorSize', 'fakeCursorStyle', 'silentCursorOffset', 'silentModeEnabled']).then(function (data) {
         if (!active) return;
         updateSize(data.fakeCursorSize);
         updateStyle(data.fakeCursorStyle);
+        var normalizedOffset = normalizeSilentCursorOffset(data.silentCursorOffset);
+        setSilentCursorOffset(normalizedOffset);
+        silentCursorOffsetRef.current = normalizedOffset;
         silentModeEnabledRef.current = data.silentModeEnabled === true;
         setSilentModeEnabled(silentModeEnabledRef.current);
         if (silentModeEnabledRef.current && !IS_FULL_ACCESS) {
@@ -619,6 +632,11 @@ export function mountPanel(host) {
         if (areaName !== 'local') return;
         if (changes.fakeCursorSize) updateSize(changes.fakeCursorSize.newValue);
         if (changes.fakeCursorStyle) updateStyle(changes.fakeCursorStyle.newValue);
+        if (changes.silentCursorOffset) {
+          var normalizedOffset = normalizeSilentCursorOffset(changes.silentCursorOffset.newValue);
+          setSilentCursorOffset(normalizedOffset);
+          silentCursorOffsetRef.current = normalizedOffset;
+        }
         if (changes.silentModeEnabled) {
           silentModeEnabledRef.current = changes.silentModeEnabled.newValue === true;
           if (!silentModeEnabledRef.current) removeSilentTarget();
@@ -841,6 +859,15 @@ export function mountPanel(host) {
         applyFakeCursorStyle(fakeCursorRef.current.cursor, normalized);
       }
       chrome.storage.local.set({ fakeCursorStyle: normalized }).catch(function () {
+        // Keep the locally applied value if persistence is temporarily unavailable.
+      });
+    }
+
+    function saveSilentCursorOffset(value) {
+      var normalized = normalizeSilentCursorOffset(value);
+      setSilentCursorOffset(normalized);
+      silentCursorOffsetRef.current = normalized;
+      chrome.storage.local.set({ silentCursorOffset: normalized }).catch(function () {
         // Keep the locally applied value if persistence is temporarily unavailable.
       });
     }
@@ -1659,8 +1686,8 @@ export function mountPanel(host) {
     function triggerSilentCursorFeedback() {
       var state = fakeCursorRef.current;
       if (!state) return;
-      state.offsetX = 5;
-      if (state.svg) state.svg.style.transform = 'translate3d(5px,0,0)';
+      state.offsetX = silentCursorOffsetRef.current;
+      if (state.svg) state.svg.style.transform = 'translate3d(' + state.offsetX + 'px,0,0)';
     }
 
     function resetSilentCursorFeedback() {
@@ -2729,6 +2756,22 @@ ${function () {
                       <option value="dark-outline">MacOS 黑色白边</option>
                       <option value="light-outline">Windows · 白色黑边</option>
                     </select>
+                  </label>
+                  <label class="exmp-switch-row" for="exmp-silent-cursor-offset">
+                    <span>${'\u4EFF\u5149\u6807\u89E6\u53D1\u53F3\u79FB'}</span>
+                    <span class="exmp-flex exmp-items-center">
+                      <input
+                        id="exmp-silent-cursor-offset"
+                        class="exmp-number-input"
+                        type="number"
+                        min="1"
+                        max="20"
+                        step="1"
+                        value=${silentCursorOffset}
+                        onChange=${function (e) { saveSilentCursorOffset(e.target.value); }}
+                      />
+                      <span class="exmp-input-suffix">px</span>
+                    </span>
                   </label>
                   <div class="exmp-switch-row">
                     <span>显示静默框</span>

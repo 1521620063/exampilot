@@ -28,6 +28,11 @@ function uiOpacity(value) {
   return Number.isFinite(opacity) ? Math.max(0, Math.min(opacity, 1)) : 0.95;
 }
 
+function silentCursorOffset(value) {
+  var offset = Number(value);
+  return Number.isFinite(offset) ? Math.max(1, Math.min(Math.round(offset), 20)) : 5;
+}
+
 function sanitizeAnswer(value) {
   var template = document.createElement('template');
   template.innerHTML = String(value || '');
@@ -79,7 +84,7 @@ function AnswerApp() {
     settingsVersionRef.current += 1;
     settingsRef.current = next;
     setSettings(next);
-    applySilentSettings(next.silentModeEnabled === true, next.silentDebugFrameEnabled === true).catch(function (error) {
+    applySilentSettings(next.silentModeEnabled === true, next.silentDebugFrameEnabled === true, next.silentCursorOffset).catch(function (error) {
       setStatus('窗口状态更新失败：' + (error.message || String(error)));
     });
   }
@@ -228,7 +233,7 @@ function AnswerApp() {
       setAnswer(content); setStatus('识别完成');
     }
     updateBusy(false);
-    if (!currentSettings.silentModeEnabled) await applySilentSettings(false, false);
+    if (!currentSettings.silentModeEnabled) await applySilentSettings(false, false, currentSettings.silentCursorOffset);
   }
 
   function finishWithError(error, operation) {
@@ -348,7 +353,7 @@ function SettingsApp() {
     var unlisten = null;
     loadSettings().then(function (saved) {
       updateLocalSettings(saved);
-      return applySilentSettings(saved.silentModeEnabled === true, saved.silentDebugFrameEnabled === true);
+      return applySilentSettings(saved.silentModeEnabled === true, saved.silentDebugFrameEnabled === true, saved.silentCursorOffset);
     }).catch(function (error) { setMessage(error.message || String(error)); });
     loadLastModelResponse().then(setLastResponse).catch(function () {});
     listen('settings-updated', function (event) { updateLocalSettings(event.payload); }).then(function (fn) { unlisten = fn; }).catch(function () {});
@@ -364,12 +369,13 @@ function SettingsApp() {
     await emit('settings-updated', next);
   }
   async function patchSettings(field, value) {
+    if (field === 'silentCursorOffset') value = silentCursorOffset(value);
     var next = Object.assign({}, settingsRef.current, { [field]: value });
     try {
       updateLocalSettings(next);
       var runtime = null;
-      if (field === 'silentModeEnabled' || field === 'silentDebugFrameEnabled') {
-        runtime = await applySilentSettings(next.silentModeEnabled === true, next.silentDebugFrameEnabled === true);
+      if (field === 'silentModeEnabled' || field === 'silentDebugFrameEnabled' || field === 'silentCursorOffset') {
+        runtime = await applySilentSettings(next.silentModeEnabled === true, next.silentDebugFrameEnabled === true, next.silentCursorOffset);
       }
       await saveSettings(next);
       await setAnswerOpacity(uiOpacity(next.uiOpacity)).catch(function () {});
@@ -408,7 +414,7 @@ function SettingsApp() {
       var backup = await importSettings(); if (!backup) return;
       var normalized = globalThis.ExamPilotSettingsTransfer.normalizeSettingsBackup(backup);
       await persist(normalized);
-      await applySilentSettings(normalized.silentModeEnabled === true, normalized.silentDebugFrameEnabled === true);
+      await applySilentSettings(normalized.silentModeEnabled === true, normalized.silentDebugFrameEnabled === true, normalized.silentCursorOffset);
       setMessage('设置已导入');
     } catch (error) { showError(error); }
   }
@@ -436,7 +442,7 @@ function SettingsApp() {
     <p class="settings-security-note">导入和导出文件包含 API Key，请勿分享或上传到公共位置。</p>
     ${message ? html`<p class="settings-message">${message}</p>` : null}
     <section class="settings-grid"><aside><h2>AI 配置</h2>${settings.configList.map(function (item) { return html`<div class=${item.selected ? 'config-item active' : 'config-item'} onClick=${function () { selectConfig(item.id); }}><span>${item.name || '未命名配置'}</span><button class="config-delete" title="删除" onClick=${function (event) { event.stopPropagation(); deleteConfig(item.id); }}>删除</button></div>`; })}</aside><div>${config ? html`<${ConfigEditor} config=${config} update=${updateConfig} updateMany=${updateConfigFields} previewPrompt=${settings.silentModeEnabled ? settings.silentPrompt : settings.customPrompt} />` : html`<p class="empty-config">添加一个 AI 配置后即可开始使用。</p>`}</div></section>
-    <section class="preferences"><h2>识别与界面</h2><label class="toggle"><input type="checkbox" checked=${settings.silentModeEnabled === true} onChange=${function (e) { patchSettings('silentModeEnabled', e.currentTarget.checked); }} />静默模式</label><label class="toggle"><input type="checkbox" checked=${settings.silentDebugFrameEnabled === true} onChange=${function (e) { patchSettings('silentDebugFrameEnabled', e.currentTarget.checked); }} />显示静默命中框</label><label>答案窗口透明度 ${Math.round(uiOpacity(settings.uiOpacity) * 100)}%<input type="range" min="0" max="100" step="1" value=${Math.round(uiOpacity(settings.uiOpacity) * 100)} onInput=${function (e) { patchSettings('uiOpacity', Number(e.currentTarget.value) / 100); }} /></label><div class="prompt-head"><strong>普通提示词</strong><button type="button" onClick=${function () { patchSettings('customPrompt', DEFAULT_PROMPT); }}>恢复默认</button></div><textarea value=${settings.customPrompt || ''} onInput=${function (e) { patchSettings('customPrompt', e.currentTarget.value); }} /><div class="prompt-head"><strong>静默提示词</strong><button type="button" onClick=${function () { patchSettings('silentPrompt', DEFAULT_SILENT_PROMPT); }}>恢复默认</button></div><textarea value=${settings.silentPrompt || ''} onInput=${function (e) { patchSettings('silentPrompt', e.currentTarget.value); }} /></section>
+    <section class="preferences"><h2>识别与界面</h2><label class="toggle"><input type="checkbox" checked=${settings.silentModeEnabled === true} onChange=${function (e) { patchSettings('silentModeEnabled', e.currentTarget.checked); }} />静默模式</label><label class="toggle"><input type="checkbox" checked=${settings.silentDebugFrameEnabled === true} onChange=${function (e) { patchSettings('silentDebugFrameEnabled', e.currentTarget.checked); }} />显示静默命中框</label><label>${'\u771F\u5B9E\u5149\u6807\u89E6\u53D1\u53F3\u79FB'}<input type="number" min="1" max="20" step="1" value=${settings.silentCursorOffset} onChange=${function (e) { patchSettings('silentCursorOffset', Number(e.currentTarget.value)); }} /></label><label>答案窗口透明度 ${Math.round(uiOpacity(settings.uiOpacity) * 100)}%<input type="range" min="0" max="100" step="1" value=${Math.round(uiOpacity(settings.uiOpacity) * 100)} onInput=${function (e) { patchSettings('uiOpacity', Number(e.currentTarget.value) / 100); }} /></label><div class="prompt-head"><strong>普通提示词</strong><button type="button" onClick=${function () { patchSettings('customPrompt', DEFAULT_PROMPT); }}>恢复默认</button></div><textarea value=${settings.customPrompt || ''} onInput=${function (e) { patchSettings('customPrompt', e.currentTarget.value); }} /><div class="prompt-head"><strong>静默提示词</strong><button type="button" onClick=${function () { patchSettings('silentPrompt', DEFAULT_SILENT_PROMPT); }}>恢复默认</button></div><textarea value=${settings.silentPrompt || ''} onInput=${function (e) { patchSettings('silentPrompt', e.currentTarget.value); }} /></section>
     <section class="model-response"><div class="model-response-head"><div><h2>最近一次模型返回 / 错误</h2>${lastResponse ? html`<p>${new Date(lastResponse.receivedAt).toLocaleString()} · ${lastResponse.configName} · ${lastResponse.silent ? '静默模式' : '普通模式'}${lastResponse.targetCount !== null ? ' · 命中框 ' + lastResponse.targetCount + ' 个' : ''}</p>` : null}</div><div class="settings-actions"><button disabled=${!lastResponse} onClick=${copyLastResponse}>复制</button><button disabled=${!lastResponse} onClick=${clearLastResponse}>清空</button></div></div>${lastResponse && lastResponse.requestError ? html`<p class="response-error">运行错误：${lastResponse.requestError}</p>` : null}${lastResponse && lastResponse.parseError ? html`<p class="response-error">解析错误：${lastResponse.parseError}</p>` : null}<textarea readonly value=${lastResponse ? lastResponse.content || '本次请求没有收到模型正文' : '尚未收到模型返回或错误'}></textarea></section>
   </main>`;
 }

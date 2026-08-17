@@ -4,6 +4,7 @@
   var MAX_CONFIGS = 100;
   var DEFAULT_FAKE_CURSOR_SIZE = 14;
   var DEFAULT_FAKE_CURSOR_STYLE = 'dark-outline';
+  var DEFAULT_SILENT_CURSOR_OFFSET = 5;
   var DEFAULT_SILENT_PROMPT = '请识别图片中所有完整显示的题目。只返回一个 JSON 对象，不要使用 Markdown 代码块，不要输出多余文字。\n' +
     '不要定位到题干空白、横线、输入框、解析区域或未完整显示的题目。\n' +
     '选择题必须返回正确选项本身的位置：bboxPercent 要框住正确选项行，至少包含选项字母圆圈和选项文本；coordinatePercent 要落在这个 bboxPercent 内。\n' +
@@ -45,6 +46,12 @@
 
   function normalizeFakeCursorStyle(value) {
     return value === 'light-outline' ? value : DEFAULT_FAKE_CURSOR_STYLE;
+  }
+
+  function normalizeSilentCursorOffset(value) {
+    var number = Number(value);
+    if (!Number.isFinite(number)) return DEFAULT_SILENT_CURSOR_OFFSET;
+    return Math.max(1, Math.min(Math.round(number), 20));
   }
 
   function validateConfigUrl(value, index) {
@@ -138,7 +145,8 @@
       silentModeEnabled: backup.settings.silentModeEnabled === true,
       silentDebugFrameEnabled: backup.settings.silentDebugFrameEnabled === true,
       fakeCursorSize: normalizeFakeCursorSize(backup.settings.fakeCursorSize),
-      fakeCursorStyle: normalizeFakeCursorStyle(backup.settings.fakeCursorStyle)
+      fakeCursorStyle: normalizeFakeCursorStyle(backup.settings.fakeCursorStyle),
+      silentCursorOffset: normalizeSilentCursorOffset(backup.settings.silentCursorOffset)
     };
   }
 

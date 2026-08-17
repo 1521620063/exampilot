@@ -89,6 +89,7 @@ struct RequestState {
     active: Mutex<Option<(u64, CancellationToken)>>,
 }
 struct SilentState(Mutex<Vec<MouseTarget>>);
+struct SilentCursorOffset(Mutex<i32>);
 struct SelectionCapture {
     image: image::RgbaImage,
     monitor: MonitorInfo,
@@ -108,6 +109,8 @@ struct OverlayStateData {
 struct OverlayState(Mutex<OverlayStateData>);
 struct ShortcutErrors(Mutex<Vec<String>>);
 struct NativeDebugWindows(Mutex<Vec<isize>>);
+
+const DEFAULT_SILENT_CURSOR_OFFSET: i32 = 5;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -330,10 +333,14 @@ fn mouse_location() -> Result<(i32, i32), String> {
     pointer_location()
 }
 
-fn perform_jitter(point: MousePoint) -> Result<(), String> {
+fn normalize_silent_cursor_offset(value: i32) -> i32 {
+    value.clamp(1, 20)
+}
+
+fn perform_jitter(point: MousePoint, offset: i32) -> Result<(), String> {
     let mut enigo = Enigo::new(&Settings::default()).map_err(error)?;
     let (original_x, original_y) = enigo.location().map_err(error)?;
-    let nudged_x = jitter_x(original_x, &point);
+    let nudged_x = jitter_x(original_x, &point, offset);
     enigo
         .move_mouse(
             nudged_x,
@@ -347,9 +354,11 @@ fn perform_jitter(point: MousePoint) -> Result<(), String> {
         .map_err(error)
 }
 
-fn jitter_x(original_x: i32, point: &MousePoint) -> i32 {
+fn jitter_x(original_x: i32, point: &MousePoint, offset: i32) -> i32 {
     let right = (point.x + point.width - 2).max(point.x);
-    (original_x + 5).min(right).max(point.x)
+    (original_x + normalize_silent_cursor_offset(offset))
+        .min(right)
+        .max(point.x)
 }
 
 fn mouse_target(target: &PercentTarget, monitor: &MonitorInfo) -> MouseTarget {
@@ -367,8 +376,9 @@ fn mouse_target(target: &PercentTarget, monitor: &MonitorInfo) -> MouseTarget {
 }
 
 #[tauri::command]
-async fn jitter_mouse(point: MousePoint) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || perform_jitter(point))
+async fn jitter_mouse(point: MousePoint, offset: Option<i32>) -> Result<(), String> {
+    let offset = normalize_silent_cursor_offset(offset.unwrap_or(DEFAULT_SILENT_CURSOR_OFFSET));
+    tauri::async_runtime::spawn_blocking(move || perform_jitter(point, offset))
         .await
         .map_err(error)?
 }
@@ -701,7 +711,10 @@ fn apply_silent_settings(
     app: AppHandle,
     silent_mode_enabled: bool,
     silent_debug_frame_enabled: bool,
+    silent_cursor_offset: i32,
+    cursor_offset: State<'_, SilentCursorOffset>,
 ) -> Result<RuntimeSettingsResult, String> {
+    *cursor_offset.0.lock().map_err(error)? = normalize_silent_cursor_offset(silent_cursor_offset);
     if !silent_mode_enabled {
         app.state::<SilentState>().0.lock().map_err(error)?.clear();
         *app.state::<OverlayState>().0.lock().map_err(error)? = OverlayStateData::default();
@@ -936,8 +949,14 @@ fn start_hover_monitor(app: AppHandle) {
                         })
                     });
                 if let Some(point) = point {
+                    let offset = app
+                        .state::<SilentCursorOffset>()
+                        .0
+                        .lock()
+                        .map(|value| *value)
+                        .unwrap_or(DEFAULT_SILENT_CURSOR_OFFSET);
                     let _ =
-                        tauri::async_runtime::spawn_blocking(move || perform_jitter(point)).await;
+                        tauri::async_runtime::spawn_blocking(move || perform_jitter(point, offset)).await;
                     let _ = app.emit("silent-triggered", ());
                 }
             }
@@ -952,6 +971,7 @@ pub fn run() {
             active: Mutex::new(None),
         })
         .manage(SilentState(Mutex::new(Vec::new())))
+        .manage(SilentCursorOffset(Mutex::new(DEFAULT_SILENT_CURSOR_OFFSET)))
         .manage(SelectionState(Mutex::new(None)))
         .manage(OverlayState(Mutex::new(OverlayStateData::default())))
         .manage(ShortcutErrors(Mutex::new(Vec::new())))
@@ -1097,8 +1117,16 @@ mod tests {
             width: 8,
             height: 24,
         };
-        assert_eq!(jitter_x(106, &point), 106);
-        assert_eq!(jitter_x(96, &point), 101);
+        assert_eq!(jitter_x(106, &point, 5), 106);
+        assert_eq!(jitter_x(96, &point, 5), 101);
+        assert_eq!(jitter_x(96, &point, 20), 106);
+    }
+
+    #[test]
+    fn cursor_offset_is_clamped_to_the_supported_range() {
+        assert_eq!(normalize_silent_cursor_offset(-1), 1);
+        assert_eq!(normalize_silent_cursor_offset(5), 5);
+        assert_eq!(normalize_silent_cursor_offset(99), 20);
     }
 
     #[test]

@@ -14,6 +14,7 @@ export function createDefaultSettings() {
     silentPrompt: DEFAULT_SILENT_PROMPT,
     uiOpacity: 0.95,
     silentModeEnabled: false,
-    silentDebugFrameEnabled: false
+    silentDebugFrameEnabled: false,
+    silentCursorOffset: 5
   };
 }

@@ -5,6 +5,7 @@ var CONFIG_STRING_FIELDS = ['model', 'apiKey', 'customHeadersJson', 'customBodyJ
 function isPlainObject(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
 function requireString(value, label, allowEmpty) { if (typeof value !== 'string' || (!allowEmpty && !value.trim())) throw new Error(label + ' must be ' + (allowEmpty ? 'a string' : 'a non-empty string')); return value; }
 function cursorSize(value) { var size = Number(value); return Number.isFinite(size) ? Math.max(10, Math.min(Math.round(size), 32)) : 14; }
+function silentCursorOffset(value) { var offset = Number(value); return Number.isFinite(offset) ? Math.max(1, Math.min(Math.round(offset), 20)) : 5; }
 function configFromBackup(config, index, usedIds) {
   if (!isPlainObject(config)) throw new Error('Configuration ' + (index + 1) + ' is invalid');
   var id = typeof config.id === 'string' && config.id.trim() ? config.id : 'cfg_import_' + (index + 1);
@@ -31,7 +32,7 @@ export function normalizeSettingsBackup(backup) {
   if (configList.length && !selected) configList[0].selected = true;
   var opacity = Number(settings.uiOpacity);
   if (!Number.isFinite(opacity)) throw new Error('Invalid answer window opacity');
-  return { configList: configList, customPrompt: requireString(settings.customPrompt, 'Prompt', true), silentPrompt: settings.silentPrompt === undefined ? DEFAULT_SILENT_PROMPT : requireString(settings.silentPrompt, 'Silent prompt', true), uiOpacity: Math.max(0, Math.min(opacity, 1)), silentModeEnabled: settings.silentModeEnabled === true, silentDebugFrameEnabled: settings.silentDebugFrameEnabled === true, fakeCursorSize: cursorSize(settings.fakeCursorSize), fakeCursorStyle: settings.fakeCursorStyle === 'light-outline' ? 'light-outline' : 'dark-outline' };
+  return { configList: configList, customPrompt: requireString(settings.customPrompt, 'Prompt', true), silentPrompt: settings.silentPrompt === undefined ? DEFAULT_SILENT_PROMPT : requireString(settings.silentPrompt, 'Silent prompt', true), uiOpacity: Math.max(0, Math.min(opacity, 1)), silentModeEnabled: settings.silentModeEnabled === true, silentDebugFrameEnabled: settings.silentDebugFrameEnabled === true, fakeCursorSize: cursorSize(settings.fakeCursorSize), fakeCursorStyle: settings.fakeCursorStyle === 'light-outline' ? 'light-outline' : 'dark-outline', silentCursorOffset: silentCursorOffset(settings.silentCursorOffset) };
 }
 
 export function createSettingsBackup(settings) {

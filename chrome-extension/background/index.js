@@ -4,6 +4,7 @@ var currentAbortController = null;
 var IS_FULL_ACCESS = __EXAMPILOT_FULL_ACCESS__;
 var DEFAULT_FAKE_CURSOR_SIZE = 14;
 var DEFAULT_FAKE_CURSOR_STYLE = 'dark-outline';
+var DEFAULT_SILENT_CURSOR_OFFSET = 5;
 var DEFAULT_PROMPT = '解析图片中的内容。\n\n如果图片中有题目：\n请识别题目并解答。\n\n严格按照下面格式输出：\n\n题目："xxx"\n\n<br/>\n\n<b>答案："xxx"</b>\n\n不要输出多余内容。';
 var DEFAULT_SILENT_PROMPT = '请识别图片中所有完整显示的题目。只返回一个 JSON 对象，不要使用 Markdown 代码块，不要输出多余文字。\n' +
   '不要定位到题干空白、横线、输入框、解析区域或未完整显示的题目。\n' +
@@ -20,6 +21,12 @@ function normalizeFakeCursorSize(value) {
 
 function normalizeFakeCursorStyle(value) {
   return value === 'light-outline' ? value : DEFAULT_FAKE_CURSOR_STYLE;
+}
+
+function normalizeSilentCursorOffset(value) {
+  var number = Number(value);
+  if (!Number.isFinite(number)) return DEFAULT_SILENT_CURSOR_OFFSET;
+  return Math.max(1, Math.min(Math.round(number), 20));
 }
 
 async function ensureFrameCursorBridge(tabId) {
@@ -191,7 +198,7 @@ async function ensurePromptInitialized() {
 
 /** 首次启动时初始化全局静默模式设置 */
 async function ensureSilentModeInitialized() {
-  var data = await chrome.storage.local.get(['silentModeEnabled', 'silentDebugFrameEnabled', 'fakeCursorSize', 'fakeCursorStyle']);
+  var data = await chrome.storage.local.get(['silentModeEnabled', 'silentDebugFrameEnabled', 'fakeCursorSize', 'fakeCursorStyle', 'silentCursorOffset']);
   var updates = {};
   if (data.silentModeEnabled === undefined) {
     updates.silentModeEnabled = false;
@@ -204,6 +211,9 @@ async function ensureSilentModeInitialized() {
   }
   if (data.fakeCursorStyle === undefined) {
     updates.fakeCursorStyle = DEFAULT_FAKE_CURSOR_STYLE;
+  }
+  if (data.silentCursorOffset === undefined) {
+    updates.silentCursorOffset = DEFAULT_SILENT_CURSOR_OFFSET;
   }
   if (Object.keys(updates).length > 0) {
     await chrome.storage.local.set(updates);
@@ -728,7 +738,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   if (request.action === 'exportSettings') {
     return asyncHandler(async function () {
-      var data = await chrome.storage.local.get(['configList', 'customPrompt', 'silentPrompt', 'uiOpacity', 'silentModeEnabled', 'silentDebugFrameEnabled', 'fakeCursorSize', 'fakeCursorStyle']);
+      var data = await chrome.storage.local.get(['configList', 'customPrompt', 'silentPrompt', 'uiOpacity', 'silentModeEnabled', 'silentDebugFrameEnabled', 'fakeCursorSize', 'fakeCursorStyle', 'silentCursorOffset']);
       var backup = ExamPilotSettingsTransfer.createSettingsBackup({
         configList: data.configList || [],
         customPrompt: data.customPrompt || '',
@@ -737,7 +747,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         silentModeEnabled: data.silentModeEnabled === true,
         silentDebugFrameEnabled: data.silentDebugFrameEnabled === true,
         fakeCursorSize: normalizeFakeCursorSize(data.fakeCursorSize),
-        fakeCursorStyle: normalizeFakeCursorStyle(data.fakeCursorStyle)
+        fakeCursorStyle: normalizeFakeCursorStyle(data.fakeCursorStyle),
+        silentCursorOffset: normalizeSilentCursorOffset(data.silentCursorOffset)
       });
       return { success: true, backup: backup };
     })(request, sender, sendResponse);
