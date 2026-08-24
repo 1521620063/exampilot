@@ -3,11 +3,12 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 var root = join(dirname(fileURLToPath(import.meta.url)), '..');
-var command = join(root, 'node_modules', '.bin', process.platform === 'win32' ? 'tauri.cmd' : 'tauri');
+var command = process.execPath;
 var args = process.argv.slice(2).concat([
   '--config',
   join(root, 'desktop-app', 'src-tauri', 'tauri.conf.json')
 ]);
+args.unshift(join(root, 'node_modules', '@tauri-apps', 'cli', 'tauri.js'));
 var child = spawn(command, args, {
   cwd: root,
   env: {
