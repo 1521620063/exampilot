@@ -116,6 +116,8 @@ struct NativeDebugWindows(Mutex<Vec<isize>>);
 
 const DEFAULT_SILENT_CURSOR_OFFSET: i32 = 5;
 
+const PRIMARY_SHORTCUT_MODIFIER: Modifiers = Modifiers::CONTROL;
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RuntimeSettingsResult {
@@ -938,6 +940,18 @@ fn hide_answer_window(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn toggle_answer_window(app: AppHandle) -> Result<(), String> {
+    let window = app.get_webview_window("answer").ok_or_else(|| "answer window unavailable".to_string())?;
+    if window.is_visible().map_err(error)? {
+        window.hide().map_err(error)
+    } else {
+        window.show().map_err(error)?;
+        window.set_always_on_top(true).map_err(error)?;
+        window.set_visible_on_all_workspaces(true).map_err(error)
+    }
+}
+
+#[tauri::command]
 fn set_answer_opacity(_app: AppHandle, _opacity: f64) -> Result<(), String> {
     // Tauri has no cross-platform native opacity setter. The HUD owns opacity in CSS.
     Ok(())
@@ -1061,7 +1075,7 @@ pub fn run() {
                     if event.state() != ShortcutState::Pressed {
                         return;
                     }
-                    let modifiers = Modifiers::CONTROL | Modifiers::SHIFT;
+                    let modifiers = PRIMARY_SHORTCUT_MODIFIER | Modifiers::SHIFT;
                     let event_name = if shortcut.matches(modifiers, Code::Digit1) {
                         "shortcut-capture-full"
                     } else if shortcut.matches(modifiers, Code::Digit2) {
@@ -1070,6 +1084,8 @@ pub fn run() {
                         "shortcut-switch-config"
                     } else if shortcut.matches(modifiers, Code::Digit4) {
                         "shortcut-clear"
+                    } else if shortcut.matches(modifiers, Code::Digit5) {
+                        "shortcut-toggle-answer"
                     } else {
                         return;
                     };
@@ -1115,6 +1131,7 @@ pub fn run() {
                 "CTRL+SHIFT+2",
                 "CTRL+SHIFT+3",
                 "CTRL+SHIFT+4",
+                "CTRL+SHIFT+5",
             ] {
                 if let Err(register_error) = app.global_shortcut().register(shortcut) {
                     let message = format!("{} 无法注册: {}", shortcut, register_error);
@@ -1149,6 +1166,7 @@ pub fn run() {
             get_shortcut_errors,
             show_answer_window,
             hide_answer_window,
+            toggle_answer_window,
             set_answer_opacity,
             read_settings_backup,
             write_settings_backup
