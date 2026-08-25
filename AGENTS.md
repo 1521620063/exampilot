@@ -3,7 +3,7 @@
 ExamPilot contains two independent applications that share Node.js dependencies and a settings-backup format:
 
 - `chrome-extension/`: Chrome Manifest V3 extension.
-- `desktop-app/`: Tauri 2 desktop application for Windows and macOS.
+- `desktop-app/`: Tauri 2 desktop application for Windows x64 and macOS Apple Silicon (not Intel Mac).
 - `docs/`: project website and privacy policy.
 - `assets/branding/`: source branding assets.
 
@@ -48,6 +48,15 @@ The desktop frontend is built to `desktop-app/dist/`. Tauri configuration and Ru
 - Preserve global shortcuts, native screen capture, region selection, normal and silent modes, Rust HTTP requests, cancellation, native hover targets, and multi-monitor/high-DPI coordinates.
 - Silent mode monitors the real system cursor. Its trigger feedback temporarily moves the real cursor inside the detected target, then restores it.
 - Frontend settings are stored through `desktop-app/src/desktop-api.mjs`; the native runtime behavior is implemented in `desktop-app/src-tauri/src/lib.rs`.
+- The supported release targets are Windows x64 and macOS Apple Silicon only; do not add or document Intel Mac artifacts.
+
+## Desktop Releases and Updates
+
+- Desktop releases are built locally and uploaded manually to the stable GitHub Release; do not restore an automated release workflow unless explicitly requested.
+- The Tauri updater endpoint and public key live in `desktop-app/src-tauri/tauri.conf.json`. The private signing key and its password must remain outside the repository.
+- A stable release must upload the platform package and its matching `.sig` file, then update `latest.json` with the exact version, URL, and signature for each platform. Use `darwin-aarch64` for macOS Apple Silicon and `windows-x86_64` for Windows x64.
+- Keep the release tag, root `package.json`, `desktop-app/src-tauri/Cargo.toml`, and `desktop-app/src-tauri/tauri.conf.json` versions aligned before packaging.
+- The updater downloads an update only after user confirmation and restarts the app to install it. Preserve the non-blocking behavior for check, download, and verification failures.
 
 ## Shared Settings Backups
 

@@ -26,7 +26,7 @@ exampilot/
 - Node.js 20.19+、22.12+ 或更高版本
 - Chrome 或其他兼容 Manifest V3 的 Chromium 浏览器
 - 桌面端开发需要 Rust stable 工具链和对应平台的 Tauri 依赖
-- 桌面端支持 Windows 与 macOS
+- 桌面端支持 Windows x64 与 macOS Apple Silicon（不支持 Intel Mac）
 
 ## 安装依赖
 
@@ -61,6 +61,8 @@ npm run chrome:build:package
 
 桌面端通过系统级截图和真实鼠标位置工作，不依赖浏览器内容脚本。答案窗口透明、始终置顶，可覆盖浏览器全屏，并通过系统托盘打开独立设置窗口。
 
+可从 [GitHub Releases](https://github.com/1521620063/exampilot/releases/latest) 下载最新稳定版：Windows 请使用 x64 安装包，macOS 请使用 Apple Silicon 安装包。
+
 主要功能：
 
 - 捕获鼠标所在显示器或选择屏幕区域
@@ -71,6 +73,7 @@ npm run chrome:build:package
 - 多显示器和高 DPI 坐标换算
 - 配置导入导出，兼容 `exampilot-settings-backup` v1
 - 请求取消、错误记录和最近一次模型原始响应
+- 启动时静默检查稳定版更新；可在设置窗口的“应用更新”中手动检查、下载并重启完成更新
 
 启动桌面开发模式：
 
@@ -100,6 +103,8 @@ npm run tauri:build
 | `Ctrl+Shift+4` | 取消当前任务或清除结果 |
 
 macOS 首次使用截图功能时需要授予“屏幕录制”权限；使用静默鼠标反馈时还需要授予“辅助功能”权限。
+
+自动更新仅在用户确认下载后执行，并需要重启应用完成替换。无网络、取消下载或更新校验失败不会影响截图、AI 请求和已保存的本地配置。
 
 ## 测试与构建
 

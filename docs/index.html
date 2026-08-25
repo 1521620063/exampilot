@@ -706,6 +706,10 @@
           <div><strong>首次运行与权限</strong>macOS 需要为 ExamPilot 授予“屏幕录制”权限；静默鼠标反馈还需要“辅助功能”权限。若启动后快捷键没有反应，请先查看答案窗口或设置窗口中的快捷键占用提示，并关闭占用相同组合键的软件后重启 ExamPilot。</div>
         </div>
         <div class="callout">
+          <span aria-hidden="true">↻</span>
+          <div><strong>应用更新</strong>ExamPilot 会在启动后静默检查最新稳定版；也可以在设置窗口的“应用更新”中手动检查。发现更新后，确认下载并重启即可完成安装。取消下载、无网络或校验失败不会影响当前版本、截图功能或已保存的配置。</div>
+        </div>
+        <div class="callout">
           <span aria-hidden="true">⌘</span>
           <div><strong>从源码运行</strong>先安装 Node.js、Rust stable 和对应平台的 Tauri 依赖，再在仓库根目录运行 <code>npm install</code> 和 <code>npm run tauri:dev</code>。构建安装包使用 <code>npm run tauri:build</code>。</div>
         </div>
@@ -942,6 +946,10 @@
           <details>
             <summary>桌面端如何查看大模型原始返回和错误？</summary>
             <p>打开设置窗口，查看底部的“最近一次模型返回 / 错误”。这里会保留最近一次模型正文、请求错误、解析错误和命中框数量，并提供复制与清空按钮。</p>
+          </details>
+          <details>
+            <summary>桌面端如何更新到最新版本？</summary>
+            <p>应用启动后会静默检查最新稳定版。也可以从系统托盘打开“设置”，在“应用更新”区域点击“检查更新”；确认后下载，完成时应用会重启并替换为新版本。Windows 使用 x64 安装包，macOS 仅支持 Apple Silicon。</p>
           </details>
           <details>
             <summary>点击扩展图标后没有出现面板</summary>
