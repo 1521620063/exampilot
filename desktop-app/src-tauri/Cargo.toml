@@ -1,6 +1,6 @@
 [package]
 name = "exampilot-desktop"
-version = "1.7.5"
+version = "1.8.0"
 description = "ExamPilot desktop client"
 authors = ["ExamPilot"]
 edition = "2021"
@@ -27,6 +27,8 @@ tauri-plugin-store = "2.4.4"
 tokio = { version = "1", features = ["time"] }
 tokio-util = "0.7.19"
 xcap = "0.9.8"
+tauri-plugin-updater = "2.9.0"
+tauri-plugin-process = "2.3.1"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_UI_WindowsAndMessaging"] }

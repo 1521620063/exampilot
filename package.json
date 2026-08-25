@@ -1,7 +1,7 @@
 {
   "name": "exampilot",
   "private": true,
-  "version": "1.7.5",
+  "version": "1.8.0",
   "scripts": {
     "build": "npm run chrome:build && npm run desktop:build",
     "test": "npm run chrome:test && npm run desktop:test",
@@ -11,13 +11,16 @@
     "desktop:dev": "vite --config desktop-app/vite.config.mjs",
     "desktop:build": "vite build --config desktop-app/vite.config.mjs",
     "desktop:test": "node --test desktop-app/test/*.test.mjs",
+    "version:check": "node scripts/check-version.mjs",
     "tauri:dev": "node scripts/tauri-with-local-cargo.mjs dev",
     "tauri:build": "node scripts/tauri-with-local-cargo.mjs build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-dialog": "^2.7.2",
+    "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-store": "^2.4.4",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "htm": "^3.1.1",
     "preact": "^10.26.0"
   },

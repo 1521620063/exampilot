@@ -14,6 +14,7 @@ import { buildSilentPrompt, mapTargetsToMonitor, normalizeSilentResult } from '.
 import { validateConfigField } from './shared/config-validation.mjs';
 import { getDefaultTemplateBodyJson, getDefaultTemplateHeadersJson, getDefaultTemplateResponseText } from './shared/template-engine.mjs';
 import * as settingsTransfer from './shared/settings-transfer.mjs';
+import { checkForUpdate, currentVersion, downloadAndInstall, formatUpdateError, progressPercent, progressState, updateDetails } from './updater.mjs';
 import './styles.css';
 
 var html = htm.bind(h);
@@ -107,6 +108,9 @@ function AnswerApp() {
     });
     getShortcutErrors().then(function (errors) {
       if (errors && errors.length) setStatus('快捷键被占用：' + errors.map(function (item) { return item.split(' ')[0]; }).join('、'));
+    }).catch(function () {});
+    checkForUpdate().then(function (update) {
+      if (update) emit('app-update-available', updateDetails(update)).catch(function () {});
     }).catch(function () {});
     var unlisten = [];
     Promise.all([
@@ -350,6 +354,11 @@ function SettingsApp() {
   var state = useState(createDefaultSettings()), settings = state[0], setSettings = state[1];
   var messageState = useState(''), message = messageState[0], setMessage = messageState[1];
   var responseState = useState(null), lastResponse = responseState[0], setLastResponse = responseState[1];
+  var versionState = useState('读取中…'), version = versionState[0], setVersion = versionState[1];
+  var updateState = useState(null), update = updateState[0], setUpdate = updateState[1];
+  var updateBusyState = useState(false), updateBusy = updateBusyState[0], setUpdateBusy = updateBusyState[1];
+  var updateProgressState = useState(null), updateProgress = updateProgressState[0], setUpdateProgress = updateProgressState[1];
+  var updateRef = useRef(null);
   var settingsRef = useRef(settings);
   function updateLocalSettings(next) {
     settingsRef.current = next;
@@ -362,10 +371,22 @@ function SettingsApp() {
       return applySilentSettings(saved.silentModeEnabled === true, saved.silentDebugFrameEnabled === true, saved.silentCursorOffset);
     }).catch(function (error) { setMessage(error.message || String(error)); });
     loadLastModelResponse().then(setLastResponse).catch(function () {});
+    currentVersion().then(setVersion).catch(function () { setVersion('未知'); });
+    checkForUpdate().then(function (available) {
+      if (available) { updateRef.current = available; setUpdate(updateDetails(available)); }
+    }).catch(function () {});
     listen('settings-updated', function (event) { updateLocalSettings(event.payload); }).then(function (fn) { unlisten = fn; }).catch(function () {});
+    var unlistenUpdate = null;
+    listen('app-update-available', function (event) {
+      setUpdate(event.payload);
+      setMessage('发现新版本 ' + event.payload.version + '，请在下方确认更新。');
+      checkForUpdate().then(function (available) {
+        if (available) { updateRef.current = available; setUpdate(updateDetails(available)); }
+      }).catch(function () {});
+    }).then(function (fn) { unlistenUpdate = fn; }).catch(function () {});
     var unlistenResponse = null;
     listen('model-response-updated', function (event) { setLastResponse(event.payload); }).then(function (fn) { unlistenResponse = fn; }).catch(function () {});
-    return function () { if (unlisten) unlisten(); if (unlistenResponse) unlistenResponse(); };
+    return function () { if (unlisten) unlisten(); if (unlistenResponse) unlistenResponse(); if (unlistenUpdate) unlistenUpdate(); };
   }, []);
   var config = activeConfig(settings);
   async function persist(next) {
@@ -443,12 +464,36 @@ function SettingsApp() {
     try { await saveLastModelResponse(null); setLastResponse(null); setMessage('模型原始返回已清空'); }
     catch (error) { showError(error); }
   }
+  async function checkForUpdates() {
+    try {
+      setMessage('正在检查更新…');
+      var available = await checkForUpdate();
+      if (!available) { setUpdate(null); updateRef.current = null; setMessage('当前已是最新版本'); return; }
+      updateRef.current = available;
+      setUpdate(updateDetails(available));
+      setMessage('发现新版本 ' + available.version);
+    } catch (error) { setMessage(formatUpdateError(error)); }
+  }
+  async function installUpdate() {
+    var available = updateRef.current;
+    if (!available || updateBusy) return;
+    if (!window.confirm('将下载并安装 ExamPilot ' + available.version + '，完成后应用会重启。是否继续？')) return;
+    try {
+      setUpdateBusy(true); setUpdateProgress({ downloaded: 0, total: null, finished: false }); setMessage('正在下载更新…');
+      await downloadAndInstall(available, function (event) {
+        setUpdateProgress(function (state) { return progressState(event, state); });
+      });
+    } catch (error) {
+      setUpdateBusy(false); setMessage(formatUpdateError(error));
+    }
+  }
   return html`<main class="settings-page">
     <header><div><h1>ExamPilot 设置</h1><p>答案窗口默认显示在屏幕右下角，可拖动调整位置。</p></div><div class="settings-actions"><button onClick=${addConfig}>添加配置</button><button onClick=${doImport}>导入</button><button onClick=${doExport}>导出</button></div></header>
     <p class="settings-security-note">导入和导出文件包含 API Key，请勿分享或上传到公共位置。</p>
     ${message ? html`<p class="settings-message">${message}</p>` : null}
     <section class="settings-grid"><aside><h2>AI 配置</h2>${settings.configList.map(function (item) { return html`<div class=${item.selected ? 'config-item active' : 'config-item'} onClick=${function () { selectConfig(item.id); }}><span>${item.name || '未命名配置'}</span><button class="config-delete" title="删除" onClick=${function (event) { event.stopPropagation(); deleteConfig(item.id); }}>删除</button></div>`; })}</aside><div>${config ? html`<${ConfigEditor} key=${config.id} config=${config} update=${updateConfig} updateMany=${updateConfigFields} previewPrompt=${settings.silentModeEnabled ? settings.silentPrompt : settings.customPrompt} />` : html`<p class="empty-config">添加一个 AI 配置后即可开始使用。</p>`}</div></section>
     <section class="preferences"><h2>识别与界面</h2><label class="toggle"><input type="checkbox" checked=${settings.silentModeEnabled === true} onChange=${function (e) { patchSettings('silentModeEnabled', e.currentTarget.checked); }} />静默模式</label><label class="toggle"><input type="checkbox" checked=${settings.silentDebugFrameEnabled === true} onChange=${function (e) { patchSettings('silentDebugFrameEnabled', e.currentTarget.checked); }} />显示静默命中框</label><label>${'\u771F\u5B9E\u5149\u6807\u89E6\u53D1\u53F3\u79FB'}<input type="number" min="1" max="20" step="1" value=${settings.silentCursorOffset} onChange=${function (e) { patchSettings('silentCursorOffset', Number(e.currentTarget.value)); }} /></label><label>答案窗口透明度 ${Math.round(uiOpacity(settings.uiOpacity) * 100)}%<input type="range" min="0" max="100" step="1" value=${Math.round(uiOpacity(settings.uiOpacity) * 100)} onInput=${function (e) { patchSettings('uiOpacity', Number(e.currentTarget.value) / 100); }} /></label><div class="prompt-head"><strong>普通提示词</strong><button type="button" onClick=${function () { patchSettings('customPrompt', DEFAULT_PROMPT); }}>恢复默认</button></div><textarea value=${settings.customPrompt || ''} onInput=${function (e) { patchSettings('customPrompt', e.currentTarget.value); }} /><div class="prompt-head"><strong>静默提示词</strong><button type="button" onClick=${function () { patchSettings('silentPrompt', DEFAULT_SILENT_PROMPT); }}>恢复默认</button></div><textarea value=${settings.silentPrompt || ''} onInput=${function (e) { patchSettings('silentPrompt', e.currentTarget.value); }} /></section>
+    <section class="preferences app-update"><div class="model-response-head"><div><h2>应用更新</h2><p>当前版本：${version}</p></div><button type="button" disabled=${updateBusy} onClick=${checkForUpdates}>检查更新</button></div>${update ? html`<div class="update-details"><p>发现新版本：${update.version}${update.date ? ' · ' + new Date(update.date).toLocaleDateString() : ''}</p>${update.body ? html`<pre>${update.body}</pre>` : null}<button type="button" disabled=${updateBusy} onClick=${installUpdate}>${updateBusy ? updateProgress && progressPercent(updateProgress) !== null ? '下载中 ' + progressPercent(updateProgress) + '%' : '下载中…' : '下载并重启更新'}</button></div>` : html`<p>点击“检查更新”获取最新稳定版。</p>`}</section>
     <section class="model-response"><div class="model-response-head"><div><h2>最近一次模型返回 / 错误</h2>${lastResponse ? html`<p>${new Date(lastResponse.receivedAt).toLocaleString()} · ${lastResponse.configName} · ${lastResponse.silent ? '静默模式' : '普通模式'}${lastResponse.targetCount !== null ? ' · 命中框 ' + lastResponse.targetCount + ' 个' : ''}</p>` : null}</div><div class="settings-actions"><button disabled=${!lastResponse} onClick=${copyLastResponse}>复制</button><button disabled=${!lastResponse} onClick=${clearLastResponse}>清空</button></div></div>${lastResponse && lastResponse.requestError ? html`<p class="response-error">运行错误：${lastResponse.requestError}</p>` : null}${lastResponse && lastResponse.parseError ? html`<p class="response-error">解析错误：${lastResponse.parseError}</p>` : null}<textarea readonly value=${lastResponse ? lastResponse.content || '本次请求没有收到模型正文' : '尚未收到模型返回或错误'}></textarea></section>
   </main>`;
 }

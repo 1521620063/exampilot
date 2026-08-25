@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Default capability for ExamPilot windows",
   "windows": ["answer", "settings", "overlay", "debug-target-*"],
-  "permissions": ["core:default", "core:window:allow-start-dragging", "store:default", "dialog:default"]
+  "permissions": ["core:default", "core:window:allow-start-dragging", "store:default", "dialog:default", "updater:default", "process:default"]
 }
