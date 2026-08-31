@@ -189,7 +189,8 @@ fn image_data_url(image: image::RgbaImage) -> Result<String, String> {
 
 #[cfg(target_os = "macos")]
 fn pointer_location() -> Result<(i32, i32), String> {
-    use core_graphics::event::{CGEvent, CGEventSource, CGEventSourceStateID};
+    use core_graphics::event::CGEvent;
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 
     // Reading the pointer does not require Accessibility permission. Keep that
     // permission limited to the silent-mode mouse movement path.
@@ -430,9 +431,8 @@ fn normalize_silent_cursor_offset(value: i32) -> i32 {
 
 #[cfg(target_os = "macos")]
 fn perform_jitter(point: MousePoint, offset: i32) -> Result<(), String> {
-    use core_graphics::event::{
-        CGEvent, CGEventSource, CGEventSourceStateID, CGEventType, CGMouseButton,
-    };
+    use core_graphics::event::{CGEvent, CGEventType, CGMouseButton};
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
     use core_graphics::geometry::CGPoint;
 
     let source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState)
