@@ -6,7 +6,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   applySilentSettings, beginRegionSelection, cancelRequest, captureCurrentMonitor, captureRegion, clearOverlayTargets,
   copyText, exportSettings, finishRegionSelection, getOverlayState, getShortcutErrors, hideAnswerWindow, hideCaptureUi, importSettings, loadSettings, overlayReady,
-  loadLastModelResponse, postJson, saveLastModelResponse, saveSettings, setAnswerOpacity, setOverlayTargets, showAnswerWindow, toggleAnswerWindow
+  loadLastModelResponse, postJson, saveLastModelResponse, saveSettings, setAnswerOpacity, setOverlayTargets, showAnswerWindow
 } from './desktop-api.mjs';
 import { buildRequest, extractAnswer } from './ai-client.mjs';
 import { createDefaultSettings, DEFAULT_PROMPT, DEFAULT_SILENT_PROMPT } from './defaults.mjs';
@@ -118,9 +118,6 @@ function AnswerApp() {
       listen('shortcut-capture-region', function () { startRegionCapture(); }),
       listen('shortcut-switch-config', function () { switchConfig(); }),
       listen('shortcut-clear', function () { clearResults(); }),
-      listen('shortcut-toggle-answer', function () {
-        if (!settingsRef.current.silentModeEnabled) toggleAnswerWindow().catch(function () {});
-      }),
       listen('region-selected', function (event) { processCapture(event.payload.rect); }),
       listen('region-cancelled', function () {
         operationRef.current += 1;
@@ -129,6 +126,7 @@ function AnswerApp() {
         (settingsRef.current.silentModeEnabled ? hideAnswerWindow() : showAnswerWindow()).catch(function () {});
       }),
       listen('silent-triggered', function () { setStatus('静默模式已触发'); }),
+      listen('silent-trigger-failed', function (event) { setStatus('静默模式触发失败：' + event.payload); }),
       listen('settings-updated', function (event) {
         applySettings(event.payload);
         setAnswerOpacity(uiOpacity(event.payload.uiOpacity)).catch(function () {});

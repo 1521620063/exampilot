@@ -9,6 +9,7 @@ use std::{
 };
 
 use base64::{engine::general_purpose::STANDARD, Engine};
+#[cfg(not(target_os = "macos"))]
 use enigo::{Coordinate, Enigo, Mouse, Settings};
 use image::{codecs::jpeg::JpegEncoder, DynamicImage};
 use reqwest::Client;
@@ -21,10 +22,11 @@ use tauri::utils::config::Color;
 use tauri::PhysicalSize;
 use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewUrl, WebviewWindowBuilder,
+    WindowEvent,
 };
 #[cfg(target_os = "macos")]
 use tauri::{LogicalPosition, LogicalSize};
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, ShortcutState};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tokio_util::sync::CancellationToken;
 use xcap::Monitor;
 
@@ -92,6 +94,7 @@ struct RequestState {
     active: Mutex<Option<(u64, CancellationToken)>>,
 }
 struct SilentState(Mutex<Vec<MouseTarget>>);
+struct SilentModeState(Mutex<bool>);
 struct SilentCursorOffset(Mutex<i32>);
 struct SelectionCapture {
     image: image::RgbaImage,
@@ -184,6 +187,20 @@ fn image_data_url(image: image::RgbaImage) -> Result<String, String> {
     Ok(format!("data:image/jpeg;base64,{}", STANDARD.encode(bytes)))
 }
 
+#[cfg(target_os = "macos")]
+fn pointer_location() -> Result<(i32, i32), String> {
+    use core_graphics::event::{CGEvent, CGEventSource, CGEventSourceStateID};
+
+    // Reading the pointer does not require Accessibility permission. Keep that
+    // permission limited to the silent-mode mouse movement path.
+    let source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState)
+        .map_err(|_| "无法创建 macOS 鼠标事件源".to_string())?;
+    let event = CGEvent::new(source).map_err(|_| "无法读取 macOS 鼠标位置".to_string())?;
+    let location = event.location();
+    Ok((location.x.round() as i32, location.y.round() as i32))
+}
+
+#[cfg(not(target_os = "macos"))]
 fn pointer_location() -> Result<(i32, i32), String> {
     let enigo = Enigo::new(&Settings::default()).map_err(error)?;
     enigo.location().map_err(error)
@@ -411,6 +428,34 @@ fn normalize_silent_cursor_offset(value: i32) -> i32 {
     value.clamp(1, 20)
 }
 
+#[cfg(target_os = "macos")]
+fn perform_jitter(point: MousePoint, offset: i32) -> Result<(), String> {
+    use core_graphics::event::{
+        CGEvent, CGEventSource, CGEventSourceStateID, CGEventType, CGMouseButton,
+    };
+    use core_graphics::geometry::CGPoint;
+
+    let source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState)
+        .map_err(|_| "无法创建 macOS 鼠标事件源".to_string())?;
+    let current = CGEvent::new(source.clone())
+        .map_err(|_| "无法读取 macOS 鼠标位置".to_string())?
+        .location();
+    let original_x = current.x.round() as i32;
+    let original_y = current.y.round() as i32;
+    let nudged_x = jitter_x(original_x, &point, offset);
+    let nudged_y = original_y.clamp(point.y, point.y + point.height - 1);
+    let event = CGEvent::new_mouse_event(
+        source,
+        CGEventType::MouseMoved,
+        CGPoint::new(nudged_x as f64, nudged_y as f64),
+        CGMouseButton::Left,
+    )
+    .map_err(|_| "无法创建 macOS 鼠标移动事件".to_string())?;
+    event.post(core_graphics::event::CGEventTapLocation::HID);
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
 fn perform_jitter(point: MousePoint, offset: i32) -> Result<(), String> {
     let mut enigo = Enigo::new(&Settings::default()).map_err(error)?;
     let (original_x, original_y) = enigo.location().map_err(error)?;
@@ -421,7 +466,8 @@ fn perform_jitter(point: MousePoint, offset: i32) -> Result<(), String> {
             original_y.clamp(point.y, point.y + point.height - 1),
             Coordinate::Abs,
         )
-        .map_err(error)
+        .map_err(error)?;
+    Ok(())
 }
 
 fn jitter_x(original_x: i32, point: &MousePoint, offset: i32) -> i32 {
@@ -788,6 +834,7 @@ fn apply_silent_settings(
     silent_cursor_offset: i32,
     cursor_offset: State<'_, SilentCursorOffset>,
 ) -> Result<RuntimeSettingsResult, String> {
+    *app.state::<SilentModeState>().0.lock().map_err(error)? = silent_mode_enabled;
     *cursor_offset.0.lock().map_err(error)? = normalize_silent_cursor_offset(silent_cursor_offset);
     if !silent_mode_enabled {
         app.state::<SilentState>().0.lock().map_err(error)?.clear();
@@ -939,9 +986,10 @@ fn hide_answer_window(app: AppHandle) -> Result<(), String> {
     window.hide().map_err(error)
 }
 
-#[tauri::command]
-fn toggle_answer_window(app: AppHandle) -> Result<(), String> {
-    let window = app.get_webview_window("answer").ok_or_else(|| "answer window unavailable".to_string())?;
+fn toggle_answer_window(app: &AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("answer")
+        .ok_or_else(|| "answer window unavailable".to_string())?;
     if window.is_visible().map_err(error)? {
         window.hide().map_err(error)
     } else {
@@ -975,10 +1023,197 @@ fn show_settings(app: &AppHandle) {
     }
 }
 
+fn shortcut_event_name(shortcut: &Shortcut, modifiers: Modifiers) -> Option<&'static str> {
+    if shortcut.matches(modifiers, Code::Digit1) || shortcut.matches(modifiers, Code::Numpad1) {
+        Some("shortcut-capture-full")
+    } else if shortcut.matches(modifiers, Code::Digit2)
+        || shortcut.matches(modifiers, Code::Numpad2)
+    {
+        Some("shortcut-capture-region")
+    } else if shortcut.matches(modifiers, Code::Digit3)
+        || shortcut.matches(modifiers, Code::Numpad3)
+    {
+        Some("shortcut-switch-config")
+    } else if shortcut.matches(modifiers, Code::Digit4)
+        || shortcut.matches(modifiers, Code::Numpad4)
+    {
+        Some("shortcut-clear")
+    } else if shortcut.matches(modifiers, Code::Digit5)
+        || shortcut.matches(modifiers, Code::Numpad5)
+    {
+        Some("shortcut-toggle-answer")
+    } else {
+        None
+    }
+}
+
+fn dispatch_shortcut_event(app: &AppHandle, event_name: &str) {
+    if event_name == "shortcut-toggle-answer" {
+        let silent_mode = app
+            .state::<SilentModeState>()
+            .0
+            .lock()
+            .map(|value| *value)
+            .unwrap_or(false);
+        if !silent_mode {
+            let _ = toggle_answer_window(app);
+        }
+    } else {
+        let _ = app.emit(event_name, ());
+    }
+}
+
+#[cfg(windows)]
+unsafe extern "system" fn native_shortcut_window_proc(
+    hwnd: windows_sys::Win32::Foundation::HWND,
+    message: u32,
+    wparam: windows_sys::Win32::Foundation::WPARAM,
+    _lparam: windows_sys::Win32::Foundation::LPARAM,
+) -> windows_sys::Win32::Foundation::LRESULT {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        DefWindowProcW, GetWindowLongPtrW, SetWindowLongPtrW, GWLP_USERDATA, WM_DESTROY, WM_HOTKEY,
+    };
+
+    unsafe {
+        if message == WM_HOTKEY {
+            let event_name = match wparam {
+                1 | 11 | 21 => Some("shortcut-capture-full"),
+                2 | 12 | 22 => Some("shortcut-capture-region"),
+                3 | 13 | 23 => Some("shortcut-switch-config"),
+                4 | 14 | 24 => Some("shortcut-clear"),
+                5 | 15 | 25 => Some("shortcut-toggle-answer"),
+                _ => None,
+            };
+            let app = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const AppHandle;
+            if let (Some(event_name), app) = (event_name, app) {
+                if !app.is_null() {
+                    dispatch_shortcut_event(&*app, event_name);
+                }
+            }
+            return 0;
+        }
+
+        if message == WM_DESTROY {
+            let app = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut AppHandle;
+            if !app.is_null() {
+                drop(Box::from_raw(app));
+                SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+            }
+        }
+
+        DefWindowProcW(hwnd, message, wparam, _lparam)
+    }
+}
+
+#[cfg(windows)]
+fn register_windows_numpad_fallbacks(app: &AppHandle) -> Result<(), String> {
+    use std::{ptr, sync::OnceLock};
+    use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        RegisterHotKey, UnregisterHotKey, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, VK_CLEAR, VK_DOWN,
+        VK_END, VK_LEFT, VK_NEXT, VK_NUMPAD1, VK_NUMPAD2, VK_NUMPAD3, VK_NUMPAD4, VK_NUMPAD5,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        CreateWindowExW, DestroyWindow, RegisterClassW, SetWindowLongPtrW, GWLP_USERDATA,
+        HWND_MESSAGE, WNDCLASSW,
+    };
+
+    static CLASS_READY: OnceLock<Result<(), String>> = OnceLock::new();
+    let class_name: Vec<u16> = "ExamPilotNativeShortcuts\0".encode_utf16().collect();
+    match CLASS_READY.get_or_init(|| unsafe {
+        let instance = GetModuleHandleW(ptr::null());
+        let class = WNDCLASSW {
+            lpfnWndProc: Some(native_shortcut_window_proc),
+            hInstance: instance,
+            lpszClassName: class_name.as_ptr(),
+            ..Default::default()
+        };
+        if RegisterClassW(&class) == 0 {
+            Err(format!(
+                "注册小键盘快捷键窗口失败：{}",
+                std::io::Error::last_os_error()
+            ))
+        } else {
+            Ok(())
+        }
+    }) {
+        Ok(()) => {}
+        Err(message) => return Err(message.clone()),
+    }
+
+    let title: Vec<u16> = "ExamPilot shortcuts\0".encode_utf16().collect();
+    let hwnd = unsafe {
+        CreateWindowExW(
+            0,
+            class_name.as_ptr(),
+            title.as_ptr(),
+            0,
+            0,
+            0,
+            0,
+            0,
+            HWND_MESSAGE,
+            ptr::null_mut(),
+            GetModuleHandleW(ptr::null()),
+            ptr::null(),
+        )
+    };
+    if hwnd.is_null() {
+        return Err(format!(
+            "创建小键盘快捷键窗口失败：{}",
+            std::io::Error::last_os_error()
+        ));
+    }
+
+    let fallbacks: [(i32, u16, &str); 10] = [
+        (11, VK_NUMPAD1, "CTRL+SHIFT+NUM1"),
+        (12, VK_NUMPAD2, "CTRL+SHIFT+NUM2"),
+        (13, VK_NUMPAD3, "CTRL+SHIFT+NUM3"),
+        (14, VK_NUMPAD4, "CTRL+SHIFT+NUM4"),
+        (15, VK_NUMPAD5, "CTRL+SHIFT+NUM5"),
+        (21, VK_END, "CTRL+SHIFT+NUM1"),
+        (22, VK_DOWN, "CTRL+SHIFT+NUM2"),
+        (23, VK_NEXT, "CTRL+SHIFT+NUM3"),
+        (24, VK_LEFT, "CTRL+SHIFT+NUM4"),
+        (25, VK_CLEAR, "CTRL+SHIFT+NUM5"),
+    ];
+    for (index, (id, key, label)) in fallbacks.iter().enumerate() {
+        if unsafe {
+            RegisterHotKey(
+                hwnd,
+                *id,
+                MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT,
+                *key as u32,
+            )
+        } == 0
+        {
+            for (registered_id, _, _) in fallbacks.iter().take(index) {
+                unsafe { UnregisterHotKey(hwnd, *registered_id) };
+            }
+            unsafe { DestroyWindow(hwnd) };
+            return Err(format!(
+                "{} 无法注册: {}",
+                label,
+                std::io::Error::last_os_error()
+            ));
+        }
+    }
+
+    unsafe {
+        SetWindowLongPtrW(
+            hwnd,
+            GWLP_USERDATA,
+            Box::into_raw(Box::new(app.clone())) as isize,
+        )
+    };
+    Ok(())
+}
+
 fn start_hover_monitor(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut entered_at: Option<Instant> = None;
         let mut active: Option<usize> = None;
+        let mut last_jitter_failure: Option<Instant> = None;
         loop {
             tokio::time::sleep(Duration::from_millis(40)).await;
             let location = tauri::async_runtime::spawn_blocking(pointer_location)
@@ -1011,9 +1246,15 @@ fn start_hover_monitor(app: AppHandle) {
                 }
                 active = target;
                 entered_at = active.map(|_| Instant::now());
+                last_jitter_failure = None;
             }
             if let (Some(index), Some(start)) = (active, entered_at) {
                 if start.elapsed() < Duration::from_millis(350) {
+                    continue;
+                }
+                if last_jitter_failure
+                    .is_some_and(|failed_at| failed_at.elapsed() < Duration::from_secs(1))
+                {
                     continue;
                 }
                 let point = app
@@ -1026,7 +1267,6 @@ fn start_hover_monitor(app: AppHandle) {
                         if item.fired {
                             return None;
                         }
-                        item.fired = true;
                         Some(MousePoint {
                             x: item.x,
                             y: item.y,
@@ -1041,9 +1281,24 @@ fn start_hover_monitor(app: AppHandle) {
                         .lock()
                         .map(|value| *value)
                         .unwrap_or(DEFAULT_SILENT_CURSOR_OFFSET);
-                    let _ =
-                        tauri::async_runtime::spawn_blocking(move || perform_jitter(point, offset))
-                            .await;
+                    let jitter_result = match tauri::async_runtime::spawn_blocking(move || {
+                        perform_jitter(point, offset)
+                    })
+                    .await
+                    {
+                        Ok(result) => result,
+                        Err(join_error) => Err(error(join_error)),
+                    };
+                    if let Err(message) = jitter_result {
+                        last_jitter_failure = Some(Instant::now());
+                        let _ = app.emit("silent-trigger-failed", message);
+                        continue;
+                    }
+                    if let Ok(mut targets) = app.state::<SilentState>().0.lock() {
+                        if let Some(item) = targets.get_mut(index) {
+                            item.fired = true;
+                        }
+                    }
                     let _ = app.emit("silent-triggered", ());
                 }
             }
@@ -1058,6 +1313,7 @@ pub fn run() {
             active: Mutex::new(None),
         })
         .manage(SilentState(Mutex::new(Vec::new())))
+        .manage(SilentModeState(Mutex::new(false)))
         .manage(SilentCursorOffset(Mutex::new(DEFAULT_SILENT_CURSOR_OFFSET)))
         .manage(SelectionState(Mutex::new(None)))
         .manage(OverlayState(Mutex::new(OverlayStateData::default())))
@@ -1065,6 +1321,14 @@ pub fn run() {
     #[cfg(windows)]
     let builder = builder.manage(NativeDebugWindows(Mutex::new(Vec::new())));
     builder
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "settings" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
@@ -1076,20 +1340,10 @@ pub fn run() {
                         return;
                     }
                     let modifiers = PRIMARY_SHORTCUT_MODIFIER | Modifiers::SHIFT;
-                    let event_name = if shortcut.matches(modifiers, Code::Digit1) {
-                        "shortcut-capture-full"
-                    } else if shortcut.matches(modifiers, Code::Digit2) {
-                        "shortcut-capture-region"
-                    } else if shortcut.matches(modifiers, Code::Digit3) {
-                        "shortcut-switch-config"
-                    } else if shortcut.matches(modifiers, Code::Digit4) {
-                        "shortcut-clear"
-                    } else if shortcut.matches(modifiers, Code::Digit5) {
-                        "shortcut-toggle-answer"
-                    } else {
+                    let Some(event_name) = shortcut_event_name(shortcut, modifiers) else {
                         return;
                     };
-                    let _ = app.emit(event_name, ());
+                    dispatch_shortcut_event(app, event_name);
                 })
                 .build(),
         )
@@ -1143,6 +1397,31 @@ pub fn run() {
                         .push(message);
                 }
             }
+            #[cfg(not(windows))]
+            for shortcut in [
+                "CTRL+SHIFT+NUM1",
+                "CTRL+SHIFT+NUM2",
+                "CTRL+SHIFT+NUM3",
+                "CTRL+SHIFT+NUM4",
+                "CTRL+SHIFT+NUM5",
+            ] {
+                if let Err(register_error) = app.global_shortcut().register(shortcut) {
+                    let message = format!("{} 无法注册: {}", shortcut, register_error);
+                    eprintln!("{}", message);
+                    app.state::<ShortcutErrors>()
+                        .0
+                        .lock()
+                        .map_err(|_| "快捷键状态锁不可用")?
+                        .push(message);
+                }
+            }
+            #[cfg(windows)]
+            if let Err(message) = register_windows_numpad_fallbacks(app.handle()) {
+                eprintln!("{}", message);
+                if let Ok(mut errors) = app.state::<ShortcutErrors>().0.lock() {
+                    errors.push(message);
+                }
+            }
             start_hover_monitor(app.handle().clone());
             Ok(())
         })
@@ -1166,7 +1445,6 @@ pub fn run() {
             get_shortcut_errors,
             show_answer_window,
             hide_answer_window,
-            toggle_answer_window,
             set_answer_opacity,
             read_settings_backup,
             write_settings_backup
@@ -1297,6 +1575,31 @@ mod tests {
         assert_eq!(rect.y, 491.0);
         assert_eq!(rect.width, 100.0);
         assert_eq!(rect.height, 50.0);
+    }
+
+    #[test]
+    fn global_shortcuts_accept_main_and_numpad_digits() {
+        let modifiers = PRIMARY_SHORTCUT_MODIFIER | Modifiers::SHIFT;
+        let cases = [
+            (Code::Digit1, Code::Numpad1, "shortcut-capture-full"),
+            (Code::Digit2, Code::Numpad2, "shortcut-capture-region"),
+            (Code::Digit3, Code::Numpad3, "shortcut-switch-config"),
+            (Code::Digit4, Code::Numpad4, "shortcut-clear"),
+            (Code::Digit5, Code::Numpad5, "shortcut-toggle-answer"),
+        ];
+
+        for (digit, numpad, event_name) in cases {
+            let digit_shortcut = Shortcut::new(Some(modifiers), digit);
+            let numpad_shortcut = Shortcut::new(Some(modifiers), numpad);
+            assert_eq!(
+                shortcut_event_name(&digit_shortcut, modifiers),
+                Some(event_name)
+            );
+            assert_eq!(
+                shortcut_event_name(&numpad_shortcut, modifiers),
+                Some(event_name)
+            );
+        }
     }
 
     #[test]

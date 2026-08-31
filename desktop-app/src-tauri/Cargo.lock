@@ -1240,6 +1240,7 @@ version = "1.8.0"
 dependencies = [
  "arboard",
  "base64 0.22.1",
+ "core-graphics",
  "enigo",
  "image",
  "reqwest 0.12.28",

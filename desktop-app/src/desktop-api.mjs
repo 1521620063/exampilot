@@ -85,5 +85,4 @@ export function finishRegionSelection() { return invoke('finish_region_selection
 export function hideCaptureUi() { return invoke('hide_capture_ui'); }
 export function showAnswerWindow() { return invoke('show_answer_window'); }
 export function hideAnswerWindow() { return invoke('hide_answer_window'); }
-export function toggleAnswerWindow() { return invoke('toggle_answer_window'); }
 export function setAnswerOpacity(opacity) { return invoke('set_answer_opacity', { opacity: opacity }); }
