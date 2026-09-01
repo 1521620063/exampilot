@@ -302,7 +302,8 @@ fn capture_rect_from_physical(
 }
 
 /// 将两个全局屏幕坐标换算成某块显示器内的选区坐标。
-/// macOS 的屏幕坐标是逻辑坐标；其他平台则直接使用物理像素坐标。
+/// macOS 的屏幕坐标已经是逻辑坐标；Windows 的屏幕坐标是物理像素，
+/// 必须先除以 DPI，避免 physical_crop_rect 再次缩放。
 fn region_rect_from_screen_points(
     start: (i32, i32),
     end: (i32, i32),
@@ -314,11 +315,25 @@ fn region_rect_from_screen_points(
     let start_y = (i64::from(start.1) - i64::from(monitor.y)).clamp(0, monitor_height);
     let end_x = (i64::from(end.0) - i64::from(monitor.x)).clamp(0, monitor_width);
     let end_y = (i64::from(end.1) - i64::from(monitor.y)).clamp(0, monitor_height);
-    Rect {
+    let physical_rect = Rect {
         x: start_x.min(end_x) as f64,
         y: start_y.min(end_y) as f64,
         width: (start_x - end_x).unsigned_abs() as f64,
         height: (start_y - end_y).unsigned_abs() as f64,
+    };
+    #[cfg(windows)]
+    {
+        let scale = f64::from(monitor.scale_factor.max(1.0));
+        return Rect {
+            x: physical_rect.x / scale,
+            y: physical_rect.y / scale,
+            width: physical_rect.width / scale,
+            height: physical_rect.height / scale,
+        };
+    }
+    #[cfg(not(windows))]
+    {
+        physical_rect
     }
 }
 
@@ -1486,12 +1501,12 @@ unsafe extern "system" fn native_shortcut_window_proc(
 /// Windows 小键盘快捷键兜底：tauri global-shortcut 不支持小键盘数字，
 /// 改用原生 RegisterHotKey 在隐藏消息窗口上注册 CTRL+SHIFT+NUM1~5。
 #[cfg(windows)]
-fn register_windows_numpad_fallbacks(app: &AppHandle) -> Result<(), String> {
+fn register_windows_numpad_fallbacks(app: &AppHandle) -> Result<Vec<String>, String> {
     use std::{ptr, sync::OnceLock};
     use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-        RegisterHotKey, UnregisterHotKey, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, VK_CLEAR, VK_DOWN,
-        VK_END, VK_LEFT, VK_NEXT, VK_NUMPAD1, VK_NUMPAD2, VK_NUMPAD3, VK_NUMPAD4, VK_NUMPAD5,
+        RegisterHotKey, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, VK_CLEAR, VK_DOWN, VK_END, VK_LEFT,
+        VK_NEXT, VK_NUMPAD1, VK_NUMPAD2, VK_NUMPAD3, VK_NUMPAD4, VK_NUMPAD5,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DestroyWindow, RegisterClassW, SetWindowLongPtrW, GWLP_USERDATA,
@@ -1558,26 +1573,25 @@ fn register_windows_numpad_fallbacks(app: &AppHandle) -> Result<(), String> {
         (24, VK_LEFT, "CTRL+SHIFT+NUM4"),
         (25, VK_CLEAR, "CTRL+SHIFT+NUM5"),
     ];
-    for (index, (id, key, label)) in fallbacks.iter().enumerate() {
-        if unsafe {
-            RegisterHotKey(
-                hwnd,
-                *id,
-                MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT,
-                *key as u32,
-            )
-        } == 0
+    let mut errors = Vec::new();
+    let mut registered_count = 0;
+    for (id, key, label) in fallbacks {
+        if unsafe { RegisterHotKey(hwnd, id, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, key as u32) }
+            == 0
         {
-            for (registered_id, _, _) in fallbacks.iter().take(index) {
-                unsafe { UnregisterHotKey(hwnd, *registered_id) };
-            }
-            unsafe { DestroyWindow(hwnd) };
-            return Err(format!(
+            errors.push(format!(
                 "{} 无法注册: {}",
                 label,
                 std::io::Error::last_os_error()
             ));
+        } else {
+            registered_count += 1;
         }
+    }
+
+    if registered_count == 0 {
+        unsafe { DestroyWindow(hwnd) };
+        return Ok(errors);
     }
 
     unsafe {
@@ -1587,7 +1601,7 @@ fn register_windows_numpad_fallbacks(app: &AppHandle) -> Result<(), String> {
             Box::into_raw(Box::new(app.clone())) as isize,
         )
     };
-    Ok(())
+    Ok(errors)
 }
 
 /// 静默模式核心循环：每 40ms 轮询光标位置，进入命中区停留 350ms 后微移真实光标并广播触发事件。
@@ -1827,10 +1841,20 @@ pub fn run() {
             }
             // Windows：小键盘快捷键走原生 RegisterHotKey 兜底。
             #[cfg(windows)]
-            if let Err(message) = register_windows_numpad_fallbacks(app.handle()) {
-                eprintln!("{}", message);
-                if let Ok(mut errors) = app.state::<ShortcutErrors>().0.lock() {
-                    errors.push(message);
+            match register_windows_numpad_fallbacks(app.handle()) {
+                Ok(messages) => {
+                    for message in messages {
+                        eprintln!("{}", message);
+                        if let Ok(mut errors) = app.state::<ShortcutErrors>().0.lock() {
+                            errors.push(message);
+                        }
+                    }
+                }
+                Err(message) => {
+                    eprintln!("{}", message);
+                    if let Ok(mut errors) = app.state::<ShortcutErrors>().0.lock() {
+                        errors.push(message);
+                    }
                 }
             }
             start_hover_monitor(app.handle().clone());
@@ -2089,6 +2113,28 @@ mod tests {
         assert_eq!(bottom_right.y, 900.0);
         assert_eq!(bottom_right.width, 120.0);
         assert_eq!(bottom_right.height, 180.0);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_keyboard_region_rect_is_not_scaled_twice_at_high_dpi() {
+        let monitor = MonitorInfo {
+            id: 1,
+            x: -3840,
+            y: 0,
+            width: 3840,
+            height: 2160,
+            scale_factor: 2.0,
+        };
+        let rect = region_rect_from_screen_points((-3640, 100), (-2840, 700), &monitor);
+        assert_eq!(rect.x, 100.0);
+        assert_eq!(rect.y, 50.0);
+        assert_eq!(rect.width, 400.0);
+        assert_eq!(rect.height, 300.0);
+        assert_eq!(
+            physical_crop_rect(&rect, &monitor, 3840, 2160),
+            (200, 100, 800, 600)
+        );
     }
 
     #[test]
