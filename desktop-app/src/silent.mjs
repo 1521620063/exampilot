@@ -36,7 +36,10 @@ function normalizeItem(item) {
   if (point) {
     var px = percent(point.x, 'coordinatePercent.x'); var py = percent(point.y, 'coordinatePercent.y');
     if (box && (px < x || px > x + width || py < y || py > y + height)) throw new Error('coordinatePercent 必须落在 bboxPercent 内');
-    if (!box) { x = Math.max(0, px - width / 2); y = Math.max(0, py - height / 2); }
+    if (!box) {
+      x = Math.min(Math.max(0, px - width / 2), 1 - width);
+      y = Math.min(Math.max(0, py - height / 2), 1 - height);
+    }
   }
   return { questionNumber: String(item.questionNumber || item.question || ''), answer: String(answer), clipboardOnly: false, target: { x: x, y: y, width: width, height: height } };
 }

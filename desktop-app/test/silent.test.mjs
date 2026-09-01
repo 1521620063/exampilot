@@ -27,3 +27,11 @@ test('maps cropped-image targets back to monitor coordinates', function () {
   });
   assert.deepEqual(targets[0], { x: 0.375, y: 0.5, width: 0.25, height: 0.125 });
 });
+
+test('keeps point-only targets inside the screenshot at the bottom-right edge', function () {
+  var result = normalizeSilentResult(JSON.stringify({
+    answer: 'A',
+    coordinatePercent: { x: 1, y: 1 }
+  }));
+  assert.deepEqual(result.targets[0].target, { x: 0.98, y: 0.98, width: 0.02, height: 0.02 });
+});

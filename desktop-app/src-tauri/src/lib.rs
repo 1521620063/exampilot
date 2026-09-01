@@ -478,15 +478,31 @@ fn jitter_x(original_x: i32, point: &MousePoint, offset: i32) -> i32 {
 }
 
 fn mouse_target(target: &PercentTarget, monitor: &MonitorInfo) -> MouseTarget {
+    let monitor_width = monitor.width.max(1).min(i32::MAX as u32) as i32;
+    let monitor_height = monitor.height.max(1).min(i32::MAX as u32) as i32;
+    let width = (target.width.clamp(0.001, 1.0) * f64::from(monitor.width))
+        .round()
+        .max(8.0)
+        .min(f64::from(monitor_width)) as i32;
+    let height = (target.height.clamp(0.001, 1.0) * f64::from(monitor.height))
+        .round()
+        .max(8.0)
+        .min(f64::from(monitor_height)) as i32;
+    let x = monitor.x
+        .saturating_add(
+            (target.x.clamp(0.0, 1.0) * f64::from(monitor.width)).round() as i32,
+        )
+        .clamp(monitor.x, monitor.x.saturating_add(monitor_width - width));
+    let y = monitor.y
+        .saturating_add(
+            (target.y.clamp(0.0, 1.0) * f64::from(monitor.height)).round() as i32,
+        )
+        .clamp(monitor.y, monitor.y.saturating_add(monitor_height - height));
     MouseTarget {
-        x: monitor.x + (target.x.clamp(0.0, 1.0) * f64::from(monitor.width)).round() as i32,
-        y: monitor.y + (target.y.clamp(0.0, 1.0) * f64::from(monitor.height)).round() as i32,
-        width: (target.width.clamp(0.001, 1.0) * f64::from(monitor.width))
-            .round()
-            .max(8.0) as i32,
-        height: (target.height.clamp(0.001, 1.0) * f64::from(monitor.height))
-            .round()
-            .max(8.0) as i32,
+        x,
+        y,
+        width,
+        height,
         fired: false,
     }
 }
@@ -1480,6 +1496,29 @@ mod tests {
         assert_eq!(target.y, 270);
         assert_eq!(target.width, 384);
         assert_eq!(target.height, 108);
+    }
+
+    #[test]
+    fn percent_target_is_clamped_inside_monitor_bounds() {
+        let monitor = MonitorInfo {
+            id: 1,
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 80,
+            scale_factor: 1.0,
+        };
+        let target = mouse_target(
+            &PercentTarget {
+                x: 1.0,
+                y: 1.0,
+                width: 0.02,
+                height: 0.02,
+            },
+            &monitor,
+        );
+        assert_eq!(target.x + target.width, 100);
+        assert_eq!(target.y + target.height, 80);
     }
 
     #[test]

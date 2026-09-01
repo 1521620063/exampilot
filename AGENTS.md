@@ -46,7 +46,7 @@ The desktop frontend is built to `desktop-app/dist/`. Tauri configuration and Ru
 
 - The desktop app uses a transparent, always-on-top answer window plus a separate settings window.
 - Preserve global shortcuts, native screen capture, region selection, normal and silent modes, Rust HTTP requests, cancellation, native hover targets, and multi-monitor/high-DPI coordinates.
-- Silent mode monitors the real system cursor. Its trigger feedback temporarily moves the real cursor inside the detected target, then restores it.
+- Silent mode monitors the real system cursor. Its trigger feedback moves the real cursor inside the detected target and leaves it there.
 - Frontend settings are stored through `desktop-app/src/desktop-api.mjs`; the native runtime behavior is implemented in `desktop-app/src-tauri/src/lib.rs`.
 - The supported release targets are Windows x64 and macOS Apple Silicon only; do not add or document Intel Mac artifacts.
 
