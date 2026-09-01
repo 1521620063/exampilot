@@ -3,11 +3,10 @@ import { h, render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import htm from 'htm';
 import { emit, listen } from '@tauri-apps/api/event';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   applySilentSettings, beginRegionSelection, cancelRequest, captureCurrentMonitor, captureRegion, clearOverlayTargets,
   copyText, exportSettings, finishRegionSelection, getOverlayState, getShortcutErrors, hideAnswerWindow, hideCaptureUi, importSettings, loadSettings, overlayReady,
-  loadLastModelResponse, postJson, saveLastModelResponse, saveSettings, setAnswerOpacity, setOverlayTargets, showAnswerWindow
+  loadLastModelResponse, postJson, saveLastModelResponse, saveSettings, setAnswerOpacity, setAnswerScrollKeysEnabled, setOverlayTargets, showAnswerWindow
 } from './desktop-api.mjs';
 import { buildRequest, extractAnswer } from './ai-client.mjs';
 import { createDefaultSettings, DEFAULT_PROMPT, DEFAULT_SILENT_PROMPT } from './defaults.mjs';
@@ -74,11 +73,6 @@ function nextConfig(settings) {
   return Object.assign({}, settings, { configList: list.map(function (item, itemIndex) { return Object.assign({}, item, { selected: itemIndex === (index + 1) % list.length }); }) });
 }
 
-function startAnswerDragging(event) {
-  if (event.button !== 0) return;
-  getCurrentWindow().startDragging().catch(function () {});
-}
-
 function AnswerApp() {
   var settingsState = useState(createDefaultSettings()), settings = settingsState[0], setSettings = settingsState[1];
   var statusState = useState('准备就绪'), status = statusState[0], setStatus = statusState[1];
@@ -87,6 +81,9 @@ function AnswerApp() {
   var settingsRef = useRef(settings);
   var settingsVersionRef = useRef(0);
   var busyRef = useRef(busy);
+  var answerContentRef = useRef(null);
+  var answerWindowVisibleRef = useRef(false);
+  var answerScrollKeysUpdateRef = useRef(Promise.resolve());
   // 操作序号：每次新截图/清除自增，用于丢弃过期的异步结果
   var operationRef = useRef(0);
 
@@ -102,6 +99,14 @@ function AnswerApp() {
   function updateBusy(next) {
     busyRef.current = next;
     setBusy(next);
+  }
+
+  // 将注册/注销请求串行化，避免答案快速更新时异步调用乱序。
+  function updateAnswerScrollKeys(enabled) {
+    answerScrollKeysUpdateRef.current = answerScrollKeysUpdateRef.current
+      .catch(function () {})
+      .then(function () { return setAnswerScrollKeysEnabled(enabled); });
+    return answerScrollKeysUpdateRef.current;
   }
 
   useEffect(function () {
@@ -123,10 +128,15 @@ function AnswerApp() {
     var unlisten = [];
     Promise.all([
       listen('shortcut-capture-full', function () { startFullCapture(); }),
-      listen('shortcut-capture-region', function () { startRegionCapture(); }),
       listen('shortcut-switch-config', function () { switchConfig(); }),
       listen('shortcut-clear', function () { clearResults(); }),
       listen('region-selected', function (event) { processCapture(event.payload.rect); }),
+      listen('region-selection-failed', function (event) {
+        operationRef.current += 1;
+        updateBusy(false);
+        setStatus('区域截图失败：' + (event.payload || '未知错误'));
+        (settingsRef.current.silentModeEnabled ? hideAnswerWindow() : showAnswerWindow()).catch(function () {});
+      }),
       listen('region-cancelled', function () {
         operationRef.current += 1;
         updateBusy(false);
@@ -135,6 +145,20 @@ function AnswerApp() {
       }),
       listen('silent-triggered', function () { setStatus('静默模式已触发'); }),
       listen('silent-trigger-failed', function (event) { setStatus('静默模式触发失败：' + event.payload); }),
+      listen('answer-scroll-up', function () {
+        if (answerContentRef.current) answerContentRef.current.scrollBy({ top: -72, behavior: 'smooth' });
+      }),
+      listen('answer-scroll-down', function () {
+        if (answerContentRef.current) answerContentRef.current.scrollBy({ top: 72, behavior: 'smooth' });
+      }),
+      listen('answer-window-shown', function () {
+        answerWindowVisibleRef.current = true;
+        syncAnswerScrollKeys().catch(function () {});
+      }),
+      listen('answer-window-hidden', function () {
+        answerWindowVisibleRef.current = false;
+        updateAnswerScrollKeys(false).catch(function () {});
+      }),
       listen('settings-updated', function (event) {
         applySettings(event.payload);
         setAnswerOpacity(uiOpacity(event.payload.uiOpacity)).catch(function () {});
@@ -142,6 +166,29 @@ function AnswerApp() {
     ]).then(function (items) { unlisten = items; });
     return function () { unlisten.forEach(function (fn) { fn(); }); };
   }, []);
+
+  function syncAnswerScrollKeys() {
+    var content = answerContentRef.current;
+    return updateAnswerScrollKeys(answerWindowVisibleRef.current && !!content && content.scrollHeight > content.clientHeight);
+  }
+
+  useEffect(function () {
+    var content = answerContentRef.current;
+    if (!content) {
+      syncAnswerScrollKeys().catch(function () {});
+      return;
+    }
+    function syncScrollKeys() {
+      syncAnswerScrollKeys().catch(function () {});
+    }
+    syncScrollKeys();
+    var observer = new ResizeObserver(syncScrollKeys);
+    observer.observe(content);
+    return function () {
+      observer.disconnect();
+      updateAnswerScrollKeys(false).catch(function () {});
+    };
+  }, [answer]);
 
   function persist(next) {
     applySettings(next);
@@ -180,20 +227,13 @@ function AnswerApp() {
     } catch (error) { finishWithError(error, operation); }
   }
 
-  async function startRegionCapture() {
+  async function processCapture(rect) {
     if (busyRef.current) await cancelRequest().catch(function () {});
     var operation = operationRef.current + 1;
     operationRef.current = operation;
     await clearOverlayTargets().catch(function () {});
-    setAnswer(''); setStatus('请选择截图区域'); updateBusy(true);
-    try { await beginRegionSelection(); }
-    catch (error) { finishWithError(error, operation); }
-  }
-
-  async function processCapture(rect) {
-    var operation = operationRef.current;
+    setAnswer(''); setStatus('截图中...'); updateBusy(true);
     try {
-      setStatus('截图中...');
       var capture = await captureRegion(rect);
       await finishRegionSelection();
       await processCaptureData(capture, operation);
@@ -273,33 +313,36 @@ function AnswerApp() {
 
   return html`
     <main class="answer-hud" style=${{ opacity: uiOpacity(settings.uiOpacity) }}>
-      <div class="answer-drag-region answer-drag-strip" onMouseDown=${startAnswerDragging}></div>
-      ${answer ? html`<article class="answer-content" dangerouslySetInnerHTML=${{ __html: sanitizeAnswer(answer) }}></article>` : null}
+      ${answer ? html`<article class="answer-content" ref=${answerContentRef} dangerouslySetInnerHTML=${{ __html: sanitizeAnswer(answer) }}></article>` : null}
     </main>
   `;
 }
 
-// 截图遮罩窗口：在全屏截图上拖拽框选区域
+// 截图遮罩窗口：保留供面板区域截图使用；桌面全局快捷键采用两点键盘选区，不显示遮罩。
 function OverlayApp() {
-  var overlayState = useState({ selecting: false, previewDataUrl: '', start: null, rect: null }), overlay = overlayState[0], setOverlay = overlayState[1];
+  var overlayState = useState({ selecting: false, start: null, rect: null }), overlay = overlayState[0], setOverlay = overlayState[1];
   useEffect(function () {
     var unlisten = [];
     getOverlayState().then(function (saved) {
-      setOverlay({ selecting: saved.selecting === true, previewDataUrl: saved.previewDataUrl || '', start: null, rect: null });
+      setOverlay({ selecting: saved.selecting === true, start: null, rect: null });
       if (saved.selecting === true) return overlayReady();
     }).catch(function () {});
     Promise.all([
       listen('region-selection', function () {
         getOverlayState().then(function (saved) {
-          setOverlay({ selecting: true, previewDataUrl: saved.previewDataUrl || '', start: null, rect: null });
+          setOverlay({ selecting: true, start: null, rect: null });
           return overlayReady();
         }).catch(function () {});
+      }),
+      listen('region-cancel-request', function () {
+        finishRegionSelection().then(function () { return emit('region-cancelled'); }).catch(function () {});
+        setOverlay({ selecting: false, start: null, rect: null });
       })
     ]).then(function (items) { unlisten = items; });
     function onKeyDown(event) {
       if (event.key !== 'Escape') return;
       finishRegionSelection().then(function () { return emit('region-cancelled'); }).catch(function () {});
-      setOverlay({ selecting: false, previewDataUrl: '', start: null, rect: null });
+      setOverlay({ selecting: false, start: null, rect: null });
     }
     window.addEventListener('keydown', onKeyDown);
     unlisten.push(function () { window.removeEventListener('keydown', onKeyDown); });
@@ -321,7 +364,7 @@ function OverlayApp() {
     await emit('region-selected', { rect: overlay.rect });
     setOverlay(Object.assign({}, overlay, { selecting: false, start: null, rect: null }));
   }
-  return html`<main class=${overlay.selecting ? 'screen-overlay selecting' : 'screen-overlay'} style=${overlay.previewDataUrl ? { backgroundImage: 'url("' + overlay.previewDataUrl + '")' } : null} onMouseDown=${down} onMouseMove=${move} onMouseUp=${up}>
+  return html`<main class=${overlay.selecting ? 'screen-overlay selecting' : 'screen-overlay'} onMouseDown=${down} onMouseMove=${move} onMouseUp=${up}>
     ${overlay.selecting && overlay.rect ? html`<div class="selection-box" style=${{ left: overlay.rect.x + 'px', top: overlay.rect.y + 'px', width: overlay.rect.width + 'px', height: overlay.rect.height + 'px' }}></div>` : null}
   </main>`;
 }
@@ -502,7 +545,7 @@ function SettingsApp() {
     }
   }
   return html`<main class="settings-page">
-    <header><div><h1>ExamPilot 设置</h1><p>答案窗口默认显示在屏幕右下角，可拖动调整位置。</p></div><div class="settings-actions"><button onClick=${addConfig}>添加配置</button><button onClick=${doImport}>导入</button><button onClick=${doExport}>导出</button></div></header>
+    <header><div><h1>ExamPilot 设置</h1><p>答案窗口默认显示在屏幕右下角，点击穿透；内容较长时使用键盘 ↑/↓ 滚动。</p></div><div class="settings-actions"><button onClick=${addConfig}>添加配置</button><button onClick=${doImport}>导入</button><button onClick=${doExport}>导出</button></div></header>
     <p class="settings-security-note">导入和导出文件包含 API Key，请勿分享或上传到公共位置。</p>
     ${message ? html`<p class="settings-message">${message}</p>` : null}
     <section class="settings-grid"><aside><h2>AI 配置</h2>${settings.configList.map(function (item) { return html`<div class=${item.selected ? 'config-item active' : 'config-item'} onClick=${function () { selectConfig(item.id); }}><span>${item.name || '未命名配置'}</span><button class="config-delete" title="删除" onClick=${function (event) { event.stopPropagation(); deleteConfig(item.id); }}>删除</button></div>`; })}</aside><div>${config ? html`<${ConfigEditor} key=${config.id} config=${config} update=${updateConfig} updateMany=${updateConfigFields} previewPrompt=${settings.silentModeEnabled ? settings.silentPrompt : settings.customPrompt} />` : html`<p class="empty-config">添加一个 AI 配置后即可开始使用。</p>`}</div></section>

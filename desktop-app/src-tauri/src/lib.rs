@@ -122,6 +122,17 @@ struct SelectionCapture {
 }
 /// 区域截图缓存（None 表示没有进行中的区域选择）。
 struct SelectionState(Mutex<Option<SelectionCapture>>);
+/// 键盘区域截图：按下 Ctrl+Shift+2 时记录起点，松开时以终点完成截图。
+struct KeyboardRegionSelectionState {
+    active: Mutex<Option<KeyboardRegionSelection>>,
+    generation: AtomicU64,
+}
+
+struct KeyboardRegionSelection {
+    start: (i32, i32),
+    started_at: Instant,
+    generation: u64,
+}
 
 /// 覆盖层窗口的展示状态，前端通过 get_overlay_state 拉取。
 #[derive(Clone, Debug, Default, Serialize)]
@@ -131,13 +142,16 @@ struct OverlayStateData {
     debug: bool,
     selecting: bool,
     monitor: Option<MonitorInfo>,
-    preview_data_url: Option<String>,
 }
 
 /// 覆盖层状态的共享容器。
 struct OverlayState(Mutex<OverlayStateData>);
+/// 区域选择期间临时注册的 Esc 快捷键状态。
+struct RegionSelectionEscapeState(Mutex<bool>);
 /// 全局快捷键注册失败信息列表，供设置页展示。
 struct ShortcutErrors(Mutex<Vec<String>>);
+/// 答案内容溢出时临时注册的上下滚动快捷键状态。
+struct AnswerScrollKeysState(Mutex<bool>);
 /// Windows 原生调试命中框的 HWND 列表。
 #[cfg(windows)]
 struct NativeDebugWindows(Mutex<Vec<isize>>);
@@ -284,6 +298,27 @@ fn capture_rect_from_physical(
         y: f64::from(y) / scale,
         width: f64::from(width) / scale,
         height: f64::from(height) / scale,
+    }
+}
+
+/// 将两个全局屏幕坐标换算成某块显示器内的选区坐标。
+/// macOS 的屏幕坐标是逻辑坐标；其他平台则直接使用物理像素坐标。
+fn region_rect_from_screen_points(
+    start: (i32, i32),
+    end: (i32, i32),
+    monitor: &MonitorInfo,
+) -> Rect {
+    let monitor_width = i64::from(monitor.width);
+    let monitor_height = i64::from(monitor.height);
+    let start_x = (i64::from(start.0) - i64::from(monitor.x)).clamp(0, monitor_width);
+    let start_y = (i64::from(start.1) - i64::from(monitor.y)).clamp(0, monitor_height);
+    let end_x = (i64::from(end.0) - i64::from(monitor.x)).clamp(0, monitor_width);
+    let end_y = (i64::from(end.1) - i64::from(monitor.y)).clamp(0, monitor_height);
+    Rect {
+        x: start_x.min(end_x) as f64,
+        y: start_y.min(end_y) as f64,
+        width: (start_x - end_x).unsigned_abs() as f64,
+        height: (start_y - end_y).unsigned_abs() as f64,
     }
 }
 
@@ -548,15 +583,13 @@ fn mouse_target(target: &PercentTarget, monitor: &MonitorInfo) -> MouseTarget {
         .round()
         .max(8.0)
         .min(f64::from(monitor_height)) as i32;
-    let x = monitor.x
-        .saturating_add(
-            (target.x.clamp(0.0, 1.0) * f64::from(monitor.width)).round() as i32,
-        )
+    let x = monitor
+        .x
+        .saturating_add((target.x.clamp(0.0, 1.0) * f64::from(monitor.width)).round() as i32)
         .clamp(monitor.x, monitor.x.saturating_add(monitor_width - width));
-    let y = monitor.y
-        .saturating_add(
-            (target.y.clamp(0.0, 1.0) * f64::from(monitor.height)).round() as i32,
-        )
+    let y = monitor
+        .y
+        .saturating_add((target.y.clamp(0.0, 1.0) * f64::from(monitor.height)).round() as i32)
         .clamp(monitor.y, monitor.y.saturating_add(monitor_height - height));
     MouseTarget {
         x,
@@ -599,6 +632,8 @@ fn create_overlay(app: &AppHandle, monitor: &MonitorInfo) -> Result<tauri::Webvi
     .always_on_top(true)
     .skip_taskbar(true)
     .focused(false)
+    // 覆盖层需要接收鼠标事件，但不能激活窗口，否则会让用户当前操作的应用失焦。
+    .focusable(false)
     // On Windows an undecorated but resizable window keeps the invisible
     // WS_THICKFRAME resize border, which insets the webview client area and
     // shifts the mask away from the screen's left/top edge. The overlay never
@@ -619,6 +654,22 @@ fn create_overlay(app: &AppHandle, monitor: &MonitorInfo) -> Result<tauri::Webvi
     .map_err(error)?;
     window.set_ignore_cursor_events(true).map_err(error)?;
     Ok(window)
+}
+
+/// 显示选区覆盖层但不激活 ExamPilot（macOS 的 `show` 会调用 makeKeyAndOrderFront）。
+#[cfg(target_os = "macos")]
+fn show_overlay_window(app: &AppHandle, window: &tauri::WebviewWindow) -> Result<(), String> {
+    let ns_window = window.ns_window().map_err(error)? as usize;
+    app.run_on_main_thread(move || unsafe {
+        let window = &*(ns_window as *mut objc2_app_kit::NSWindow);
+        window.orderFrontRegardless();
+    })
+    .map_err(error)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn show_overlay_window(_app: &AppHandle, window: &tauri::WebviewWindow) -> Result<(), String> {
+    window.show().map_err(error)
 }
 
 /// 隐藏 debug-target-* 调试窗口（非 Windows：遍历 webview 窗口）。
@@ -886,7 +937,6 @@ fn set_overlay_targets(
         debug,
         selecting: false,
         monitor: Some(monitor.clone()),
-        preview_data_url: None,
     };
     hide_debug_windows(&app)?;
     if debug {
@@ -935,17 +985,11 @@ fn apply_silent_settings(
         app.state::<SilentState>().0.lock().map_err(error)?.clear();
         *app.state::<OverlayState>().0.lock().map_err(error)? = OverlayStateData::default();
         hide_debug_windows(&app)?;
-        if let Some(window) = app.get_webview_window("answer") {
-            window.show().map_err(error)?;
-            window.set_always_on_top(true).map_err(error)?;
-            window.set_visible_on_all_workspaces(true).map_err(error)?;
-        }
+        show_answer_window(app.clone())?;
         return Ok(RuntimeSettingsResult { target_count: 0 });
     }
 
-    if let Some(window) = app.get_webview_window("answer") {
-        window.hide().map_err(error)?;
-    }
+    hide_answer_window(app.clone())?;
     let overlay_state_handle = app.state::<OverlayState>();
     let overlay_state = {
         let mut stored = overlay_state_handle.0.lock().map_err(error)?;
@@ -968,6 +1012,12 @@ fn apply_silent_settings(
 /// 清空全部命中区并隐藏覆盖层与调试框。
 #[tauri::command]
 fn clear_overlay_targets(app: AppHandle, state: State<'_, SilentState>) -> Result<(), String> {
+    let _ = update_region_selection_escape(&app, false);
+    let keyboard_selection = app.state::<KeyboardRegionSelectionState>();
+    keyboard_selection
+        .generation
+        .fetch_add(1, Ordering::Relaxed);
+    keyboard_selection.active.lock().map_err(error)?.take();
     state.0.lock().map_err(error)?.clear();
     *app.state::<OverlayState>().0.lock().map_err(error)? = OverlayStateData::default();
     close_debug_windows(&app)?;
@@ -977,7 +1027,100 @@ fn clear_overlay_targets(app: AppHandle, state: State<'_, SilentState>) -> Resul
     Ok(())
 }
 
-/// 开始区域选择：截取鼠标所在显示器整屏作为底图，弹出覆盖层并通知前端。
+/// 快捷键区域截图开始时仅隐藏 ExamPilot 自身窗口并记录鼠标起点。
+/// 这里不能调用会注销全局快捷键的逻辑，避免在快捷键回调中发生阻塞。
+fn begin_keyboard_region_selection(app: &AppHandle) -> Result<(), String> {
+    let start = pointer_location()?;
+    if let Some(window) = app.get_webview_window("answer") {
+        window.hide().map_err(error)?;
+        let _ = app.emit("answer-window-hidden", ());
+    }
+    if let Some(window) = app.get_webview_window("overlay") {
+        window.hide().map_err(error)?;
+    }
+    hide_debug_windows(app)?;
+
+    let state = app.state::<KeyboardRegionSelectionState>();
+    let generation = state.generation.fetch_add(1, Ordering::Relaxed) + 1;
+    *state.active.lock().map_err(error)? = Some(KeyboardRegionSelection {
+        start,
+        started_at: Instant::now(),
+        generation,
+    });
+    Ok(())
+}
+
+/// 释放 Ctrl+Shift+2 后，按两个鼠标位置在起点所在显示器截取矩形区域。
+fn finish_keyboard_region_selection(app: &AppHandle) {
+    let state = app.state::<KeyboardRegionSelectionState>();
+    let selection = match state.active.lock() {
+        Ok(mut active) => active.take(),
+        Err(_) => None,
+    };
+    let Some(selection) = selection else {
+        return;
+    };
+    let end = match pointer_location() {
+        Ok(point) => point,
+        Err(capture_error) => {
+            let _ = app.emit("region-selection-failed", capture_error);
+            return;
+        }
+    };
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        // 给隐藏的答案窗口一个完整的合成帧，避免它出现在截图中。
+        let elapsed = selection.started_at.elapsed();
+        let generation = selection.generation;
+        let start = selection.start;
+        if elapsed < Duration::from_millis(100) {
+            tokio::time::sleep(Duration::from_millis(100) - elapsed).await;
+        }
+        let result = tauri::async_runtime::spawn_blocking(move || {
+            let monitor = Monitor::from_point(start.0, start.1).map_err(error)?;
+            let info = monitor_info(&monitor)?;
+            let rect = region_rect_from_screen_points(start, end, &info);
+            if rect.width < 5.0 || rect.height < 5.0 {
+                return Ok::<_, String>(None);
+            }
+            let image = monitor.capture_image().map_err(error)?;
+            Ok(Some((
+                SelectionCapture {
+                    image,
+                    monitor: info,
+                },
+                rect,
+            )))
+        })
+        .await
+        .map_err(error);
+
+        if app
+            .state::<KeyboardRegionSelectionState>()
+            .generation
+            .load(Ordering::Relaxed)
+            != generation
+        {
+            return;
+        }
+        match result {
+            Ok(Ok(Some((capture, rect)))) => {
+                if let Ok(mut slot) = app.state::<SelectionState>().0.lock() {
+                    *slot = Some(capture);
+                    let _ = app.emit("region-selected", serde_json::json!({ "rect": rect }));
+                }
+            }
+            Ok(Ok(None)) => {
+                let _ = app.emit("region-cancelled", ());
+            }
+            Ok(Err(capture_error)) | Err(capture_error) => {
+                let _ = app.emit("region-selection-failed", capture_error);
+            }
+        }
+    });
+}
+
+/// 开始区域选择：缓存鼠标所在显示器整屏以供裁剪，弹出透明覆盖层并通知前端。
 #[tauri::command]
 async fn begin_region_selection(
     app: AppHandle,
@@ -986,12 +1129,11 @@ async fn begin_region_selection(
     hide_capture_windows(&app)?;
     // 等待答题/调试窗口完全隐藏后再截屏，避免 UI 入镜。
     tokio::time::sleep(Duration::from_millis(100)).await;
-    let (image, info, preview_data_url) = tauri::async_runtime::spawn_blocking(|| {
+    let (image, info) = tauri::async_runtime::spawn_blocking(|| {
         let monitor = current_monitor()?;
         let info = monitor_info(&monitor)?;
         let image = monitor.capture_image().map_err(error)?;
-        let preview_data_url = image_data_url(image.clone())?;
-        Ok::<_, String>((image, info, preview_data_url))
+        Ok::<_, String>((image, info))
     })
     .await
     .map_err(error)??;
@@ -1005,15 +1147,14 @@ async fn begin_region_selection(
         debug: false,
         selecting: true,
         monitor: Some(info.clone()),
-        preview_data_url: Some(preview_data_url),
     };
+    let _ = update_region_selection_escape(&app, true);
     overlay.emit("region-selection", &info).map_err(error)?;
-    overlay.show().map_err(error)?;
-    overlay.set_focus().map_err(error)?;
+    show_overlay_window(&app, &overlay)?;
     Ok(info)
 }
 
-/// 覆盖层前端就绪回调：选区模式下允许接收鼠标事件并聚焦。
+/// 覆盖层前端就绪回调：选区模式下允许接收鼠标事件，但不激活窗口。
 #[tauri::command]
 fn overlay_ready(app: AppHandle, state: State<'_, OverlayState>) -> Result<(), String> {
     let overlay_state = state.0.lock().map_err(error)?.clone();
@@ -1024,10 +1165,7 @@ fn overlay_ready(app: AppHandle, state: State<'_, OverlayState>) -> Result<(), S
     overlay
         .set_ignore_cursor_events(!overlay_state.selecting)
         .map_err(error)?;
-    overlay.show().map_err(error)?;
-    if overlay_state.selecting {
-        overlay.set_focus().map_err(error)?;
-    }
+    show_overlay_window(&app, &overlay)?;
     Ok(())
 }
 
@@ -1037,6 +1175,12 @@ fn finish_region_selection(
     app: AppHandle,
     selection: State<'_, SelectionState>,
 ) -> Result<(), String> {
+    let _ = update_region_selection_escape(&app, false);
+    let keyboard_selection = app.state::<KeyboardRegionSelectionState>();
+    keyboard_selection
+        .generation
+        .fetch_add(1, Ordering::Relaxed);
+    keyboard_selection.active.lock().map_err(error)?.take();
     selection.0.lock().map_err(error)?.take();
     *app.state::<OverlayState>().0.lock().map_err(error)? = OverlayStateData::default();
     if let Some(window) = app.get_webview_window("overlay") {
@@ -1060,8 +1204,11 @@ fn get_shortcut_errors(state: State<'_, ShortcutErrors>) -> Result<Vec<String>, 
 
 /// 隐藏答题窗口、覆盖层与调试框（截屏前调用，避免 UI 入镜）。
 fn hide_capture_windows(app: &AppHandle) -> Result<(), String> {
+    let _ = update_region_selection_escape(app, false);
     if let Some(window) = app.get_webview_window("answer") {
+        let _ = update_answer_scroll_keys(app, false);
         window.hide().map_err(error)?;
+        let _ = app.emit("answer-window-hidden", ());
     }
     if let Some(window) = app.get_webview_window("overlay") {
         window.hide().map_err(error)?;
@@ -1080,16 +1227,20 @@ fn hide_capture_ui(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn show_answer_window(app: AppHandle) -> Result<(), String> {
     let window = app.get_webview_window("answer").ok_or("答案窗口不存在")?;
+    window.set_ignore_cursor_events(true).map_err(error)?;
     window.show().map_err(error)?;
     window.set_always_on_top(true).map_err(error)?;
-    window.set_visible_on_all_workspaces(true).map_err(error)
+    window.set_visible_on_all_workspaces(true).map_err(error)?;
+    app.emit("answer-window-shown", ()).map_err(error)
 }
 
 /// 隐藏答题窗口。
 #[tauri::command]
 fn hide_answer_window(app: AppHandle) -> Result<(), String> {
     let window = app.get_webview_window("answer").ok_or("答案窗口不存在")?;
-    window.hide().map_err(error)
+    let _ = update_answer_scroll_keys(&app, false);
+    window.hide().map_err(error)?;
+    app.emit("answer-window-hidden", ()).map_err(error)
 }
 
 /// 切换答题窗口显示/隐藏（快捷键 toggle-answer 使用）。
@@ -1098,11 +1249,14 @@ fn toggle_answer_window(app: &AppHandle) -> Result<(), String> {
         .get_webview_window("answer")
         .ok_or_else(|| "answer window unavailable".to_string())?;
     if window.is_visible().map_err(error)? {
-        window.hide().map_err(error)
+        window.hide().map_err(error)?;
+        app.emit("answer-window-hidden", ()).map_err(error)
     } else {
+        window.set_ignore_cursor_events(true).map_err(error)?;
         window.show().map_err(error)?;
         window.set_always_on_top(true).map_err(error)?;
-        window.set_visible_on_all_workspaces(true).map_err(error)
+        window.set_visible_on_all_workspaces(true).map_err(error)?;
+        app.emit("answer-window-shown", ()).map_err(error)
     }
 }
 
@@ -1110,6 +1264,49 @@ fn toggle_answer_window(app: &AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn set_answer_opacity(_app: AppHandle, _opacity: f64) -> Result<(), String> {
     // Tauri has no cross-platform native opacity setter. The HUD owns opacity in CSS.
+    Ok(())
+}
+
+/// 内容溢出时注册上下方向键；内容恢复可见时立即释放，避免影响原应用的键盘操作。
+#[tauri::command]
+fn set_answer_scroll_keys_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
+    update_answer_scroll_keys(&app, enabled)
+}
+
+fn update_region_selection_escape(app: &AppHandle, enabled: bool) -> Result<(), String> {
+    let state = app.state::<RegionSelectionEscapeState>();
+    let mut registered = state.0.lock().map_err(error)?;
+    if *registered == enabled {
+        return Ok(());
+    }
+    if enabled {
+        app.global_shortcut().register("ESCAPE").map_err(error)?;
+    } else {
+        app.global_shortcut().unregister("ESCAPE").map_err(error)?;
+    }
+    *registered = enabled;
+    Ok(())
+}
+
+fn update_answer_scroll_keys(app: &AppHandle, enabled: bool) -> Result<(), String> {
+    let state = app.state::<AnswerScrollKeysState>();
+    let mut registered = state.0.lock().map_err(error)?;
+    if *registered == enabled {
+        return Ok(());
+    }
+    if enabled {
+        app.global_shortcut().register("ARROWUP").map_err(error)?;
+        if let Err(register_error) = app.global_shortcut().register("ARROWDOWN") {
+            let _ = app.global_shortcut().unregister("ARROWUP");
+            return Err(error(register_error));
+        }
+    } else {
+        app.global_shortcut().unregister("ARROWUP").map_err(error)?;
+        app.global_shortcut()
+            .unregister("ARROWDOWN")
+            .map_err(error)?;
+    }
+    *registered = enabled;
     Ok(())
 }
 
@@ -1138,10 +1335,6 @@ fn show_settings(app: &AppHandle) {
 fn shortcut_event_name(shortcut: &Shortcut, modifiers: Modifiers) -> Option<&'static str> {
     if shortcut.matches(modifiers, Code::Digit1) || shortcut.matches(modifiers, Code::Numpad1) {
         Some("shortcut-capture-full")
-    } else if shortcut.matches(modifiers, Code::Digit2)
-        || shortcut.matches(modifiers, Code::Numpad2)
-    {
-        Some("shortcut-capture-region")
     } else if shortcut.matches(modifiers, Code::Digit3)
         || shortcut.matches(modifiers, Code::Numpad3)
     {
@@ -1159,8 +1352,45 @@ fn shortcut_event_name(shortcut: &Shortcut, modifiers: Modifiers) -> Option<&'st
     }
 }
 
+/// Ctrl+Shift+2 的按下和松开分别记录区域截图的两个顶点。
+fn is_keyboard_region_shortcut(shortcut: &Shortcut) -> bool {
+    let modifiers = PRIMARY_SHORTCUT_MODIFIER | Modifiers::SHIFT;
+    shortcut.matches(modifiers, Code::Digit2) || shortcut.matches(modifiers, Code::Numpad2)
+}
+
+/// 未带修饰键的方向键仅在答案内容溢出时动态注册，用于滚动点击穿透的答案窗。
+fn answer_scroll_event_name(shortcut: &Shortcut) -> Option<&'static str> {
+    if shortcut.matches(Modifiers::empty(), Code::ArrowUp) {
+        Some("answer-scroll-up")
+    } else if shortcut.matches(Modifiers::empty(), Code::ArrowDown) {
+        Some("answer-scroll-down")
+    } else {
+        None
+    }
+}
+
+fn region_selection_escape_event_name(shortcut: &Shortcut) -> Option<&'static str> {
+    if shortcut.matches(Modifiers::empty(), Code::Escape) {
+        Some("region-selection-escape")
+    } else {
+        None
+    }
+}
+
 /// 分发快捷键事件：静默模式下忽略 toggle-answer（不弹出答题窗口），其余广播给前端。
 fn dispatch_shortcut_event(app: &AppHandle, event_name: &str) {
+    if event_name == "region-selection-escape" {
+        let selecting = app
+            .state::<OverlayState>()
+            .0
+            .lock()
+            .map(|value| value.selecting)
+            .unwrap_or(false);
+        if selecting {
+            let _ = app.emit("region-cancel-request", ());
+        }
+        return;
+    }
     if event_name == "shortcut-toggle-answer" {
         let silent_mode = app
             .state::<SilentModeState>()
@@ -1176,6 +1406,23 @@ fn dispatch_shortcut_event(app: &AppHandle, event_name: &str) {
     }
 }
 
+/// Windows 小键盘 2 松开后完成两点区域截图。
+#[cfg(windows)]
+fn finish_windows_region_selection_on_release(app: AppHandle, virtual_key: i32) {
+    std::thread::spawn(move || {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
+
+        loop {
+            let key_state = unsafe { GetAsyncKeyState(virtual_key) } as u16;
+            if key_state & 0x8000 == 0 {
+                finish_keyboard_region_selection(&app);
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    });
+}
+
 /// Windows 原生快捷键消息窗口过程：收到 WM_HOTKEY 时按 id 映射事件并分发。
 #[cfg(windows)]
 unsafe extern "system" fn native_shortcut_window_proc(
@@ -1184,21 +1431,38 @@ unsafe extern "system" fn native_shortcut_window_proc(
     wparam: windows_sys::Win32::Foundation::WPARAM,
     _lparam: windows_sys::Win32::Foundation::LPARAM,
 ) -> windows_sys::Win32::Foundation::LRESULT {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{VK_DOWN, VK_NUMPAD2};
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         DefWindowProcW, GetWindowLongPtrW, SetWindowLongPtrW, GWLP_USERDATA, WM_DESTROY, WM_HOTKEY,
     };
 
     unsafe {
         if message == WM_HOTKEY {
+            let app = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const AppHandle;
+            if matches!(wparam, 12 | 22) && !app.is_null() {
+                let app = (&*app).clone();
+                match begin_keyboard_region_selection(&app) {
+                    Ok(()) => finish_windows_region_selection_on_release(
+                        app,
+                        if wparam == 12 {
+                            VK_NUMPAD2 as i32
+                        } else {
+                            VK_DOWN as i32
+                        },
+                    ),
+                    Err(region_error) => {
+                        let _ = app.emit("region-selection-failed", region_error);
+                    }
+                }
+                return 0;
+            }
             let event_name = match wparam {
                 1 | 11 | 21 => Some("shortcut-capture-full"),
-                2 | 12 | 22 => Some("shortcut-capture-region"),
                 3 | 13 | 23 => Some("shortcut-switch-config"),
                 4 | 14 | 24 => Some("shortcut-clear"),
                 5 | 15 | 25 => Some("shortcut-toggle-answer"),
                 _ => None,
             };
-            let app = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const AppHandle;
             if let (Some(event_name), app) = (event_name, app) {
                 if !app.is_null() {
                     dispatch_shortcut_event(&*app, event_name);
@@ -1438,8 +1702,14 @@ pub fn run() {
         .manage(SilentModeState(Mutex::new(false)))
         .manage(SilentCursorOffset(Mutex::new(DEFAULT_SILENT_CURSOR_OFFSET)))
         .manage(SelectionState(Mutex::new(None)))
+        .manage(KeyboardRegionSelectionState {
+            active: Mutex::new(None),
+            generation: AtomicU64::new(0),
+        })
         .manage(OverlayState(Mutex::new(OverlayStateData::default())))
-        .manage(ShortcutErrors(Mutex::new(Vec::new())));
+        .manage(RegionSelectionEscapeState(Mutex::new(false)))
+        .manage(ShortcutErrors(Mutex::new(Vec::new())))
+        .manage(AnswerScrollKeysState(Mutex::new(false)));
     #[cfg(windows)]
     let builder = builder.manage(NativeDebugWindows(Mutex::new(Vec::new())));
     builder
@@ -1459,11 +1729,25 @@ pub fn run() {
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
+                    if is_keyboard_region_shortcut(shortcut) {
+                        match event.state() {
+                            ShortcutState::Pressed => {
+                                if let Err(region_error) = begin_keyboard_region_selection(app) {
+                                    let _ = app.emit("region-selection-failed", region_error);
+                                }
+                            }
+                            ShortcutState::Released => finish_keyboard_region_selection(app),
+                        }
+                        return;
+                    }
                     if event.state() != ShortcutState::Pressed {
                         return;
                     }
                     let modifiers = PRIMARY_SHORTCUT_MODIFIER | Modifiers::SHIFT;
-                    let Some(event_name) = shortcut_event_name(shortcut, modifiers) else {
+                    let Some(event_name) = shortcut_event_name(shortcut, modifiers)
+                        .or_else(|| region_selection_escape_event_name(shortcut))
+                        .or_else(|| answer_scroll_event_name(shortcut))
+                    else {
                         return;
                     };
                     dispatch_shortcut_event(app, event_name);
@@ -1473,6 +1757,7 @@ pub fn run() {
         .setup(|app| {
             if let Some(answer) = app.get_webview_window("answer") {
                 answer.set_focusable(false)?;
+                answer.set_ignore_cursor_events(true)?;
             }
             position_answer_window_bottom_right(app.handle())?;
             let settings = WebviewWindowBuilder::new(
@@ -1572,6 +1857,7 @@ pub fn run() {
             show_answer_window,
             hide_answer_window,
             set_answer_opacity,
+            set_answer_scroll_keys_enabled,
             read_settings_backup,
             write_settings_backup
         ])
@@ -1732,7 +2018,6 @@ mod tests {
         let modifiers = PRIMARY_SHORTCUT_MODIFIER | Modifiers::SHIFT;
         let cases = [
             (Code::Digit1, Code::Numpad1, "shortcut-capture-full"),
-            (Code::Digit2, Code::Numpad2, "shortcut-capture-region"),
             (Code::Digit3, Code::Numpad3, "shortcut-switch-config"),
             (Code::Digit4, Code::Numpad4, "shortcut-clear"),
             (Code::Digit5, Code::Numpad5, "shortcut-toggle-answer"),
@@ -1750,6 +2035,81 @@ mod tests {
                 Some(event_name)
             );
         }
+    }
+
+    #[test]
+    fn keyboard_region_shortcut_uses_ctrl_shift_2() {
+        let digit_shortcut = Shortcut::new(
+            Some(PRIMARY_SHORTCUT_MODIFIER | Modifiers::SHIFT),
+            Code::Digit2,
+        );
+        let numpad_shortcut = Shortcut::new(
+            Some(PRIMARY_SHORTCUT_MODIFIER | Modifiers::SHIFT),
+            Code::Numpad2,
+        );
+        assert!(is_keyboard_region_shortcut(&digit_shortcut));
+        assert!(is_keyboard_region_shortcut(&numpad_shortcut));
+    }
+
+    #[test]
+    fn keyboard_region_rect_uses_the_two_global_pointer_positions() {
+        let monitor = MonitorInfo {
+            id: 1,
+            x: -1920,
+            y: 0,
+            width: 1920,
+            height: 1080,
+            scale_factor: 1.0,
+        };
+        let rect = region_rect_from_screen_points((-1700, 120), (-900, 720), &monitor);
+        assert_eq!(rect.x, 220.0);
+        assert_eq!(rect.y, 120.0);
+        assert_eq!(rect.width, 800.0);
+        assert_eq!(rect.height, 600.0);
+    }
+
+    #[test]
+    fn keyboard_region_rect_clips_points_outside_the_start_monitor() {
+        let monitor = MonitorInfo {
+            id: 1,
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+            scale_factor: 1.0,
+        };
+        let top_left = region_rect_from_screen_points((100, 80), (-500, -300), &monitor);
+        assert_eq!(top_left.x, 0.0);
+        assert_eq!(top_left.y, 0.0);
+        assert_eq!(top_left.width, 100.0);
+        assert_eq!(top_left.height, 80.0);
+
+        let bottom_right = region_rect_from_screen_points((1800, 900), (2400, 1400), &monitor);
+        assert_eq!(bottom_right.x, 1800.0);
+        assert_eq!(bottom_right.y, 900.0);
+        assert_eq!(bottom_right.width, 120.0);
+        assert_eq!(bottom_right.height, 180.0);
+    }
+
+    #[test]
+    fn region_selection_escape_shortcut_is_unmodified() {
+        let shortcut = Shortcut::new(None, Code::Escape);
+        assert_eq!(
+            region_selection_escape_event_name(&shortcut),
+            Some("region-selection-escape")
+        );
+    }
+
+    #[test]
+    fn answer_scroll_shortcuts_accept_unmodified_arrow_keys() {
+        assert_eq!(
+            answer_scroll_event_name(&Shortcut::new(None, Code::ArrowUp)),
+            Some("answer-scroll-up")
+        );
+        assert_eq!(
+            answer_scroll_event_name(&Shortcut::new(None, Code::ArrowDown)),
+            Some("answer-scroll-down")
+        );
     }
 
     #[test]

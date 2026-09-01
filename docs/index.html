@@ -629,7 +629,7 @@
               <div class="step-number">1</div>
               <h3>启动应用并打开设置</h3>
               <p>启动 ExamPilot 后，答案窗口默认位于屏幕右下角，系统托盘会出现 ExamPilot 图标。右键托盘图标并选择“打开设置”，即可进入独立设置窗口。</p>
-              <p>答案窗口始终置顶、背景透明且不会抢走当前应用焦点。按住窗口顶部的透明拖动区域可以调整位置。</p>
+              <p>答案窗口始终置顶、背景透明并支持点击穿透，不会抢走当前应用焦点。答案内容超出显示区域时，使用键盘 <code>↑</code>/<code>↓</code> 滚动。</p>
             </div>
             <div class="step-visual">
               <div class="panel-mock" aria-hidden="true">
@@ -658,7 +658,7 @@
             <div class="step-copy">
               <div class="step-number">3</div>
               <h3>使用全局快捷键识别</h3>
-              <p>把鼠标移到题目所在显示器，按 <code>Ctrl+Shift+1</code> 截取整个显示器；按 <code>Ctrl+Shift+2</code> 后拖动鼠标框选题目，松开即可识别，按 <code>Esc</code> 可取消框选。</p>
+              <p>把鼠标移到题目所在显示器，按 <code>Ctrl+Shift+1</code> 截取整个显示器；按住 <code>Ctrl+Shift+2</code> 记录区域起点，移动鼠标后松开即可识别。</p>
               <p>截图时答案窗和静默命中层会暂时隐藏，完成后自动恢复。普通模式下，模型答案会直接显示在右下角的置顶透明窗口中。</p>
             </div>
             <div class="step-visual">
@@ -675,7 +675,7 @@
         </div>
         <div class="button-guide">
           <div class="guide-item"><div class="guide-key">1</div><div><strong>截取鼠标所在显示器</strong><p><code>Ctrl+Shift+1</code>，完成截图后立即发送给当前 AI 配置。</p></div></div>
-          <div class="guide-item"><div class="guide-key">2</div><div><strong>框选屏幕区域</strong><p><code>Ctrl+Shift+2</code>，拖动选择范围；按 <code>Esc</code> 退出选区。</p></div></div>
+          <div class="guide-item"><div class="guide-key">2</div><div><strong>框选屏幕区域</strong><p>按住 <code>Ctrl+Shift+2</code> 移动鼠标，松开后按两个鼠标位置截图；Windows 也支持小键盘 <code>Num2</code>。</p></div></div>
           <div class="guide-item"><div class="guide-key">3</div><div><strong>切换 AI 配置</strong><p><code>Ctrl+Shift+3</code>，按配置列表顺序切换到下一个配置。</p></div></div>
           <div class="guide-item"><div class="guide-key">4</div><div><strong>取消或清除</strong><p><code>Ctrl+Shift+4</code>，识别中取消任务，空闲时清除答案和命中区域。</p></div></div>
           <div class="guide-item"><div class="guide-key">5</div><div><strong>显示/隐藏答案</strong><p><code>Ctrl+Shift+5</code>，Windows 和 macOS 均使用 Ctrl，仅普通模式生效。</p></div></div>
@@ -685,8 +685,8 @@
           <article class="card usage-card">
             <div class="usage-copy">
               <h3>桌面端普通模式</h3>
-              <p>关闭“静默模式”后，答案窗口会显示在桌面右下角并保持置顶。识别完成后窗口只显示模型答案，可拖动到其他位置；设置中的透明度按 0% 到 100% 生效。</p>
-              <ul><li>可覆盖 Chrome 等应用的全屏窗口</li><li>点击或拖动答案窗口不会让当前应用失焦</li><li>切换配置后，答案窗口会同步使用当前配置</li></ul>
+              <p>关闭“静默模式”后，答案窗口会显示在桌面右下角并保持置顶。窗口点击穿透，识别完成后可继续操作原来的应用；设置中的透明度按 0% 到 100% 生效。</p>
+              <ul><li>可覆盖 Chrome 等应用的全屏窗口</li><li>答案内容超出显示区域时使用键盘 <code>↑</code>/<code>↓</code> 滚动</li><li>切换配置后，答案窗口会同步使用当前配置</li></ul>
             </div>
           </article>
           <article class="card usage-card">
@@ -780,12 +780,12 @@
           </article>
           <article class="card usage-card">
             <div class="usage-preview">
-              <div class="selection-page" aria-hidden="true"><div class="selection-box"></div><div class="selection-label">拖拽选择题目</div></div>
+              <div class="selection-page" aria-hidden="true"><div class="selection-box"></div><div class="selection-label">按键两点选区</div></div>
             </div>
             <div class="usage-copy">
               <h3>区域识别</h3>
-              <p>扩展点击“区域”，桌面端按 <code>Ctrl+Shift+2</code>；随后按住鼠标拖拽，只选择题目和必要上下文，松开鼠标开始分析。</p>
-              <ul><li>按 ESC 可退出区域选择</li><li>尽量包含完整题干、选项和图表</li></ul>
+              <p>扩展点击“区域”，桌面端按住 <code>Ctrl+Shift+2</code> 并移动鼠标；松开后会按两个鼠标位置截取题目和必要上下文。</p>
+              <ul><li>选区限制在起点所在显示器内</li><li>尽量包含完整题干、选项和图表</li></ul>
             </div>
           </article>
         </div>
@@ -938,8 +938,8 @@
             <p>先查看答案窗口或设置窗口是否提示“快捷键被占用”。关闭占用 <code>Ctrl+Shift+1/2/3/4/5</code> 的其他软件后重启 ExamPilot；macOS 还需确认已授予屏幕录制权限。</p>
           </details>
           <details>
-            <summary>桌面端区域截图出现遮盖层但无法框选</summary>
-            <p>区域截图会临时显示全屏选区层，这是正常行为。按住鼠标拖动后松开即可提交选区，按 <code>Esc</code> 可取消；如果选区层呈不透明白色或无法操作，请记录系统版本并反馈，该状态不应持续存在。</p>
+            <summary>桌面端区域截图没有显示框选提示</summary>
+            <p>桌面端区域截图不会显示遮盖层。按住 <code>Ctrl+Shift+2</code>（Windows 也可使用小键盘 <code>Num2</code>）时记录鼠标起点，移动鼠标后松开快捷键记录终点并开始识别。</p>
           </details>
           <details>
             <summary>桌面端为什么没有显示答案或红色命中框？</summary>

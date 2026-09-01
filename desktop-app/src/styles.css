@@ -5,17 +5,14 @@
 html, body, #app { width: 100%; height: 100%; background: transparent; }
 body { margin: 0; background: transparent !important; }
 button, input, textarea, select { font: inherit; }
-/* 答题 HUD：标题栏（可拖动）、状态徽标与答案内容区 */
+/* 答题 HUD：点击穿透的答案内容区 */
 .answer-hud { width: 100%; min-height: 100%; padding: 10px 12px; color: #182230; background: transparent; border: 0; border-radius: 6px; box-shadow: none; overflow: hidden; }
 .answer-head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 700; }
-.answer-drag-region { cursor: grab; user-select: none; touch-action: none; }
-.answer-drag-region:active { cursor: grabbing; }
-.answer-drag-strip { height: 10px; }
 .answer-live, .answer-idle { padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; }
 .answer-live { background: #dbeafe; color: #1d4ed8; }.answer-idle { background: #f1f5f9; color: #475569; }
-.answer-status { margin-top: 6px; color: #475569; font-size: 12px; }.answer-content { max-height: 115px; margin-top: 7px; overflow: auto; line-height: 1.5; }.answer-content p { margin: 0 0 6px; }.answer-empty { margin-top: 18px; color: #94a3b8; font-size: 12px; }
-/* 区域选择：全屏底图覆盖层 + 选区框（截图底图由 JS 注入） */
-.screen-overlay { width: 100vw; height: 100vh; background-color: transparent; background-position: center; background-repeat: no-repeat; background-size: 100% 100%; }.selection-box { position: fixed; border: 0; background: transparent; pointer-events: none; }
+.answer-status { margin-top: 6px; color: #475569; font-size: 12px; }.answer-content { max-height: 220px; margin-top: 7px; overflow: hidden auto; line-height: 1.5; }.answer-content p { margin: 0 0 6px; }.answer-empty { margin-top: 18px; color: #94a3b8; font-size: 12px; }
+/* 区域选择：全屏透明覆盖层 + 选区框 */
+.screen-overlay { width: 100vw; height: 100vh; background: transparent; }.selection-box { position: fixed; border: 0; background: transparent; pointer-events: none; }
 /* 调试框：显示静默模式识别到的悬停目标区域（红框 + 中心点） */
 .debug-window { position: fixed; inset: 0; width: 100vw; height: 100vh; border: 2px solid #ef4444; background: rgba(239,68,68,.12); pointer-events: none; }
 .debug-window-center { position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 2px #fff; }

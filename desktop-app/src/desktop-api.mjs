@@ -91,3 +91,4 @@ export function hideCaptureUi() { return invoke('hide_capture_ui'); }
 export function showAnswerWindow() { return invoke('show_answer_window'); }
 export function hideAnswerWindow() { return invoke('hide_answer_window'); }
 export function setAnswerOpacity(opacity) { return invoke('set_answer_opacity', { opacity: opacity }); }
+export function setAnswerScrollKeysEnabled(enabled) { return invoke('set_answer_scroll_keys_enabled', { enabled: enabled }); }

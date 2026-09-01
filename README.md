@@ -68,6 +68,7 @@ npm run chrome:build:package
 - 捕获鼠标所在显示器或选择屏幕区域
 - 支持 OpenAI Chat Completions、Responses API、Anthropic Messages 和自定义 JSON 模板
 - 普通模式在悬浮窗口中显示答案
+- 答案窗口点击穿透，不会抢走当前应用焦点；内容超出显示区域时使用 `↑`/`↓` 滚动
 - 静默模式隐藏答案窗口，通过原生命中区域检测真实鼠标悬停并反馈
 - 无坐标的静默答案自动复制到剪贴板
 - 多显示器和高 DPI 坐标换算
@@ -98,7 +99,7 @@ npm run tauri:build
 | 快捷键 | 功能 |
 | --- | --- |
 | `Ctrl+Shift+1` | 截取鼠标所在显示器并识别 |
-| `Ctrl+Shift+2` | 选择屏幕区域并识别 |
+| `Ctrl+Shift+2` | 按下记录区域起点，移动鼠标后松开记录终点并识别（选区限制在起点所在显示器；Windows 也支持小键盘 `Num2`） |
 | `Ctrl+Shift+3` | 切换到下一个 AI 配置 |
 | `Ctrl+Shift+4` | 取消当前任务或清除结果 |
 | `Ctrl+Shift+5` | 普通模式下显示/隐藏答案窗口 |
