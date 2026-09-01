@@ -3,6 +3,11 @@
  *
  * Creates and mounts the Preact+htm panel with Shadow DOM isolation.
  */
+/**
+ * 内容脚本入口：负责挂载悬浮面板（Shadow DOM 隔离）、监听后台消息
+ * （ping / 快捷键截图 / 清除结果 / 切换面板）与页面内兜底快捷键，
+ * 并通过宿主元素上的 CustomEvent 将命令转发给面板组件。
+ */
 
 import { mountPanel } from './ui.js';
 
@@ -10,10 +15,12 @@ var IS_FULL_ACCESS = __EXAMPILOT_FULL_ACCESS__;
 var epHost;
 var pendingPanelCommands = [];
 
+// 获取面板宿主元素（优先按 id 查找，其次取全局缓存引用）
 function getPanelHost() {
   return document.getElementById('exmp-container') || window.__exampilotHost;
 }
 
+// 向面板宿主派发一条命令（CustomEvent），宿主不存在则返回 false
 function runPanelCommand(command) {
   var host = getPanelHost();
   if (!host) return false;
@@ -21,6 +28,7 @@ function runPanelCommand(command) {
   return true;
 }
 
+// 面板就绪后，按序执行积压的面板命令
 function flushPendingPanelCommands() {
   if (!window.__exampilotPanelReady) return;
   while (pendingPanelCommands.length > 0) {
@@ -28,6 +36,7 @@ function flushPendingPanelCommands() {
   }
 }
 
+// 派发面板命令；面板未就绪时先入队，待挂载完成后再补发
 function dispatchPanelCommand(action, detail) {
   var command = { action: action, detail: detail || {} };
 
@@ -55,6 +64,7 @@ function dispatchCaptureCommand(mode) {
   dispatchPanelCommand('start-capture', { mode: mode });
 }
 
+// 创建并挂载面板宿主元素；若面板已存在则仅隐藏（避免重复挂载）
 function createUI() {
   epHost = document.getElementById('exmp-container');
   if (window.__exampilotMounted && epHost) {
@@ -115,6 +125,7 @@ if (!window.__exampilotRuntimeHandlerAttached) {
   window.__exampilotRuntimeHandlerAttached = true;
 }
 
+// 判断是否为 ExamPilot 页面内快捷键：Ctrl+Shift+1~4
 function isExampilotShortcutEvent(e) {
   var key = e.key || '';
   var isNumberKey = key === '1' || key === '2' || key === '3' || key === '4';
@@ -166,6 +177,7 @@ if (!window.__exampilotToggleHandlerAttached) {
   window.__exampilotToggleHandlerAttached = true;
 }
 
+// 等待 DOM 就绪后再挂载隐藏面板（document_start 阶段 body 可能尚不存在）
 function createHiddenUIWhenReady() {
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', createUI, { once: true });

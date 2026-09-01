@@ -1,6 +1,12 @@
+/**
+ * ExamPilot 后台 Service Worker（MV3）
+ * 职责：截图与裁剪、静默模式结果坐标归一化、AI 请求调度（query-ai.js）、
+ * 扩展快捷键、消息路由（面板 ↔ 后台）、配置与设置的初始化/导入导出。
+ */
 importScripts('template-engine.js', 'request-overrides.js', 'settings-transfer.js', 'query-ai.js');
 
 var currentAbortController = null;
+// 构建期注入的权限变体标识：普通版按需注入脚本并申请可选权限，Full Access 版由 manifest 预授权
 var IS_FULL_ACCESS = __EXAMPILOT_FULL_ACCESS__;
 var DEFAULT_FAKE_CURSOR_SIZE = 14;
 var DEFAULT_FAKE_CURSOR_STYLE = 'dark-outline';
@@ -13,22 +19,26 @@ var DEFAULT_SILENT_PROMPT = '请识别图片中所有完整显示的题目。只
   '如果编程题已经给定了部分代码、函数签名、类定义、输入输出处理或注释要求，请在已有内容基础上补全，不要重写无关结构，不要删除题目给定的代码。\n' +
   'JSON 格式必须为：{"items":[{"questionNumber":"题号","answer":"正确答案文本","choice":"A/B/C/D 等选项字母","coordinatePercent":{"x":0到1的小数,"y":0到1的小数},"bboxPercent":{"x":0到1的小数,"y":0到1的小数,"width":0到1的小数,"height":0到1的小数}},{"questionNumber":"题号","answer":"简答/编程题答案文本","clipboardOnly":true}]}';
 
+/** 将仿光标尺寸归一化为整数并钳制到 10-32 像素 */
 function normalizeFakeCursorSize(value) {
   var number = Number(value);
   if (!Number.isFinite(number)) return DEFAULT_FAKE_CURSOR_SIZE;
   return Math.max(10, Math.min(Math.round(number), 32));
 }
 
+/** 仅允许 light-outline 样式，其余一律回退默认深色描边 */
 function normalizeFakeCursorStyle(value) {
   return value === 'light-outline' ? value : DEFAULT_FAKE_CURSOR_STYLE;
 }
 
+/** 将静默模式光标偏移归一化为整数并钳制到 1-20 像素 */
 function normalizeSilentCursorOffset(value) {
   var number = Number(value);
   if (!Number.isFinite(number)) return DEFAULT_SILENT_CURSOR_OFFSET;
   return Math.max(1, Math.min(Math.round(number), 20));
 }
 
+/** 非 Full Access 版向标签页所有 frame 注入仿光标桥接脚本 */
 async function ensureFrameCursorBridge(tabId) {
   if (IS_FULL_ACCESS) return;
   await chrome.scripting.executeScript({
@@ -37,6 +47,10 @@ async function ensureFrameCursorBridge(tabId) {
   });
 }
 
+/**
+ * 确保主内容脚本可用：先 ping 探测，未注入时补注入。
+ * Full Access 版由 manifest 预注册内容脚本，仅需补注入 frame 桥接。
+ */
 async function ensureContentScript(tabId) {
   if (!IS_FULL_ACCESS) {
     ensureFrameCursorBridge(tabId).catch(function () {
@@ -124,6 +138,7 @@ async function switchActiveConfigFromCommand() {
   return configList[nextIndex];
 }
 
+/** 通知当前活动标签页面板：激活配置已切换 */
 async function notifyConfigSwitched(config) {
   var tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   var tab = tabs[0];
@@ -227,6 +242,7 @@ function autoSelectFallback(list) {
   }
 }
 
+/** 将 API 地址转换为可选 host permission 模式：协议://主机/* */
 function apiUrlToPermissionPattern(rawUrl) {
   var url = validateHttpsUrl(rawUrl);
   return url.protocol + '//' + url.hostname + '/*';
@@ -298,6 +314,7 @@ ensureConfigInitialized();
 ensurePromptInitialized();
 ensureSilentModeInitialized();
 
+/** 在静默提示词后附加截图物理像素尺寸（CSS 尺寸 × DPR）与百分比坐标说明 */
 function buildSilentPrompt(prompt, rect, viewport) {
   var dpr = Number((rect && rect.dpr) || (viewport && viewport.dpr) || 1);
   var cssWidth = rect ? Number(rect.width) : Number(viewport && viewport.width);
@@ -313,6 +330,7 @@ function buildSilentPrompt(prompt, rect, viewport) {
     '百分比坐标以当前截图图片为参考：x=0 表示最左侧，x=1 表示最右侧，y=0 表示最上方，y=1 表示最下方。';
 }
 
+/** 剥离 Markdown 代码块围栏，截取首个 { 到最后一个 } 之间的 JSON 文本 */
 function extractJsonObjectText(value) {
   var text = String(value || '').trim();
   var fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -325,6 +343,7 @@ function extractJsonObjectText(value) {
   return text.slice(start, end + 1);
 }
 
+/** 校验值为有限数字并返回，否则抛错 */
 function readFiniteNumber(value, label) {
   var number = Number(value);
   if (!Number.isFinite(number)) {
@@ -333,21 +352,25 @@ function readFiniteNumber(value, label) {
   return number;
 }
 
+/** 按 AI 可能使用的多种字段名提取坐标目标 */
 function pickSilentTarget(data) {
   return data.target || data.coordinatePercent || data.coordinatesPercent || data.pointPercent || data.coordinate || data.coordinates || data.point || data.bboxPercent || data.bbox || data.box || data.rect || data;
 }
 
+/** 判断条目是否携带任意形式的定位坐标 */
 function hasSilentPositionData(data) {
   return !!(data && (data.target || data.coordinatePercent || data.coordinatesPercent || data.pointPercent ||
     data.coordinate || data.coordinates || data.point || data.bboxPercent || data.boxPercent ||
     data.rectPercent || data.bbox || data.box || data.rect));
 }
 
+/** 判断坐标是否为 0-1 百分比格式 */
 function hasPercentTarget(data) {
   return !!(data.coordinatePercent || data.coordinatesPercent || data.pointPercent || data.bboxPercent ||
     (data.target && (data.target.unit === 'percent' || data.target.units === 'percent')));
 }
 
+/** 校验百分比数值在 0-1 范围内 */
 function validatePercentRange(value, label) {
   var number = readFiniteNumber(value, label);
   if (number < 0 || number > 1) {
@@ -356,17 +379,25 @@ function validatePercentRange(value, label) {
   return number;
 }
 
+/** 提取百分比坐标点（coordinatePercent 或 unit=percent 的 target） */
 function pickPercentPoint(data) {
   return data.coordinatePercent || data.coordinatesPercent || data.pointPercent ||
     (data.target && (data.target.unit === 'percent' || data.target.units === 'percent') ? data.target : null);
 }
 
+/** 提取百分比包围盒（bboxPercent/boxPercent/rectPercent 及等价形式） */
 function pickPercentBox(data) {
   return data.bboxPercent || data.boxPercent || data.rectPercent ||
     (data.target && data.target.bboxPercent) ||
     (data.target && (data.target.unit === 'percent' || data.target.units === 'percent') && data.target.width !== undefined ? data.target : null);
 }
 
+/**
+ * 将 AI 返回的单个题目条目归一化为页面坐标 target。
+ * 百分比坐标按截图尺寸换算并校验（坐标点须落在 bbox 内）；
+ * 像素坐标兼容 bbox 左上角 + 宽高与裸坐标点两种形式；
+ * 缺少坐标或声明 clipboardOnly 的条目仅返回答案文本。
+ */
 function normalizeSilentTarget(parsed, rect, viewport) {
   try {
     if (!parsed || typeof parsed !== 'object') throw new Error('目标不是 JSON 对象');
@@ -500,6 +531,7 @@ function normalizeSilentTarget(parsed, rect, viewport) {
   if (!Number.isFinite(dpr) || dpr <= 0) dpr = 1;
   var imageWidth = sourceWidth * dpr;
   var imageHeight = sourceHeight * dpr;
+  // AI 可能按物理像素（图片实际尺寸）返回坐标：超出 CSS 视口但未超出图像时按 DPR 缩回
   if (unit !== 'percent' && (localX > sourceWidth || localY > sourceHeight) && localX <= imageWidth && localY <= imageHeight) {
     localX = localX / dpr;
     localY = localY / dpr;
@@ -510,6 +542,7 @@ function normalizeSilentTarget(parsed, rect, viewport) {
     throw new Error('静默模式返回坐标超出截图范围: x=' + localX + ', y=' + localY + ', 截图范围=' + sourceWidth + 'x' + sourceHeight);
   }
 
+  // 以区域偏移还原页面坐标，并将光标框中心对齐到坐标点
   var offsetX = rect ? Number(rect.x) || 0 : 0;
   var offsetY = rect ? Number(rect.y) || 0 : 0;
   var x = offsetX + localX - width / 2;
@@ -517,6 +550,7 @@ function normalizeSilentTarget(parsed, rect, viewport) {
   var viewportWidth = Number(viewport && viewport.width) || sourceWidth + offsetX;
   var viewportHeight = Number(viewport && viewport.height) || sourceHeight + offsetY;
 
+  // 钳制到视口范围内，光标框尺寸最小 8px 且不超出边界
   x = Math.max(0, Math.min(x, viewportWidth - 1));
   y = Math.max(0, Math.min(y, viewportHeight - 1));
   width = Math.max(8, Math.min(width, viewportWidth - x));
@@ -542,6 +576,10 @@ function normalizeSilentTarget(parsed, rect, viewport) {
   };
 }
 
+/**
+ * 解析静默模式 AI 返回的 JSON 并逐条归一化，
+ * 拆分为可定位目标（targets）与仅复制到剪贴板的答案。
+ */
 function normalizeSilentResult(rawAnswer, rect, viewport) {
   var parsed;
   try {

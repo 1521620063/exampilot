@@ -1,3 +1,4 @@
+// 极简 JSON 模板引擎（与扩展共享）：支持 {{path}} 变量插值，路径支持点号、数组下标与引号键。
 export function isPlainObject(value) {
   return Object.prototype.toString.call(value) === '[object Object]';
 }
@@ -13,6 +14,7 @@ function parseJson(raw, label) {
   catch (error) { throw new Error(label + ' must be valid JSON: ' + (error.message || String(error))); }
 }
 
+// 把 "a.b[0][\"c\"]" 形式的路径解析为键序列
 export function parseTemplatePath(path) {
   var text = String(path || '').trim();
   if (!text) throw new Error('Template variable cannot be empty');
@@ -47,6 +49,7 @@ export function resolveTemplatePath(source, path, label) {
   return current;
 }
 
+// 整串恰为一个 {{path}} 时返回原始值（保留类型），否则做字符串插值
 export function renderTemplateString(template, context, label) {
   var exact = String(template).match(/^\s*\{\{\s*([^{}]+?)\s*\}\}\s*$/);
   if (exact) return cloneJson(resolveTemplatePath(context, exact[1], label));
@@ -57,6 +60,7 @@ export function renderTemplateString(template, context, label) {
   });
 }
 
+// 递归渲染 JSON 模板中的全部字符串值
 export function renderJsonTemplateValue(value, context, label) {
   if (typeof value === 'string') return renderTemplateString(value, context, label);
   if (Array.isArray(value)) return value.map(function (item) { return renderJsonTemplateValue(item, context, label); });
@@ -70,12 +74,14 @@ export function renderJsonTemplate(raw, context, label) {
   return renderJsonTemplateValue(parseJson(raw, label), context || {}, label);
 }
 
+// 渲染并要求结果为 JSON 对象（用于 Headers 模板）
 export function renderJsonObjectTemplate(raw, context, label) {
   var result = renderJsonTemplate(raw, context, label);
   if (!isPlainObject(result)) throw new Error(label + ' must be a JSON object');
   return result;
 }
 
+// 用模型响应作为上下文渲染响应模板，非字符串结果转 JSON 文本
 export function renderResponseTemplate(raw, response, label) {
   var text = String(raw || '').trim();
   if (!text) throw new Error(label + ' cannot be empty');

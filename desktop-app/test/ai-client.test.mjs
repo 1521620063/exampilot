@@ -1,3 +1,4 @@
+// 测试：AI 请求构建与答案提取逻辑（普通/静默两种模式）
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildRequest, extractAnswer } from '../src/ai-client.mjs';

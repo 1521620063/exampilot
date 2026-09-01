@@ -1,3 +1,8 @@
+/**
+ * template-engine.js —— 轻量 JSON 模板引擎
+ * 支持 {{path.to.value[0]}} 变量插值：用于渲染自定义请求的
+ * Headers/Body 模板，以及从 AI 响应 JSON 中提取答案文本。
+ */
 (function (root) {
   function isPlainObject(value) {
     return Object.prototype.toString.call(value) === '[object Object]';
@@ -20,6 +25,7 @@
     }
   }
 
+  /** 将 "a.b[0]['c']" 形式的模板路径解析为 token 数组 */
   function parseTemplatePath(path) {
     var text = String(path || '').trim();
     if (!text) {
@@ -73,6 +79,7 @@
     return tokens;
   }
 
+  /** 按 token 逐级取值，任一级缺失即抛错 */
   function resolveTemplatePath(source, path, label) {
     var tokens = parseTemplatePath(path);
     var current = source;
@@ -86,6 +93,7 @@
     return current;
   }
 
+  /** 整串仅含一个 {{var}} 时保留原始类型返回；否则做字符串插值（对象/数组转 JSON） */
   function renderTemplateString(template, context, label) {
     var exact = String(template).match(/^\s*\{\{\s*([^{}]+?)\s*\}\}\s*$/);
     if (exact) {
@@ -100,6 +108,7 @@
     });
   }
 
+  /** 递归渲染 JSON 模板中的字符串叶子节点 */
   function renderJsonTemplateValue(value, context, label) {
     if (typeof value === 'string') {
       return renderTemplateString(value, context, label);
@@ -131,6 +140,7 @@
     return rendered;
   }
 
+  /** 从 AI 响应 JSON 中按模板路径提取答案文本 */
   function renderResponseTemplate(rawValue, responseJson, label) {
     var text = (rawValue || '').trim();
     if (!text) {

@@ -1,5 +1,7 @@
+// 自定义请求覆盖（与扩展共享）：HTTPS 校验、用户 Headers/Body JSON 与默认请求的深度合并。
 import { cloneJson, isPlainObject } from './template-engine.mjs';
 
+// 接口地址必须是合法的 HTTPS URL
 export function validateHttpsUrl(rawUrl) {
   var url;
   try { url = new URL(rawUrl); }
@@ -8,6 +10,7 @@ export function validateHttpsUrl(rawUrl) {
   return url;
 }
 
+// 深度合并覆盖对象；覆盖值为 null 表示删除该键
 export function mergeJsonOverride(base, override) {
   var result = isPlainObject(base) ? cloneJson(base) : {};
   var patch = isPlainObject(override) ? override : {};
@@ -20,6 +23,7 @@ export function mergeJsonOverride(base, override) {
   return result;
 }
 
+// 解析并校验必须为 JSON 对象，空串视为空对象
 export function parseJsonObjectOverride(raw, label) {
   var text = String(raw || '').trim();
   if (!text) return {};
@@ -30,6 +34,7 @@ export function parseJsonObjectOverride(raw, label) {
   return result;
 }
 
+// 把用户自定义 Headers/Body 合并进默认请求
 export function applyRequestOverrides(headers, body, config) {
   return {
     headers: mergeJsonOverride(headers, parseJsonObjectOverride(config.customHeadersJson, 'Headers JSON')),

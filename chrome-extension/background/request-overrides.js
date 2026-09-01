@@ -1,4 +1,10 @@
+/**
+ * request-overrides.js —— 自定义请求覆盖
+ * 将用户配置的 Headers/Body JSON 覆盖项深合并进默认请求，
+ * 并提供 HTTPS URL 校验（供各后台模块复用）。
+ */
 (function (root) {
+  /** 深合并覆盖项：null 表示删除该键，嵌套对象递归合并，其余值深拷贝替换 */
   function mergeJsonOverride(base, override) {
     var result = isPlainObject(base) ? cloneJson(base) : {};
     var patch = isPlainObject(override) ? override : {};
@@ -19,6 +25,7 @@
     return result;
   }
 
+  /** 解析覆盖 JSON 文本：空串视为空对象，非法或非对象时报错 */
   function parseJsonObjectOverride(rawValue, label) {
     var text = (rawValue || '').trim();
     if (!text) return {};
@@ -36,6 +43,7 @@
     return parsed;
   }
 
+  /** 将用户自定义 Headers/Body 覆盖合并到默认请求上 */
   function applyRequestOverrides(baseHeaders, baseBody, config) {
     var headersOverride = parseJsonObjectOverride(config.customHeadersJson, 'Headers JSON');
     var bodyOverride = parseJsonObjectOverride(config.customBodyJson, 'Body JSON');

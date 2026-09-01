@@ -1,3 +1,4 @@
+// Tauri CLI 包装脚本：用仓库本地 .cargo 作为 CARGO_HOME 执行 tauri 构建，并处理 Windows 上 WiX light.exe 写 WixPdb 失败导致的 MSI 打包报错（自动用 -spdb 重链接并补签名，必要时补跑 NSIS 打包）。
 import { spawn } from 'child_process';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync } from 'fs';
 import { homedir } from 'os';
@@ -17,6 +18,7 @@ function readLocalSigningValue(filename) {
   }
 }
 
+// 环境变量缺省时回退读取本地签名密钥文件
 if (!signingPrivateKey) {
   signingPrivateKey = readLocalSigningValue('updater.key');
 }
@@ -38,6 +40,7 @@ var childEnvironment = {
   ...(signingPrivateKeyPassword ? { TAURI_SIGNING_PRIVATE_KEY_PASSWORD: signingPrivateKeyPassword } : {})
 };
 
+// 启动子进程执行命令；captureOutput 时同时透传并收集输出
 function run(executable, commandArgs, environment, workingDirectory, captureOutput) {
   return new Promise(function (resolve, reject) {
     var child = spawn(executable, commandArgs, {
@@ -68,6 +71,7 @@ function run(executable, commandArgs, environment, workingDirectory, captureOutp
   });
 }
 
+// 解析命令行 --bundles 参数；未指定时返回 null
 function requestedBundles() {
   var index = cliArgs.indexOf('--bundles');
   if (index < 0) {
@@ -86,6 +90,7 @@ function needsNsisRecovery() {
   return bundles === null || bundles.includes('all') || bundles.includes('nsis');
 }
 
+// 构造仅打包 NSIS 的补充构建参数（剔除原 --bundles 参数后固定 --bundles nsis）
 function nsisArgs() {
   var result = [];
   for (var i = 0; i < cliArgs.length; i += 1) {
@@ -113,6 +118,7 @@ function buildPath() {
   return cliArgs.includes('--debug') || cliArgs.includes('-d') ? 'debug' : 'release';
 }
 
+// WiX light 写 WixPdb 失败（LGHT0001）时的恢复流程：用 -spdb 重新链接生成 MSI，需要时再补签名
 function recoverMsi() {
   if (process.platform !== 'win32' || !cliArgs.includes('build')) {
     return Promise.resolve(false);
@@ -125,6 +131,7 @@ function recoverMsi() {
     return Promise.resolve(false);
   }
   var wixObjectStat = statSync(wixObject, { throwIfNoEntry: false });
+  // 仅处理本次构建新产生的中间文件
   if (!wixObjectStat || wixObjectStat.mtimeMs < buildStartedAt) {
     return Promise.resolve(false);
   }
@@ -181,6 +188,7 @@ function recoverMsi() {
   });
 }
 
+// 主流程：执行 tauri 构建；失败且输出匹配 WiX light 错误时尝试恢复 MSI，再按需补跑 NSIS 打包
 var buildStartedAt = Date.now();
 run(command, args, childEnvironment, root, true)
   .then(function (result) {

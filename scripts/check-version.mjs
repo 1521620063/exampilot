@@ -1,3 +1,4 @@
+// 版本一致性检查脚本：package.json、tauri.conf.json、Cargo.toml 三处版本必须一致，且与发布 tag（可选参数或 GITHUB_REF_NAME）匹配。
 import fs from 'node:fs';
 
 var expected = process.argv[2] || process.env.GITHUB_REF_NAME;

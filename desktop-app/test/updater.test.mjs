@@ -1,3 +1,4 @@
+// 测试：更新错误格式化与下载进度计算
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { formatUpdateError, progressPercent, progressState, updateDetails } from '../src/updater.mjs';

@@ -1,3 +1,8 @@
+/**
+ * settings-transfer.js —— 设置备份/迁移/归一化
+ * 定义 exampilot-settings-backup v1 备份格式：导出时生成备份，
+ * 导入时校验并归一化为可直接写入 chrome.storage 的设置对象。
+ */
 (function (root) {
   var BACKUP_FORMAT = 'exampilot-settings-backup';
   var BACKUP_VERSION = 1;
@@ -67,6 +72,7 @@
     return value;
   }
 
+  /** 校验并归一化单个配置；id 冲突时追加 _copy 后缀去重 */
   function normalizeConfig(config, index, usedIds) {
     if (!isPlainObject(config)) {
       throw new Error('第 ' + (index + 1) + ' 个配置格式无效');
@@ -95,6 +101,7 @@
     return result;
   }
 
+  /** 校验备份格式/版本并归一化全部设置字段（含钳制与默认值补全） */
   function normalizeSettingsBackup(backup) {
     if (!isPlainObject(backup) || backup.format !== BACKUP_FORMAT) {
       throw new Error('这不是有效的 ExamPilot 配置文件');
@@ -118,6 +125,7 @@
     var configList = rawConfigs.map(function (config, index) {
       return normalizeConfig(config, index, usedIds);
     });
+    // 仅保留第一个选中的配置，其余强制取消选中
     var selectedFound = false;
     configList.forEach(function (config) {
       if (config.selected && !selectedFound) {
@@ -150,6 +158,7 @@
     };
   }
 
+  /** 用当前设置生成备份文件（经同一套归一化校验保证格式合法） */
   function createSettingsBackup(settings) {
     var backup = {
       format: BACKUP_FORMAT,

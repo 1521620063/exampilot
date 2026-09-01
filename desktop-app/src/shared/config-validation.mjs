@@ -1,9 +1,11 @@
+// AI 配置表单字段校验：返回错误文案，空字符串表示通过。
 import { parseJsonObjectOverride, validateHttpsUrl } from './request-overrides.mjs';
 
 function text(value) {
   return String(value || '').trim();
 }
 
+// 借助解析器校验 JSON 合法性，失败返回错误文案
 function validateJsonObject(value, label) {
   if (!text(value)) return '';
   try {
@@ -14,6 +16,7 @@ function validateJsonObject(value, label) {
   }
 }
 
+// 校验单个字段；自定义模板模式下模型名可不填
 export function validateConfigField(config, field) {
   config = config || {};
   if (field === 'name') return text(config.name) ? '' : '请填写配置名称';
@@ -32,6 +35,7 @@ export function validateConfigField(config, field) {
   return '';
 }
 
+// 校验全部字段，返回 { 字段: 错误文案 } 映射
 export function validateConfig(config) {
   var fields = ['name', 'url', 'model', 'customHeadersJson', 'customBodyJson'];
   return fields.reduce(function (errors, field) {

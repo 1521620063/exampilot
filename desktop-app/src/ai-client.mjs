@@ -1,8 +1,10 @@
+// AI 请求客户端：按配置的接口模式（Chat Completions / Responses API / Anthropic / 自定义模板）构造请求，并从响应中提取答案文本。
 import * as templateEngine from './shared/template-engine.mjs';
 import * as requestOverrides from './shared/request-overrides.mjs';
 
 Object.assign(globalThis, templateEngine, requestOverrides);
 
+// 从 data URL 中拆出 base64 与 MIME，并提供多种别名字段，兼容不同模板/接口的变量写法
 function imageContext(imageUrl) {
   var match = String(imageUrl || '').match(/^data:([^;]+);base64,([\s\S]*)$/);
   return {
@@ -22,6 +24,7 @@ function normalizeHeaders(headers) {
   return result;
 }
 
+// 按接口模式构造请求：自定义模板走模板引擎，其余内置模式支持用户 Headers/Body 覆盖
 export function buildRequest(config, imageUrl, prompt) {
   if (!config || !config.url) throw new Error('请先在设置窗口添加并选择 AI 配置');
   globalThis.validateHttpsUrl(config.url);
@@ -54,6 +57,7 @@ export function buildRequest(config, imageUrl, prompt) {
   return { url: config.url, headers: normalizeHeaders(headers), body: body };
 }
 
+// 按接口模式从响应 JSON 中取出正文文本
 export function extractAnswer(config, response) {
   var mode = config.apiMode || 'chat-completions';
   var content;

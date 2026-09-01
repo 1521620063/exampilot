@@ -1,3 +1,10 @@
+/**
+ * 可选权限申请页脚本（host-permission.html 内嵌）：
+ * 展示待授权的 origin，点击按钮调用 chrome.permissions.request 申请主机权限。
+ * 支持两种用途：'api'（授权 AI 接口域名）与 'frame'（授权跨域 iframe 域名，
+ * 供静默模式仿光标进入）；以 iframe 嵌入（embed=1）时会通过 postMessage
+ * 把授权结果回传给父页面。
+ */
 (function () {
   var params = new URLSearchParams(window.location.search);
   var origin = params.get('origin') || '';
@@ -23,10 +30,12 @@
     statusEl.className = type || '';
   }
 
+  // 仅接受 https://域名/* 形式的匹配模式，防止任意模式被申请
   function isValidOrigin(value) {
     return /^https:\/\/[^/]+\/\*$/.test(value);
   }
 
+  // iframe 嵌入模式下，把授权结果回传给父页面（面板中的授权弹窗）
   function notifyParent(granted) {
     if (!embedded) return;
     window.parent.postMessage({
@@ -44,6 +53,7 @@
     return;
   }
 
+  // 点击“授权”：申请主机权限，成功后延时回传结果并关闭页面
   authorizeBtn.addEventListener('click', function () {
     authorizeBtn.disabled = true;
     setStatus('正在请求浏览器授权...');

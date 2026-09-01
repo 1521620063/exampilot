@@ -1,3 +1,4 @@
+// 测试：设置备份（exampilot-settings-backup v1）的归一化
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeSettingsBackup } from '../src/shared/settings-transfer.mjs';

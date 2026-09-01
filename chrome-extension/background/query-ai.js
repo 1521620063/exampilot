@@ -1,4 +1,10 @@
 /**
+ * query-ai.js —— AI 请求与响应解析
+ * 按配置的 apiMode 分发到对应 API 协议实现，
+ * 统一处理权限校验、fetch 错误包装与响应体错误信息提取。
+ */
+
+/**
  * 调用视觉大模型识别图片中的题目并求解
  *
  * 支持多种 API 模式（通过 config.apiMode 切换）：
@@ -74,6 +80,7 @@ async function buildApiError(resp, prefix) {
   return new Error(prefix + ' (' + resp.status + ')');
 }
 
+/** 从 data URL 解析出 base64 数据与 MIME 类型；非 data URL 原样返回并默认 JPEG */
 function parseImageDataUrl(imageUrl) {
   var match = String(imageUrl || '').match(/^data:([^;]+);base64,([\s\S]*)$/);
   return {
@@ -83,6 +90,7 @@ function parseImageDataUrl(imageUrl) {
   };
 }
 
+/** 汇总自定义模板可用的渲染变量（模型、密钥、提示词、图片的多种表示形式） */
 function buildCustomTemplateContext(config, imageUrl, prompt) {
   var image = parseImageDataUrl(imageUrl);
   return {
@@ -98,6 +106,7 @@ function buildCustomTemplateContext(config, imageUrl, prompt) {
   };
 }
 
+/** 过滤空值请求头并将值统一转为字符串 */
 function normalizeTemplateHeaders(headers) {
   var normalized = {};
   Object.keys(headers || {}).forEach(function (key) {

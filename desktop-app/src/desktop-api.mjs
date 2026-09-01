@@ -1,8 +1,10 @@
+// 前端设置与系统能力的 API 层：设置经 Tauri store 插件持久化，截屏/网络/剪贴板/窗口等能力经 invoke 调用 Rust 侧命令。
 import { invoke } from '@tauri-apps/api/core';
 import { load } from '@tauri-apps/plugin-store';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { createDefaultSettings } from './defaults.mjs';
 
+// 单例缓存 store 句柄，避免重复加载
 var storePromise = null;
 var pendingSettings = null;
 var settingsFlushPromise = null;
@@ -17,6 +19,7 @@ export async function loadSettings() {
   return Object.assign(createDefaultSettings(), (await store.get('settings')) || {});
 }
 
+// 合并并发保存：只保留最新待写值，循环刷盘直到队列清空
 export async function saveSettings(settings) {
   pendingSettings = JSON.parse(JSON.stringify(settings));
   if (!settingsFlushPromise) {
@@ -47,6 +50,7 @@ export async function saveLastModelResponse(response) {
   return response;
 }
 
+// 设置导入/导出：弹系统文件对话框选路径，实际文件读写经 Tauri 命令完成
 export async function importSettings() {
   var path = await open({ multiple: false, filters: [{ name: 'ExamPilot 设置', extensions: ['json'] }] });
   if (!path) return null;
@@ -71,6 +75,7 @@ export function setOverlayTargets(targets, monitor, debug) {
   return invoke('set_overlay_targets', { targets: targets, monitor: monitor, debug: debug });
 }
 export function setOverlayDebug(debug) { return invoke('set_overlay_debug', { debug: debug }); }
+// 应用静默模式窗口配置；光标偏移在此钳制到 1~20，非法值回退 5
 export function applySilentSettings(silentModeEnabled, silentDebugFrameEnabled, silentCursorOffset) {
   var offset = Number(silentCursorOffset);
   offset = Number.isFinite(offset) ? Math.max(1, Math.min(Math.round(offset), 20)) : 5;

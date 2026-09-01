@@ -4,6 +4,17 @@
  * Shadow DOM via attachShadow() on a plain <div> (no custom elements).
  * No JSX transform needed — htm provides tagged template syntax.
  */
+/**
+ * 将面板挂载到宿主元素：在宿主上创建 Shadow DOM 并渲染 Panel 组件。
+ * 样式与 UI 全部隔离在 shadow root 内，避免与页面样式互相污染。
+ */
+/**
+ * 悬浮面板主文件：用 Preact + htm 在 Shadow DOM 内渲染面板 UI。
+ * 职责包括：截图/区域截图流程、结果展示（经 HTML 白名单消毒）、
+ * AI 配置管理与导入导出、提示词编辑、界面透明度，
+ * 以及静默模式（隐藏原生光标、渲染仿光标、答案区域悬停反馈、
+ * 跨域 iframe 权限申请）。面板命令经由宿主元素上的 CustomEvent 接收。
+ */
 
 import { render, h } from 'preact';
 import { useState, useEffect, useRef } from 'preact/hooks';
@@ -38,6 +49,7 @@ function getApiUrlPlaceholder(apiMode) {
   return placeholders[apiMode] || placeholders['chat-completions'];
 }
 
+// 仿光标尺寸规范化：限制在 10~32px
 function normalizeFakeCursorSize(value) {
   var number = Number(value);
   if (!Number.isFinite(number)) return DEFAULT_FAKE_CURSOR_SIZE;
@@ -48,12 +60,15 @@ function normalizeFakeCursorStyle(value) {
   return value === 'light-outline' ? value : DEFAULT_FAKE_CURSOR_STYLE;
 }
 
+// 触发时仿光标向右偏移量规范化：限制在 1~20px
 function normalizeSilentCursorOffset(value) {
   var number = Number(value);
   if (!Number.isFinite(number)) return DEFAULT_SILENT_CURSOR_OFFSET;
   return Math.max(1, Math.min(Math.round(number), 20));
 }
 
+// AI 返回的答案 HTML 白名单消毒：移除脚本/样式/iframe 等危险标签、
+// 剥掉所有属性、去掉注释，未在白名单内的标签降级为纯文本，防 XSS
 function sanitizeAnswerHtml(value) {
   var template = document.createElement('template');
   template.innerHTML = String(value || '');
@@ -171,12 +186,14 @@ export function mountPanel(host) {
     var _w = useState(false), selectingRegion = _w[0], setSelectingRegion = _w[1];
     var overlayElRef = useRef(null);
 
+    // 把静默模式相关 state 同步到 ref，供事件回调中读取最新值（闭包内 state 会过期）
     silentModeEnabledRef.current = silentModeEnabled;
     silentDebugFrameEnabledRef.current = silentDebugFrameEnabled;
     fakeCursorSizeRef.current = fakeCursorSize;
     fakeCursorStyleRef.current = fakeCursorStyle;
     silentCursorOffsetRef.current = silentCursorOffset;
 
+    // 处理后台返回的截图识别结果；mySeq 用于丢弃过期请求的响应
     function handleCaptureResponse(response, mySeq) {
       if (mySeq !== currentRequestSeqRef.current) return;
       resumeFakeCursorAfterCapture();
@@ -189,6 +206,7 @@ export function mountPanel(host) {
         setShowSpinner(false);
         if (response.result && response.result.mode === 'silent') {
           // The mode may have been turned off while the AI request was in flight.
+          // 静默模式结果：安装答案目标区域并把答案写入剪切板（请求期间开关可能已被关闭）
           if (!silentModeEnabledRef.current) {
             setStatusText('静默模式已关闭');
             return;
@@ -240,6 +258,7 @@ export function mountPanel(host) {
     }
 
     // ---- Listen for status messages from background ----
+    // 监听后台状态消息：截图时隐藏面板并挂起仿光标，完成后恢复显示
     useEffect(function () {
       function handler(request) {
         if (request.action === 'status') {
@@ -282,6 +301,8 @@ export function mountPanel(host) {
     }, []);
 
     // ---- Draggable mini panel position ----
+    // 迷你面板拖拽与位置记忆：位置以“可视范围内比例 (xRatio/yRatio)”持久化，
+    // 这样窗口缩放后位置仍按比例还原；旧版像素/左右停靠格式在此处迁移。
     function clampPositionRatio(value) {
       return Math.max(0, Math.min(Number(value), 1));
     }
@@ -410,6 +431,7 @@ export function mountPanel(host) {
     function handleMiniPointerMove(event) {
       var drag = miniDragRef.current;
       if (!drag || drag.pointerId !== event.pointerId) return;
+      // 位移超过 4px 才视为拖拽，避免点击误判为拖动
       if (!drag.dragged && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4) return;
       drag.dragged = true;
       var bounds = getPositionBounds(drag.width, drag.height);
@@ -483,6 +505,9 @@ export function mountPanel(host) {
     }, []);
 
     // ---- Global fake cursor preference ----
+    // 仿光标初始化：在 document.body（Shadow DOM 之外）创建 fixed 定位的仿光标元素，
+    // SVG 箭头放在 closed shadow root 里防止页面篡改；监听页面 mousemove、
+    // iframe 转发消息（top-move）并跟随 storage 偏好更新尺寸/样式/开关。
     useEffect(function () {
       var active = true;
       var style = document.createElement('style');
@@ -668,6 +693,8 @@ export function mountPanel(host) {
     }, []);
 
     // The fake cursor only replaces the system cursor while silent mode is active.
+    // 静默模式开启且未在框选区域时，用全局 CSS 隐藏原生光标并启用仿光标；
+    // 区域选择期间需让用户看到真实光标，故临时关闭。
     useEffect(function () {
       var state = fakeCursorRef.current;
       if (!state || !state.cursor) return;
@@ -875,6 +902,7 @@ export function mountPanel(host) {
       }).catch(function () {});
     }
 
+    // 收集页面上所有跨域 https iframe 的 URL（同源与重复 origin 去除）
     function getCrossOriginIframeUrls() {
       var seen = {};
       return Array.prototype.map.call(document.querySelectorAll('iframe[src], frame[src]'), function (frame) {
@@ -889,6 +917,8 @@ export function mountPanel(host) {
       }).filter(Boolean);
     }
 
+    // 静默模式前置条件（仅可选权限版）：为每个跨域 iframe 域名申请主机权限，
+    // 全部通过后让后台向这些 frame 注入光标桥接脚本
     function ensureSilentFramePermissions() {
       if (IS_FULL_ACCESS) return Promise.resolve(true);
       var urls = getCrossOriginIframeUrls();
@@ -909,6 +939,7 @@ export function mountPanel(host) {
       });
     }
 
+    // 监听 DOM 变化与 iframe 加载：静默模式下新增跨域 iframe 时防抖后补授权
     useEffect(function () {
       if (IS_FULL_ACCESS || !silentModeEnabled) return;
       var timer = null;
@@ -1178,6 +1209,7 @@ export function mountPanel(host) {
       return chrome.runtime.sendMessage({ action: 'checkApiHostPermission', url: url });
     }
 
+    // 弹出权限申请 iframe 弹窗（同 origin+purpose 的请求复用现有 Promise，串行排队）
     function showApiHostPermissionFrame(origin, purpose) {
       var requestPurpose = purpose || 'api';
       if (__permissionRequest && __permissionRequest.origin === origin &&
@@ -1206,6 +1238,7 @@ export function mountPanel(host) {
       return queuedRequest;
     }
 
+    // 在页面上覆盖一个模态 iframe（扩展内授权页），授权结果经 postMessage 返回
     function createApiHostPermissionFrame(origin, purpose) {
       return new Promise(function (resolve) {
         if (__permissionHandler) {
@@ -1305,6 +1338,8 @@ export function mountPanel(host) {
       });
     }
 
+    // 截图前校验：必须已选择 AI 配置；可选权限版还需先授权其 API 域名。
+    // 返回 false 表示已弹出授权框，需用户授权后重新触发截图
     function ensureActiveConfigBeforeCapture() {
       return chrome.runtime.sendMessage({ action: 'getConfigs' }).then(function (res) {
         if (!res.success) {
@@ -1359,6 +1394,7 @@ export function mountPanel(host) {
       return JSON.parse(JSON.stringify(value));
     }
 
+    // 深合并 JSON 覆盖对象：null 表示删除该键，对象递归合并，其余直接覆盖
     function mergeJsonOverride(base, override) {
       var result = isPlainObject(base) ? cloneJson(base) : {};
       var patch = isPlainObject(override) ? override : {};
@@ -1461,6 +1497,7 @@ export function mountPanel(host) {
       return mergeJsonOverride(previewBody, parseJsonObjectOverride(formBodyJson, 'Body JSON'));
     }
 
+    // 保存配置表单：先本地校验 JSON，可选权限版保存前需授权 API 域名
     function saveForm() {
       setFormError('');
       if (!formName || !formUrl) {
@@ -1543,6 +1580,7 @@ export function mountPanel(host) {
       };
     }
 
+    // 复制静默模式答案到剪切板：优先 Clipboard API，被页面限制时降级为 execCommand
     async function copySilentClipboardText(text) {
       var value = String(text || '').trim();
       if (!value) return false;
@@ -1600,6 +1638,7 @@ export function mountPanel(host) {
       resetSilentCursorFeedback();
     }
 
+    // 静默模式悬停判定：仿光标在答案区域内停留 350ms 后触发反馈（右移提示）
     function scheduleSilentHover(state) {
       if (!state || state.hoverTriggered || silentHoverTimerRef.current) return;
       silentHoverTargetRef.current = state;
@@ -1613,6 +1652,7 @@ export function mountPanel(host) {
       }, 350);
     }
 
+    // 根据仿光标位置找出命中的答案目标区域，进入/离开时重置悬停状态
     function handleSilentTargetsMouseMove(event) {
       var states = Array.isArray(silentTargetRef.current) ? silentTargetRef.current : [];
       var nextState = states.find(function (item) {
@@ -1709,6 +1749,7 @@ export function mountPanel(host) {
       silentTargetRef.current = null;
     }
 
+    // 在页面上安装一个答案目标区域（固定定位、按文档坐标跟随滚动/缩放窗口）
     function installSingleSilentTarget(result, index) {
       var target = result && result.target;
       if (!target) return null;
@@ -1791,6 +1832,7 @@ export function mountPanel(host) {
       return state;
     }
 
+    // 按 AI 返回结果安装全部答案目标区域，并开始监听 mousemove 做悬停判定
     function installSilentTarget(result) {
       removeSilentTarget();
       var targets = result && Array.isArray(result.targets) ? result.targets : [result];
@@ -1806,6 +1848,7 @@ export function mountPanel(host) {
       }
     }
 
+    // 全屏截图：校验配置/授权后交给后台 captureAndAnalyze
     function handleFullscreenCapture() {
       currentRequestSeqRef.current++;
       var mySeq = currentRequestSeqRef.current;
@@ -1830,6 +1873,7 @@ export function mountPanel(host) {
       });
     }
 
+    // 区域截图：先进入区域选择模式（隐藏面板），选区确定后在 mouseup 里发起识别
     function handleRegionCapture() {
       currentRequestSeqRef.current++;
       var mySeq = currentRequestSeqRef.current;
@@ -1923,6 +1967,7 @@ export function mountPanel(host) {
       box.style.height = h + 'px';
     }
 
+    // 选区松开鼠标：小于 20px 视为误操作直接取消；否则以视口坐标+DPR 发起区域识别
     function handleSelectionMouseUp(e) {
       if (!overlayElRef.current) {
         cancelRegionSelection();

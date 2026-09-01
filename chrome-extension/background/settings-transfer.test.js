@@ -1,3 +1,4 @@
+// settings-transfer.js 的单元测试：验证旧版备份的仿光标默认值补全与钳制逻辑。
 var test = require('node:test');
 var assert = require('node:assert/strict');
 var transfer = require('./settings-transfer.js');

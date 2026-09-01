@@ -6,6 +6,7 @@ authors = ["ExamPilot"]
 edition = "2021"
 
 [lib]
+# cdylib/staticlib 供移动端等场景使用；桌面端走 lib
 name = "exampilot_desktop_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
@@ -13,25 +14,35 @@ crate-type = ["lib", "cdylib", "staticlib"]
 tauri-build = { version = "2.5.2", features = [] }
 
 [dependencies]
+# base64: 截图数据编码；arboard: 剪贴板；enigo: 模拟鼠标移动（静默模式）
 base64 = "0.22.1"
 arboard = "3.6.1"
 enigo = "0.6.1"
+# image: 仅需 JPEG 编码（截屏压缩上传）
 image = { version = "0.25.9", default-features = false, features = ["jpeg"] }
+# reqwest: Rust 侧 HTTP 请求（AI 调用走原生层，避免前端跨域）
 reqwest = { version = "0.12.28", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+# tauri 核心：macos-private-api 支持透明窗口，tray-icon 提供系统托盘
 tauri = { version = "2.11.5", features = ["macos-private-api", "tray-icon"] }
 tauri-plugin-dialog = "2.4.0"
+# global-shortcut: 全局触发快捷键；store: 设置持久化
 tauri-plugin-global-shortcut = "2.3.2"
 tauri-plugin-store = "2.4.4"
 tokio = { version = "1", features = ["time"] }
+# tokio-util: CancellationToken 用于取消进行中的 AI 请求
 tokio-util = "0.7.19"
+# xcap: 原生屏幕截图
 xcap = "0.9.8"
+# updater: 应用内更新（签名校验）；process: 更新后重启
 tauri-plugin-updater = "2.9.0"
 tauri-plugin-process = "2.3.1"
 
+# Windows 平台：GDI/窗口/键鼠 API 用于光标监控与窗口控制
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
 
+# macOS 平台：Core Graphics 用于坐标换算
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = { version = "0.25", features = ["highsierra"] }

@@ -1,3 +1,4 @@
+// 测试：自定义 AI 配置的校验规则
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validateConfig, validateConfigField } from '../src/shared/config-validation.mjs';

@@ -1,3 +1,4 @@
+// 测试：静默模式结果归一化与显示器坐标映射
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mapTargetsToMonitor, normalizeSilentResult } from '../src/silent.mjs';

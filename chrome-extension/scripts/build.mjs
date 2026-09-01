@@ -1,3 +1,11 @@
+/**
+ * 扩展构建脚本：用 esbuild 打包内容脚本与后台脚本，产出两种变体——
+ * optional（默认，需按域名申请可选主机权限，manifest 含 optional_host_permissions）
+ * 与 full（BUILD_MODE=full，直接申请 <all_urls>，去掉 scripting 权限与
+ * 可选权限声明，并让内容脚本自动注入所有 frame）。
+ * 通过 --define 把 __EXAMPILOT_FULL_ACCESS__ 写死进 bundle。
+ */
+
 import { execSync } from 'child_process';
 import { copyFileSync, mkdirSync, rmSync, readdirSync, statSync, readFileSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
@@ -32,6 +40,7 @@ execSync(
 );
 
 // 4. Copy static assets (manifest.json, icons)
+// 递归复制静态资源（manifest、图标、权限申请页）到 dist
 function copyEntry(srcRoot, destRoot, name) {
   const src = join(srcRoot, name);
   const dest = join(destRoot, name);
@@ -51,6 +60,8 @@ copyEntry(root, dist, 'manifest.json');
 copyEntry(root, dist, 'icons');
 copyEntry(root, dist, 'permission');
 
+// Full Access 变体：改写 manifest——申请 <all_urls> 主机权限、移除 scripting 权限
+// 与可选权限/网络资源声明，内容脚本改为自动注入所有 frame（document_start 注入光标桥接）
 if (fullAccess) {
   const manifestPath = join(dist, 'manifest.json');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));

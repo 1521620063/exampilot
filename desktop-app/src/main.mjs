@@ -1,3 +1,4 @@
+// ExamPilot 桌面端前端入口：按 URL 参数 window= 在同一页面挂载答案悬浮窗 / 截图遮罩 / 调试窗 / 设置窗四个 Preact 应用。
 import { h, render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import htm from 'htm';
@@ -21,20 +22,24 @@ var html = htm.bind(h);
 
 globalThis.ExamPilotSettingsTransfer = settingsTransfer;
 
+// 取当前选中的 AI 配置
 function activeConfig(settings) {
   return (settings.configList || []).find(function (item) { return item.selected; }) || null;
 }
 
+// 透明度钳制到 0~1，非法值回退 0.95
 function uiOpacity(value) {
   var opacity = Number(value);
   return Number.isFinite(opacity) ? Math.max(0, Math.min(opacity, 1)) : 0.95;
 }
 
+// 静默模式光标触发右移像素数：钳制到 1~20，非法值回退 5
 function silentCursorOffset(value) {
   var offset = Number(value);
   return Number.isFinite(offset) ? Math.max(1, Math.min(Math.round(offset), 20)) : 5;
 }
 
+// 白名单过滤 AI 返回的 HTML（剥离标签属性与注释），防止 XSS 后再插入答案窗口
 function sanitizeAnswer(value) {
   var template = document.createElement('template');
   template.innerHTML = String(value || '');
@@ -54,11 +59,13 @@ function sanitizeAnswer(value) {
   return template.innerHTML;
 }
 
+// 保存最近一次模型返回并广播给设置窗口展示
 async function publishModelRecord(record) {
   await saveLastModelResponse(record);
   await emit('model-response-updated', record);
 }
 
+// 轮换到配置列表中的下一个配置（循环取模）
 function nextConfig(settings) {
   var list = settings.configList || [];
   if (!list.length) throw new Error('请先在设置窗口添加 AI 配置');
@@ -80,6 +87,7 @@ function AnswerApp() {
   var settingsRef = useRef(settings);
   var settingsVersionRef = useRef(0);
   var busyRef = useRef(busy);
+  // 操作序号：每次新截图/清除自增，用于丢弃过期的异步结果
   var operationRef = useRef(0);
 
   function applySettings(next) {
@@ -165,6 +173,7 @@ function AnswerApp() {
     setAnswer(''); setStatus('截图中...'); updateBusy(true);
     try {
       await hideCaptureUi();
+      // 等待窗口真正隐藏后再截屏，避免截到自身界面
       await new Promise(function (resolve) { window.setTimeout(resolve, 100); });
       var capture = await captureCurrentMonitor();
       await processCaptureData(capture, operation);
@@ -217,6 +226,7 @@ function AnswerApp() {
       parseError: ''
     };
     await publishModelRecord(responseRecord);
+    // 静默模式：把 AI 返回的 JSON 解析为坐标目标并放置命中框；非静默则直接展示答案文本
     var currentSettings = settingsRef.current;
     if (requestWasSilent && currentSettings.silentModeEnabled) {
       var result;
@@ -269,6 +279,7 @@ function AnswerApp() {
   `;
 }
 
+// 截图遮罩窗口：在全屏截图上拖拽框选区域
 function OverlayApp() {
   var overlayState = useState({ selecting: false, previewDataUrl: '', start: null, rect: null }), overlay = overlayState[0], setOverlay = overlayState[1];
   useEffect(function () {
@@ -351,6 +362,7 @@ function ConfigEditor(props) {
   </div>`;
 }
 
+// 设置窗口：管理 AI 配置、静默模式、提示词、导入导出与应用更新
 function SettingsApp() {
   var state = useState(createDefaultSettings()), settings = state[0], setSettings = state[1];
   var messageState = useState(''), message = messageState[0], setMessage = messageState[1];
@@ -440,6 +452,7 @@ function SettingsApp() {
     try {
       if (!window.confirm('导入会替换当前桌面端的全部 ExamPilot 配置，是否继续？')) return;
       var backup = await importSettings(); if (!backup) return;
+      // 备份文件先归一化校验（含钳制与必填检查）再应用
       var normalized = globalThis.ExamPilotSettingsTransfer.normalizeSettingsBackup(backup);
       await persist(normalized);
       await applySilentSettings(normalized.silentModeEnabled === true, normalized.silentDebugFrameEnabled === true, normalized.silentCursorOffset);
@@ -499,5 +512,6 @@ function SettingsApp() {
   </main>`;
 }
 
+// 根据 URL 的 window 参数渲染对应窗口应用（缺省为答案窗口）
 var windowKind = new URLSearchParams(window.location.search).get('window');
 render(windowKind === 'overlay' ? html`<${OverlayApp} />` : windowKind === 'debug' ? html`<${DebugApp} />` : windowKind === 'settings' ? html`<${SettingsApp} />` : html`<${AnswerApp} />`, document.getElementById('app'));
