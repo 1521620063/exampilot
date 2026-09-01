@@ -11,7 +11,7 @@ button, input, textarea, select { font: inherit; }
 .answer-live, .answer-idle { padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; }
 .answer-live { background: #dbeafe; color: #1d4ed8; }.answer-idle { background: #f1f5f9; color: #475569; }
 .answer-status { margin-top: 6px; color: #475569; font-size: 12px; }.answer-content { max-height: 115px; margin-top: 7px; overflow: auto; line-height: 1.5; }.answer-content p { margin: 0 0 6px; }.answer-empty { margin-top: 18px; color: #94a3b8; font-size: 12px; }
-.screen-overlay { width: 100vw; height: 100vh; background-color: transparent; background-position: center; background-repeat: no-repeat; background-size: 100% 100%; }.screen-overlay.selecting { cursor: crosshair; background-color: rgba(15,23,42,.12); background-blend-mode: multiply; }.selection-box { position: fixed; border: 2px dashed #2563eb; background: rgba(37,99,235,.12); pointer-events: none; }
+.screen-overlay { width: 100vw; height: 100vh; background-color: transparent; background-position: center; background-repeat: no-repeat; background-size: 100% 100%; }.screen-overlay.selecting { cursor: crosshair; }.selection-box { position: fixed; border: 2px dashed #2563eb; background: rgba(37,99,235,.12); pointer-events: none; }
 .debug-window { position: fixed; inset: 0; width: 100vw; height: 100vh; border: 2px solid #ef4444; background: rgba(239,68,68,.12); pointer-events: none; }
 .debug-window-center { position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 2px #fff; }
 .config-form .has-error input, .config-form .has-error textarea { border-color: #dc2626; }

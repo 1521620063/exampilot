@@ -537,6 +537,12 @@ fn create_overlay(app: &AppHandle, monitor: &MonitorInfo) -> Result<tauri::Webvi
     .always_on_top(true)
     .skip_taskbar(true)
     .focused(false)
+    // On Windows an undecorated but resizable window keeps the invisible
+    // WS_THICKFRAME resize border, which insets the webview client area and
+    // shifts the mask away from the screen's left/top edge. The overlay never
+    // resizes by dragging, so disable both the resize border and the shadow.
+    .resizable(false)
+    .shadow(false)
     .visible_on_all_workspaces(true)
     .visible(false)
     .position(
