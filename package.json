@@ -1,7 +1,7 @@
 {
   "name": "exampilot",
   "private": true,
-  "version": "1.8.0",
+  "version": "1.8.1",
   "scripts": {
     "build": "npm run chrome:build && npm run desktop:build",
     "test": "npm run chrome:test && npm run desktop:test",

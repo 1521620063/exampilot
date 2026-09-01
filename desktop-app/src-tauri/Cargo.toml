@@ -1,6 +1,6 @@
 [package]
 name = "exampilot-desktop"
-version = "1.8.0"
+version = "1.8.1"
 description = "ExamPilot desktop client"
 authors = ["ExamPilot"]
 edition = "2021"
