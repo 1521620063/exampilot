@@ -776,25 +776,18 @@ export function mountPanel(host) {
       applyUiOpacity(overlay, uiOpacity);
 
       // 遮罩层样式（内嵌 <style>，因为 document.body 在 Shadow DOM 外）
+      // 区域截图不显示选中框、不改变鼠标光标：选区框元素仅用于存储选区几何数据，保持不可见。
       var style = document.createElement('style');
       style.textContent = `
         .exmp-selection-overlay {
           position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-          background: transparent; z-index: 2147483646; cursor: crosshair;
+          background: transparent; z-index: 2147483646;
         }
         .exmp-selection-box {
-          position: fixed; border: 1px dashed rgba(79,110,247,0.8); border-radius: 2px;
-          background: rgba(79,110,247,0.02); pointer-events: none; display: none;
+          position: fixed; border: 0; background: transparent; pointer-events: none; display: none;
           z-index: 2147483647;
         }
-        .exmp-selection-corner {
-          position: absolute; width: 7px; height: 7px;
-          background: #fff; border: 1.5px solid rgba(79,110,247,0.8); border-radius: 1.5px;
-        }
-        .exmp-selection-corner-tl { top: -3px; left: -3px; }
-        .exmp-selection-corner-tr { top: -3px; right: -3px; }
-        .exmp-selection-corner-bl { bottom: -3px; left: -3px; }
-        .exmp-selection-corner-br { bottom: -3px; right: -3px; }
+        .exmp-selection-corner { display: none; }
       `;
       overlay.appendChild(style);
 
