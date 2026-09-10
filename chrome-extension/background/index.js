@@ -679,17 +679,17 @@ async function captureAndAnalyze(windowId, tabId, rect, viewport) {
 
   try {
     // 1. 截图：必须先 await sendStatus，等 content script 隐藏面板后再截图
-    await sendStatus(tabId, '截图中...');
+    await sendStatus(tabId, '截图中...', true);
     var dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 90 });
 
     // 1.5 如果指定了裁剪区域，裁剪图片
     if (rect) {
-      sendStatus(tabId, '裁剪中...');
+      sendStatus(tabId, '裁剪中...', true);
       dataUrl = await cropImage(dataUrl, rect);
     }
 
     // 2. 调用视觉大模型进行识别
-    sendStatus(tabId, 'AI识别中...');
+    sendStatus(tabId, 'AI识别中...', true);
     const settings = await chrome.storage.local.get(['customPrompt', 'silentPrompt', 'silentModeEnabled']);
     const silentModeEnabled = settings.silentModeEnabled === true;
     const prompt = silentModeEnabled ? buildSilentPrompt(settings.silentPrompt, rect, viewport) : settings.customPrompt;
@@ -711,9 +711,10 @@ async function captureAndAnalyze(windowId, tabId, rect, viewport) {
 
 /**
  * 向 content script 发送实时状态消息（静默处理连接错误）
+ * busy 为 true 时面板显示加载动画，避免依赖文案猜测忙碌状态
  */
-function sendStatus(tabId, message) {
-  return chrome.tabs.sendMessage(tabId, { action: 'status', message }).catch(() => {});
+function sendStatus(tabId, message, busy) {
+  return chrome.tabs.sendMessage(tabId, { action: 'status', message, busy: busy === true }).catch(() => {});
 }
 
 // 监听 content script 发起的截图识别请求

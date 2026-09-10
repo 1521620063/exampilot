@@ -26,7 +26,7 @@ test('clamps imported silent cursor offset', function () {
   assert.equal(normalizeSettingsBackup(backup({ silentCursorOffset: 20.6 })).silentCursorOffset, 20);
 });
 
-test('preserves opacity as a 0 to 1 ratio', function () {
-  assert.equal(normalizeSettingsBackup(backup({ uiOpacity: 0 })).uiOpacity, 0);
+test('clamps opacity to a 0.01 to 1 ratio', function () {
+  assert.equal(normalizeSettingsBackup(backup({ uiOpacity: 0 })).uiOpacity, 0.01);
   assert.equal(normalizeSettingsBackup(backup({ uiOpacity: 1.5 })).uiOpacity, 1);
 });

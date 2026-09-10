@@ -36,7 +36,7 @@ export function normalizeSettingsBackup(backup) {
   if (configList.length && !selected) configList[0].selected = true;
   var opacity = Number(settings.uiOpacity);
   if (!Number.isFinite(opacity)) throw new Error('Invalid answer window opacity');
-  return { configList: configList, customPrompt: requireString(settings.customPrompt, 'Prompt', true), silentPrompt: settings.silentPrompt === undefined ? DEFAULT_SILENT_PROMPT : requireString(settings.silentPrompt, 'Silent prompt', true), uiOpacity: Math.max(0, Math.min(opacity, 1)), silentModeEnabled: settings.silentModeEnabled === true, silentDebugFrameEnabled: settings.silentDebugFrameEnabled === true, fakeCursorSize: cursorSize(settings.fakeCursorSize), fakeCursorStyle: settings.fakeCursorStyle === 'light-outline' ? 'light-outline' : 'dark-outline', silentCursorOffset: silentCursorOffset(settings.silentCursorOffset) };
+  return { configList: configList, customPrompt: requireString(settings.customPrompt, 'Prompt', true), silentPrompt: settings.silentPrompt === undefined ? DEFAULT_SILENT_PROMPT : requireString(settings.silentPrompt, 'Silent prompt', true), uiOpacity: Math.max(0.01, Math.min(opacity, 1)), silentModeEnabled: settings.silentModeEnabled === true, silentDebugFrameEnabled: settings.silentDebugFrameEnabled === true, fakeCursorSize: cursorSize(settings.fakeCursorSize), fakeCursorStyle: settings.fakeCursorStyle === 'light-outline' ? 'light-outline' : 'dark-outline', silentCursorOffset: silentCursorOffset(settings.silentCursorOffset) };
 }
 
 // 生成备份：打包当前设置并经归一化，保证导出文件始终合法

@@ -175,7 +175,9 @@ export function mountPanel(host) {
     var silentHoverTargetRef = useRef(null);
     var silentActiveTargetRef = useRef(null);
     var silentMouseMoveHandlerRef = useRef(null);
+    var silentScrollRecheckHandlerRef = useRef(null);
     var silentModeEnabledRef = useRef(false);
+    var silentModeIntentRef = useRef(false);
     var silentDebugFrameEnabledRef = useRef(false);
     var fakeCursorRef = useRef(null);
     var fakeCursorSizeRef = useRef(DEFAULT_FAKE_CURSOR_SIZE);
@@ -283,10 +285,8 @@ export function mountPanel(host) {
             }
           }
           setStatusText(request.message || '');
-          setShowSpinner(
-            request.message.indexOf('...') !== -1 ||
-            request.message.indexOf('中') !== -1
-          );
+          // 忙碌状态由后台消息显式携带 busy 字段决定，不依赖文案内容
+          setShowSpinner(request.busy === true);
           return;
         }
 
@@ -667,6 +667,12 @@ export function mountPanel(host) {
           if (!silentModeEnabledRef.current) removeSilentTarget();
           setSilentModeEnabled(silentModeEnabledRef.current);
         }
+        if (changes.silentDebugFrameEnabled) {
+          var debugFrameEnabled = changes.silentDebugFrameEnabled.newValue === true;
+          silentDebugFrameEnabledRef.current = debugFrameEnabled;
+          setSilentDebugFrameEnabled(debugFrameEnabled);
+          applySilentDebugFrameVisibility(debugFrameEnabled);
+        }
       }
 
       document.addEventListener('mousemove', handlePointerMove, true);
@@ -1000,12 +1006,14 @@ export function mountPanel(host) {
 
     function saveSilentMode(value) {
       var enabled = value === true;
+      silentModeIntentRef.current = enabled;
       if (!enabled) {
         persistSilentMode(false);
         return;
       }
       ensureSilentFramePermissions().then(function (granted) {
-        if (granted) persistSilentMode(true);
+        // 授权等待期间用户可能已重新关闭开关，此时不得再覆盖回开启
+        if (granted && silentModeIntentRef.current === true) persistSilentMode(true);
       }).catch(function () {
         loadSilentMode();
       });
@@ -1033,17 +1041,17 @@ export function mountPanel(host) {
 
     function loadConfigs() {
       chrome.runtime.sendMessage({ action: 'getConfigs' }).then(function (res) {
-        if (res.success) setConfigList(res.configList || []);
-      });
+        if (res && res.success) setConfigList(res.configList || []);
+      }).catch(function () {});
     }
 
     function loadPrompt() {
       chrome.runtime.sendMessage({ action: 'getPrompt' }).then(function (res) {
-        if (res.success) {
+        if (res && res.success) {
           setCustomPrompt(res.prompt || '');
           setSilentPrompt(res.silentPrompt || '');
         }
-      });
+      }).catch(function () {});
     }
 
     function savePrompt() {
@@ -1075,11 +1083,11 @@ export function mountPanel(host) {
     }
 
     function selectConfig(id) {
-      chrome.runtime.sendMessage({ action: 'setActiveConfig', configId: id }).then(loadConfigs);
+      chrome.runtime.sendMessage({ action: 'setActiveConfig', configId: id }).then(loadConfigs).catch(function () {});
     }
 
     function deleteConfig(id) {
-      chrome.runtime.sendMessage({ action: 'deleteConfig', configId: id }).then(loadConfigs);
+      chrome.runtime.sendMessage({ action: 'deleteConfig', configId: id }).then(loadConfigs).catch(function () {});
     }
 
     function exportSettings() {
@@ -1177,7 +1185,7 @@ export function mountPanel(host) {
 
     function openEditForm(id) {
       chrome.runtime.sendMessage({ action: 'getConfig', configId: id }).then(function (res) {
-        if (res.success) {
+        if (res && res.success) {
           setEditingId(id);
           setFormName(res.config.name || '');
           setFormUrl(res.config.url || '');
@@ -1196,7 +1204,7 @@ export function mountPanel(host) {
           setFormError('');
           setShowForm(true);
         }
-      });
+      }).catch(function () {});
     }
 
     function cancelForm() {
@@ -1302,6 +1310,7 @@ export function mountPanel(host) {
         iframe.setAttribute('title', 'ExamPilot API 域名授权');
 
         function cleanup(result) {
+          window.clearTimeout(timeoutId);
           window.removeEventListener('message', handleMessage);
           __permissionHandler = null;
           if (overlay.parentNode) {
@@ -1319,6 +1328,14 @@ export function mountPanel(host) {
           if (data.source !== 'exampilot-permission') return;
           cleanup(!!data.granted);
         }
+
+        // 兜底：iframe 加载失败或扩展上下文失效时，避免 Promise 永久挂起卡住后续授权队列
+        iframe.addEventListener('error', function () {
+          cleanup(false);
+        });
+        var timeoutId = window.setTimeout(function () {
+          cleanup(false);
+        }, 120000);
 
         closeBtn.addEventListener('click', function () {
           cleanup(false);
@@ -1342,8 +1359,8 @@ export function mountPanel(host) {
     // 返回 false 表示已弹出授权框，需用户授权后重新触发截图
     function ensureActiveConfigBeforeCapture() {
       return chrome.runtime.sendMessage({ action: 'getConfigs' }).then(function (res) {
-        if (!res.success) {
-          throw new Error(res.error || '读取配置失败');
+        if (!res || !res.success) {
+          throw new Error((res && res.error) || '读取配置失败');
         }
         var list = res.configList || [];
         var selected = list.find(function (cfg) { return cfg.selected; });
@@ -1354,8 +1371,8 @@ export function mountPanel(host) {
           return true;
         }
         return checkApiHostPermission(selected.url).then(function (perm) {
-          if (!perm.success) {
-            throw new Error(perm.error || '授权检查失败');
+          if (!perm || !perm.success) {
+            throw new Error((perm && perm.error) || '授权检查失败');
           }
           if (perm.granted) {
             return true;
@@ -1376,11 +1393,11 @@ export function mountPanel(host) {
 
     function saveConfigPayload(payload) {
       return chrome.runtime.sendMessage(payload).then(function (res) {
-        if (res.success) {
+        if (res && res.success) {
           cancelForm();
           loadConfigs();
         } else {
-          setFormError(res.error || '保存失败');
+          setFormError((res && res.error) || '保存失败');
         }
       });
     }
@@ -1694,7 +1711,8 @@ export function mountPanel(host) {
       var stroke = style === 'light-outline' ? '#000' : '#fff';
       var strokeWidth = style === 'light-outline' ? '0.65' : '1.5';
       var state = fakeCursorRef.current;
-      var path = state && state.cursor === cursor ? state.path : cursor.querySelector('path');
+      // path 位于 closed shadow root 内，只能经 state 引用获取，无 DOM 查询兜底
+      var path = state && state.cursor === cursor ? state.path : null;
       if (!path) return;
       path.setAttribute('fill', fill);
       path.setAttribute('stroke', stroke);
@@ -1745,6 +1763,11 @@ export function mountPanel(host) {
       if (silentMouseMoveHandlerRef.current) {
         document.removeEventListener('mousemove', silentMouseMoveHandlerRef.current, true);
         silentMouseMoveHandlerRef.current = null;
+      }
+      if (silentScrollRecheckHandlerRef.current) {
+        window.removeEventListener('scroll', silentScrollRecheckHandlerRef.current, true);
+        window.removeEventListener('resize', silentScrollRecheckHandlerRef.current, true);
+        silentScrollRecheckHandlerRef.current = null;
       }
       silentTargetRef.current = null;
     }
@@ -1845,6 +1868,15 @@ export function mountPanel(host) {
       if (states.length > 0) {
         silentMouseMoveHandlerRef.current = handleSilentTargetsMouseMove;
         document.addEventListener('mousemove', silentMouseMoveHandlerRef.current, true);
+        // 滚动/缩放后目标框随文档移动，需按最后已知仿光标位置重判悬停，
+        // 否则进行中的 350ms 悬停计时会在旧位置误触发
+        silentScrollRecheckHandlerRef.current = function () {
+          var cursorState = fakeCursorRef.current;
+          if (!cursorState || !cursorState.hasPointer) return;
+          handleSilentTargetsMouseMove({ clientX: cursorState.clientX, clientY: cursorState.clientY });
+        };
+        window.addEventListener('scroll', silentScrollRecheckHandlerRef.current, true);
+        window.addEventListener('resize', silentScrollRecheckHandlerRef.current, true);
       }
     }
 
@@ -1858,6 +1890,7 @@ export function mountPanel(host) {
       setShowSpinner(true);
 
       ensureActiveConfigBeforeCapture().then(function (ok) {
+        if (mySeq !== currentRequestSeqRef.current) return null;
         if (!ok) return null;
         return chrome.runtime.sendMessage({
           action: 'captureAndAnalyze',
@@ -2008,6 +2041,7 @@ export function mountPanel(host) {
       setShowSpinner(true);
 
       ensureActiveConfigBeforeCapture().then(function (ok) {
+        if (mySeq !== currentRequestSeqRef.current) return null;
         if (!ok) return null;
         setStatusText('截图中...');
         return chrome.runtime.sendMessage({

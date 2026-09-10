@@ -167,9 +167,13 @@ if (!window.__exampilotPageShortcutHandlerAttached) {
   window.__exampilotPageShortcutHandlerAttached = true;
 }
 
-// 双击页面空白处切换面板显示/隐藏
+// 双击页面空白处切换面板显示/隐藏（忽略交互元素与文本选择，避免误触发）
 if (!window.__exampilotToggleHandlerAttached) {
-  document.addEventListener('dblclick', function () {
+  document.addEventListener('dblclick', function (e) {
+    var target = e.target;
+    if (target && target.closest && target.closest('a, button, input, textarea, select, label, [contenteditable]')) return;
+    var selection = window.getSelection();
+    if (selection && !selection.isCollapsed) return;
     var host = document.getElementById('exmp-container') || window.__exampilotHost;
     if (!host) return;
     host.dispatchEvent(new CustomEvent('toggle-panel'));

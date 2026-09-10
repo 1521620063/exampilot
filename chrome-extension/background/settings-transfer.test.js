@@ -53,3 +53,8 @@ test('仿光标配置会限制到支持的范围和样式', function () {
   }));
   assert.equal(settings.silentCursorOffset, 1);
 });
+
+test('界面透明度钳制到 0.01~1（与桌面端归一化一致）', function () {
+  assert.equal(transfer.normalizeSettingsBackup(createLegacyBackup({ uiOpacity: 0 })).uiOpacity, 0.01);
+  assert.equal(transfer.normalizeSettingsBackup(createLegacyBackup({ uiOpacity: 1.5 })).uiOpacity, 1);
+});

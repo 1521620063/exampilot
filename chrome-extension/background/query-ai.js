@@ -255,11 +255,15 @@ async function callAnthropicAPI(config, imageUrl, prompt, signal) {
 
   var headers = {
     'Content-Type': 'application/json',
-    'x-api-key': config.apiKey
+    'x-api-key': config.apiKey,
+    // Anthropic Messages API 强制要求版本头，缺失会直接 400
+    'anthropic-version': '2023-06-01'
   };
 
   var body = {
     model: config.model,
+    // Anthropic Messages API 强制要求 max_tokens
+    max_tokens: 1024,
     messages: [{
       role: 'user',
       content: [

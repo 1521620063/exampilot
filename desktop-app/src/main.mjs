@@ -26,10 +26,10 @@ function activeConfig(settings) {
   return (settings.configList || []).find(function (item) { return item.selected; }) || null;
 }
 
-// 透明度钳制到 0~1，非法值回退 0.95
+// 透明度钳制到 0.01~1（与备份归一化一致，避免全透明不可见窗口），非法值回退 0.95
 function uiOpacity(value) {
   var opacity = Number(value);
-  return Number.isFinite(opacity) ? Math.max(0, Math.min(opacity, 1)) : 0.95;
+  return Number.isFinite(opacity) ? Math.max(0.01, Math.min(opacity, 1)) : 0.95;
 }
 
 // 静默模式光标触发右移像素数：钳制到 1~20，非法值回退 5

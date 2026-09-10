@@ -18,7 +18,9 @@ use std::{
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 #[cfg(not(target_os = "macos"))]
-use enigo::{Coordinate, Enigo, Mouse, Settings};
+use enigo::{Enigo, Mouse, Settings};
+#[cfg(not(any(target_os = "macos", windows)))]
+use enigo::Coordinate;
 use image::{codecs::jpeg::JpegEncoder, DynamicImage};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -453,17 +455,25 @@ async fn post_json(request: JsonRequest, state: State<'_, RequestState>) -> Resu
     if url.scheme() != "https" {
         return Err("接口地址必须使用 HTTPS".to_string());
     }
-    let request_id = state.next_id.fetch_add(1, Ordering::Relaxed);
-    let token = CancellationToken::new();
-    {
+    let (request_id, token) = {
         let mut slot = state.active.lock().map_err(error)?;
+        // 在持锁期间分配 id，保证 id 顺序与槽位替换顺序一致（后发起的请求取消先发起的）。
+        let request_id = state.next_id.fetch_add(1, Ordering::Relaxed);
+        let token = CancellationToken::new();
         // 新请求会取消上一个仍在进行的请求（同一时刻只保留一个活跃请求）。
         if let Some((_, previous)) = slot.take() {
             previous.cancel();
         }
         *slot = Some((request_id, token.clone()));
-    }
-    let client = Client::new();
+        (request_id, token)
+    };
+    // 连接与整体超时兜底，防止服务器无响应导致请求永不结束；
+    // 总超时取宽松值，避免中断慢速供应商的合法长响应。
+    let client = Client::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(300))
+        .build()
+        .map_err(error)?;
     let mut builder = client.post(url).json(&request.body);
     for (key, value) in request.headers {
         builder = builder.header(key, value);
@@ -490,7 +500,14 @@ async fn post_json(request: JsonRequest, state: State<'_, RequestState>) -> Resu
     };
     if !response.status().is_success() {
         let status = response.status();
-        let detail = response.text().await.unwrap_or_default();
+        // 响应体读取同样纳入取消监听，避免服务器挂起 body 时请求无法取消。
+        let detail = tokio::select! {
+            _ = token.cancelled() => {
+                clear_active();
+                return Err("已取消".to_string());
+            }
+            result = response.text() => result.unwrap_or_default(),
+        };
         clear_active();
         return Err(format!(
             "API 调用失败 ({}): {}",
@@ -498,10 +515,16 @@ async fn post_json(request: JsonRequest, state: State<'_, RequestState>) -> Resu
             detail.chars().take(300).collect::<String>()
         ));
     }
-    let result = response
-        .json::<Value>()
-        .await
-        .map_err(|_| "API 返回内容不是有效的 JSON".to_string());
+    let result = tokio::select! {
+        _ = token.cancelled() => Err("已取消".to_string()),
+        result = response.json::<Value>() => match result {
+            Ok(value) => Ok(value),
+            Err(err) if err.is_timeout() => Err("请求超时：读取响应内容超时".to_string()),
+            // 传输错误与 JSON 解码错误分开报错，避免误导用户
+            Err(err) if !err.is_decode() => Err(format!("读取 API 响应失败：{}", err)),
+            Err(_) => Err("API 返回内容不是有效的 JSON".to_string()),
+        },
+    };
     clear_active();
     result
 }
@@ -561,8 +584,27 @@ fn perform_jitter(point: MousePoint, offset: i32) -> Result<(), String> {
     Ok(())
 }
 
-/// 非 macOS：用 enigo 把真实光标移入命中区。
-#[cfg(not(target_os = "macos"))]
+/// Windows：用 SetCursorPos 把真实光标移入命中区。
+/// enigo 的 move_mouse(Abs) 只按主屏尺寸做 0..65535 归一化且缺少
+/// MOUSEEVENTF_VIRTUALDESK 标志，多显示器（尤其负坐标屏）下会移动到错误位置。
+#[cfg(windows)]
+fn perform_jitter(point: MousePoint, offset: i32) -> Result<(), String> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::SetCursorPos;
+
+    let (original_x, original_y) = pointer_location()?;
+    let nudged_x = jitter_x(original_x, &point, offset);
+    let nudged_y = original_y.clamp(point.y, point.y + point.height - 1);
+    if unsafe { SetCursorPos(nudged_x, nudged_y) } == 0 {
+        return Err(format!(
+            "无法移动鼠标：{}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    Ok(())
+}
+
+/// 非 macOS/Windows：用 enigo 把真实光标移入命中区。
+#[cfg(not(any(target_os = "macos", windows)))]
 fn perform_jitter(point: MousePoint, offset: i32) -> Result<(), String> {
     let mut enigo = Enigo::new(&Settings::default()).map_err(error)?;
     let (original_x, original_y) = enigo.location().map_err(error)?;
@@ -617,8 +659,11 @@ fn mouse_target(target: &PercentTarget, monitor: &MonitorInfo) -> MouseTarget {
 
 /// 手动触发一次光标微移（offset 缺省时用默认值）。
 #[tauri::command]
-async fn jitter_mouse(point: MousePoint, offset: Option<i32>) -> Result<(), String> {
+async fn jitter_mouse(mut point: MousePoint, offset: Option<i32>) -> Result<(), String> {
     let offset = normalize_silent_cursor_offset(offset.unwrap_or(DEFAULT_SILENT_CURSOR_OFFSET));
+    // 命中区来自前端、未经验证：钳制尺寸，避免 height<1 时 clamp(min > max) 触发 panic
+    point.width = point.width.max(1);
+    point.height = point.height.max(1);
     tauri::async_runtime::spawn_blocking(move || perform_jitter(point, offset))
         .await
         .map_err(error)?
@@ -766,9 +811,9 @@ fn create_native_debug_window(rect: &MouseTarget) -> Result<isize, String> {
     };
     use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, RegisterClassW, SetLayeredWindowAttributes, SetWindowPos, HWND_TOPMOST,
-        LWA_ALPHA, SWP_NOACTIVATE, SWP_SHOWWINDOW, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-        WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+        CreateWindowExW, DestroyWindow, RegisterClassW, SetLayeredWindowAttributes, SetWindowPos,
+        HWND_TOPMOST, LWA_ALPHA, SWP_NOACTIVATE, SWP_SHOWWINDOW, WNDCLASSW, WS_EX_LAYERED,
+        WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
     };
 
     static CLASS_READY: OnceLock<Result<(), String>> = OnceLock::new();
@@ -831,6 +876,7 @@ fn create_native_debug_window(rect: &MouseTarget) -> Result<isize, String> {
         DeleteObject(center);
         if SetWindowRgn(hwnd, outer, 1) == 0 {
             DeleteObject(outer);
+            DestroyWindow(hwnd);
             return Err(format!(
                 "设置原生命中框形状失败：{}",
                 std::io::Error::last_os_error()
@@ -847,6 +893,7 @@ fn create_native_debug_window(rect: &MouseTarget) -> Result<isize, String> {
             SWP_NOACTIVATE | SWP_SHOWWINDOW,
         ) == 0
         {
+            DestroyWindow(hwnd);
             return Err(format!(
                 "显示原生命中框失败：{}",
                 std::io::Error::last_os_error()
@@ -1619,87 +1666,88 @@ fn start_hover_monitor(app: AppHandle) {
             let Some((mouse_x, mouse_y)) = location else {
                 continue;
             };
-            let target = app
+            // 单次持锁内完成命中判定与 fired 读写，避免锁间隙目标表被整体替换后索引错位。
+            let point = app
                 .state::<SilentState>()
                 .0
                 .lock()
                 .ok()
-                .and_then(|targets| {
-                    targets.iter().position(|item| {
+                .and_then(|mut targets| {
+                    let target = targets.iter().position(|item| {
                         mouse_x >= item.x
                             && mouse_x < item.x + item.width
                             && mouse_y >= item.y
                             && mouse_y < item.y + item.height
+                    });
+                    // 切换到新的命中区：重置上个区域的触发标记，重新计时。
+                    if target != active {
+                        if let Some(previous) = active {
+                            if let Some(item) = targets.get_mut(previous) {
+                                item.fired = false;
+                            }
+                        }
+                        active = target;
+                        entered_at = active.map(|_| Instant::now());
+                        last_jitter_failure = None;
+                    }
+                    let index = active?;
+                    let start = entered_at?;
+                    // 停留不足 350ms 不触发，避免光标划过时误触发。
+                    if start.elapsed() < Duration::from_millis(350) {
+                        return None;
+                    }
+                    // 微移失败后 1 秒内不重试，防止持续报错。
+                    if last_jitter_failure
+                        .is_some_and(|failed_at| failed_at.elapsed() < Duration::from_secs(1))
+                    {
+                        return None;
+                    }
+                    let item = targets.get_mut(index)?;
+                    if item.fired {
+                        return None;
+                    }
+                    // 先置位再解锁抖动，成功后无需二次持锁写回，规避跨锁索引失效。
+                    item.fired = true;
+                    Some(MousePoint {
+                        x: item.x,
+                        y: item.y,
+                        width: item.width,
+                        height: item.height,
                     })
                 });
-            // 切换到新的命中区：重置上个区域的触发标记，重新计时。
-            if target != active {
-                if let Some(previous) = active {
+            if let Some(point) = point {
+                let offset = app
+                    .state::<SilentCursorOffset>()
+                    .0
+                    .lock()
+                    .map(|value| *value)
+                    .unwrap_or(DEFAULT_SILENT_CURSOR_OFFSET);
+                let jitter_point = point.clone();
+                let jitter_result = match tauri::async_runtime::spawn_blocking(move || {
+                    perform_jitter(jitter_point, offset)
+                })
+                .await
+                {
+                    Ok(result) => result,
+                    Err(join_error) => Err(error(join_error)),
+                };
+                if let Err(message) = jitter_result {
+                    // 抖动失败：按坐标找回目标并复位 fired，允许节流后重试。
                     if let Ok(mut targets) = app.state::<SilentState>().0.lock() {
-                        if let Some(item) = targets.get_mut(previous) {
+                        if let Some(item) = targets.iter_mut().find(|item| {
+                            item.x == point.x
+                                && item.y == point.y
+                                && item.width == point.width
+                                && item.height == point.height
+                        }) {
                             item.fired = false;
                         }
                     }
-                }
-                active = target;
-                entered_at = active.map(|_| Instant::now());
-                last_jitter_failure = None;
-            }
-            if let (Some(index), Some(start)) = (active, entered_at) {
-                // 停留不足 350ms 不触发，避免光标划过时误触发。
-                if start.elapsed() < Duration::from_millis(350) {
+                    last_jitter_failure = Some(Instant::now());
+                    let _ = app.emit("silent-trigger-failed", message);
                     continue;
                 }
-                // 微移失败后 1 秒内不重试，防止持续报错。
-                if last_jitter_failure
-                    .is_some_and(|failed_at| failed_at.elapsed() < Duration::from_secs(1))
-                {
-                    continue;
-                }
-                let point = app
-                    .state::<SilentState>()
-                    .0
-                    .lock()
-                    .ok()
-                    .and_then(|mut targets| {
-                        let item = targets.get_mut(index)?;
-                        if item.fired {
-                            return None;
-                        }
-                        Some(MousePoint {
-                            x: item.x,
-                            y: item.y,
-                            width: item.width,
-                            height: item.height,
-                        })
-                    });
-                if let Some(point) = point {
-                    let offset = app
-                        .state::<SilentCursorOffset>()
-                        .0
-                        .lock()
-                        .map(|value| *value)
-                        .unwrap_or(DEFAULT_SILENT_CURSOR_OFFSET);
-                    let jitter_result = match tauri::async_runtime::spawn_blocking(move || {
-                        perform_jitter(point, offset)
-                    })
-                    .await
-                    {
-                        Ok(result) => result,
-                        Err(join_error) => Err(error(join_error)),
-                    };
-                    if let Err(message) = jitter_result {
-                        last_jitter_failure = Some(Instant::now());
-                        let _ = app.emit("silent-trigger-failed", message);
-                        continue;
-                    }
-                    if let Ok(mut targets) = app.state::<SilentState>().0.lock() {
-                        if let Some(item) = targets.get_mut(index) {
-                            item.fired = true;
-                        }
-                    }
-                    let _ = app.emit("silent-triggered", ());
-                }
+                let _ = app.emit("silent-triggered", ());
             }
         }
     });
