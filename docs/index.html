@@ -212,6 +212,8 @@
     .toc {
       position: sticky;
       top: 96px;
+      max-height: calc(100vh - 116px);
+      overflow-y: auto;
       padding: 18px;
       border: 1px solid var(--line);
       border-radius: 18px;
@@ -368,6 +370,20 @@
     .guide-key { min-width: 58px; height: 32px; padding: 0 9px; border-radius: 8px; display: grid; place-items: center; color: var(--primary); background: var(--primary-soft); font-size: 12px; font-weight: 800; }
     .guide-item strong { display: block; font-size: 14px; }
     .guide-item p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+    .manual-card { margin-top: 20px; padding: 24px; min-width: 0; }
+    .manual-card h3 { margin: 0 0 12px; font-size: 20px; }
+    .manual-card h4 { margin: 20px 0 8px; font-size: 16px; }
+    .manual-card p, .manual-card li { color: var(--muted); font-size: 14px; line-height: 1.85; }
+    .manual-card p { margin: 8px 0; }
+    .manual-card ol, .manual-card ul { margin: 8px 0; padding-left: 24px; }
+    .manual-card li + li { margin-top: 8px; }
+    .manual-card code { overflow-wrap: anywhere; }
+    .shortcut-list { display: grid; gap: 12px; margin: 0; }
+    .shortcut-row { padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: white; }
+    .shortcut-row dt { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-weight: 750; }
+    .shortcut-row dd { margin: 10px 0 0; color: var(--muted); font-size: 14px; line-height: 1.8; }
+    .shortcut-row dd p { margin: 4px 0; }
+    .shortcut-row kbd { padding: 4px 9px; border: 1px solid var(--line); border-radius: 7px; color: var(--primary-dark); background: var(--primary-soft); font: 700 13px/1.5 ui-monospace, monospace; }
     .silent-demo { width: 100%; height: 210px; position: relative; overflow: hidden; border: 1px solid rgba(81, 65, 46, .16); border-radius: 13px; background: white; }
     .silent-demo .question-line { position: absolute; left: 24px; right: 24px; height: 8px; border-radius: 999px; background: #e9e5df; }
     .silent-demo .question-line:nth-child(1) { top: 24px; width: 52%; height: 13px; background: #77707e; }
@@ -473,6 +489,7 @@
         <a href="#install">安装</a>
         <a href="#configure">配置</a>
         <a href="#capture">识别</a>
+        <a href="#shortcuts">快捷键</a>
         <a href="#silent-mode">静默</a>
         <a href="#migration">迁移</a>
         <a href="#faq">常见问题</a>
@@ -516,7 +533,9 @@
       <strong>使用指南</strong>
       <a href="#quick-start">快速上手</a>
       <a href="#install">安装扩展</a>
+      <a href="#browser">插件日常使用</a>
       <a href="#desktop">桌面应用</a>
+      <a href="#shortcuts">快捷键详解</a>
       <a href="#configure">配置模型</a>
       <a href="#api-modes">接口模式</a>
       <a href="#capture">开始识别</a>
@@ -524,6 +543,7 @@
       <a href="#migration">配置迁移</a>
       <a href="#advanced">高级配置</a>
       <a href="#faq">常见问题</a>
+      <a href="#feedback">问题反馈</a>
     </aside>
 
     <main id="main">
@@ -541,12 +561,12 @@
           <article class="card quick-card">
             <div class="number">2</div>
             <h3>填写模型配置</h3>
-            <p>输入 API 地址、模型名称与 API Key，选择匹配的接口模式后保存。</p>
+            <p>输入完整 API 地址、支持图片输入的模型名称与 API Key，选择匹配的接口模式。插件点击保存；桌面设置自动保存。</p>
           </article>
           <article class="card quick-card">
             <div class="number">3</div>
             <h3>截图并分析</h3>
-            <p>扩展可点击“全屏”或“区域”；桌面端使用全局快捷键。普通模式查看答案，静默模式通过命中区或剪切板反馈。</p>
+            <p>第一次建议关闭静默模式，用一张完整题目的区域截图测试。插件点击“区域”拖拽框选；桌面端按住 Ctrl+Shift+2 移动鼠标后松开。</p>
           </article>
         </div>
         <div class="callout">
@@ -617,19 +637,77 @@
         </div>
       </section>
 
+      <section class="section" id="browser">
+        <div class="section-heading">
+          <h2>浏览器插件：从安装到日常使用</h2>
+          <p>插件适合识别普通网页中的题目，只截取当前标签页可见内容，不会截取其他应用窗口，也不是整张长网页截图。</p>
+        </div>
+        <article class="card manual-card">
+          <h3>首次识别：建议按这个顺序操作</h3>
+          <ol>
+            <li><strong>打开题目页面：</strong>先切换到需要识别的普通网页，等待题目和图片加载完成；长题目可调整网页缩放，让题干、选项和图表同时出现在视口内。</li>
+            <li><strong>打开插件面板：</strong>点击工具栏中的 ExamPilot 图标，再点击面板右下角的 ⚙️ 进入设置。新安装或刚更新扩展后，请刷新已有题目页面。</li>
+            <li><strong>添加模型：</strong>填写配置名称、完整 API 地址、模型名称和 API Key，选择接口模式，点击保存。普通版如弹出域名授权，请确认授权；授权完成后按提示保存或重新发起截图。</li>
+            <li><strong>确认当前配置：</strong>在配置列表中点击要使用的项目；高亮项为当前配置。先关闭“静默模式”，返回主面板。</li>
+            <li><strong>框选题目：</strong>点击“区域”，在页面上按住鼠标左键，从题目一个角拖到对角，松开鼠标即可发送识别请求；无需一直按住键盘快捷键。</li>
+            <li><strong>查看结果：</strong>等待面板显示识别结果，核对题目条件与解析。等待过程中可点“取消”；需要重试时重新截图。模型输出仅供参考，请自行核实。</li>
+          </ol>
+        </article>
+        <div class="usage-tabs" style="margin-top: 20px;">
+          <article class="card usage-card"><div class="usage-copy">
+            <h3>面板与日常操作</h3>
+            <ul>
+              <li>点击“全屏”识别当前网页视口；不会自动滚动并拼接长页面。</li>
+              <li>点击“区域”后拖拽框选，按 <code>Esc</code> 放弃本次选区；选框太小会被视为误操作并取消。</li>
+              <li>“取消”中止正在进行的识别；空闲时的“清除”清空答案及静默命中区。</li>
+              <li>点击“—”折叠为 ⚡ 迷你按钮，拖动按钮调整位置，再点击展开。</li>
+              <li>双击页面空白区域可显示或隐藏已注入的面板；链接、输入框等交互元素以及选中文本时不会触发。</li>
+            </ul>
+          </div></article>
+          <article class="card usage-card"><div class="usage-copy">
+            <h3>普通版与 Full Access 版</h3>
+            <ul>
+              <li><strong>普通版：</strong>按需申请 API 域名权限；静默模式涉及跨域 iframe 时，可能还要授权 iframe 域名。</li>
+              <li><strong>Full Access 版：</strong>预先包含网站访问权限，不需要逐个域名授权；安装前请确认接受更广的访问范围。</li>
+              <li>两种版本的模型配置和截图流程相同，不代表提供免费模型或内置 API Key。</li>
+              <li>更换 API 域名、浏览器或设备后，普通版可能需要重新授权。</li>
+            </ul>
+          </div></article>
+        </div>
+        <article class="card manual-card">
+          <h3>开发者：构建与加载本地扩展</h3>
+          <ol>
+            <li>在仓库根目录运行 <code>npm install</code>，再运行 <code>npm run chrome:build</code>。</li>
+            <li>打开 <code>chrome://extensions</code>，开启“开发者模式”，点击“加载已解压的扩展程序”。</li>
+            <li>普通版选择 <code>chrome-extension/dist/chrome/</code>；Full Access 版选择 <code>chrome-extension/dist/chrome-full/</code>。选择其中一个，不要加载源码目录。</li>
+            <li>修改源码后重新构建，在扩展管理页点击重新加载，并刷新题目网页，避免旧脚本继续运行。</li>
+          </ol>
+        </article>
+      </section>
+
       <section class="section" id="desktop">
         <div class="section-heading">
           <h2>桌面应用使用说明</h2>
-          <p>桌面端支持 Windows x64 与 macOS Apple Silicon，通过系统级截图和真实鼠标位置工作，不依赖浏览器扩展。答案窗口可在浏览器全屏时保持置顶。</p>
+          <p>桌面端支持 Windows x64 与 macOS Apple Silicon，通过系统级截图和真实鼠标位置工作，不依赖浏览器扩展。答案窗口配置为置顶并跨工作区显示；是否能覆盖其他应用的全屏界面仍取决于操作系统与全屏方式。</p>
           <p><a class="button button-primary" href="https://github.com/1521620063/exampilot/releases/latest" target="_blank" rel="noopener noreferrer">下载桌面端（Windows / macOS Apple Silicon） <span aria-hidden="true">→</span></a></p>
         </div>
+        <article class="card manual-card" style="margin-bottom: 20px;">
+          <h3>下载安装与首次授权</h3>
+          <ol>
+            <li><strong>选择平台：</strong>打开上方 GitHub Releases 下载页，Windows 选择 x64 安装包；macOS 选择 Apple Silicon 安装包，不支持 Intel Mac。普通用户不需要下载源码、<code>.sig</code> 签名文件或 <code>latest.json</code>。</li>
+            <li><strong>安装并启动：</strong>Windows 按安装程序提示完成；macOS 使用发布页提供的安装包安装。若系统提示来源不明，先核对下载地址与版本，再通过系统允许的方式打开，不要关闭整个系统的安全保护。</li>
+            <li><strong>macOS 屏幕权限：</strong>在“系统设置 → 隐私与安全性 → 屏幕录制”（部分系统显示“屏幕与系统音频录制”）中允许 ExamPilot。按系统提示退出并重新打开应用后再截图。</li>
+            <li><strong>macOS 静默反馈：</strong>如需让静默模式移动真实鼠标，还需在“隐私与安全性 → 辅助功能”中允许 ExamPilot。只授予屏幕录制权限不代表已允许鼠标控制。</li>
+            <li><strong>确认后台运行：</strong>Windows 在通知区域查找 ExamPilot 图标（也可能在折叠图标内）；macOS 在菜单栏查找。通过托盘菜单打开设置或退出程序。</li>
+          </ol>
+        </article>
         <div class="install-list">
           <article class="card install-step">
             <div class="step-copy">
               <div class="step-number">1</div>
               <h3>启动应用并打开设置</h3>
-              <p>启动 ExamPilot 后，答案窗口默认位于屏幕右下角，系统托盘会出现 ExamPilot 图标。右键托盘图标并选择“打开设置”，即可进入独立设置窗口。</p>
-              <p>答案窗口始终置顶、背景透明并支持点击穿透，不会抢走当前应用焦点。答案内容超出显示区域时，使用键盘 <code>↑</code>/<code>↓</code> 滚动。</p>
+              <p>启动 ExamPilot 后，普通模式的答案窗口默认定位到主显示器右下角，系统托盘会出现 ExamPilot 图标。未产生答案时，窗口可能没有可见文字。右键托盘图标并选择“打开设置”，即可进入独立设置窗口。</p>
+              <p>答案窗口设为置顶、背景透明并支持点击穿透，不会抢走当前应用焦点。答案内容超出显示区域时，使用键盘 <code>↑</code>/<code>↓</code> 滚动。</p>
             </div>
             <div class="step-visual">
               <div class="panel-mock" aria-hidden="true">
@@ -642,14 +720,14 @@
             <div class="step-copy">
               <div class="step-number">2</div>
               <h3>添加并保存 AI 配置</h3>
-              <p>在设置窗口点击“添加配置”，填写配置名称、API 地址、模型名称和 API Key，再选择与服务商匹配的接口模式并保存。列表中高亮的配置就是当前使用的配置。</p>
+              <p>在设置窗口点击“添加配置”，填写配置名称、完整 API 地址、模型名称和 API Key，再选择与服务商匹配的接口模式。桌面设置会自动保存，不需要寻找“保存”按钮；列表中高亮的配置就是当前使用的配置。</p>
               <p>普通提示词、静默提示词、答案窗口透明度和静默模式开关都在“识别与界面”中设置；提示词可以随时恢复默认值。</p>
             </div>
             <div class="step-visual">
               <div class="config-card" aria-hidden="true">
                 <div class="field"><label>配置名称</label><div class="input">我的视觉模型</div></div>
                 <div class="field"><label>接口模式</label><div class="input">Chat Completions</div></div>
-                <div class="save-bar">保存配置</div>
+                <div class="save-bar">修改后自动保存</div>
               </div>
             </div>
           </article>
@@ -671,7 +749,8 @@
         </div>
 
         <div class="section-heading" style="margin-top: 36px; margin-bottom: 18px;">
-          <h2 style="font-size: 25px;">桌面端快捷键</h2>
+          <h3 style="font-size: 25px;">桌面端快捷键速查</h3>
+          <p>以下为默认组合键，逐步操作与冲突排查见<a href="#shortcuts">快捷键详解</a>。</p>
         </div>
         <div class="button-guide">
           <div class="guide-item"><div class="guide-key">1</div><div><strong>截取鼠标所在显示器</strong><p><code>Ctrl+Shift+1</code>，完成截图后立即发送给当前 AI 配置。</p></div></div>
@@ -685,8 +764,8 @@
           <article class="card usage-card">
             <div class="usage-copy">
               <h3>桌面端普通模式</h3>
-              <p>关闭“静默模式”后，答案窗口会显示在桌面右下角并保持置顶。窗口点击穿透，识别完成后可继续操作原来的应用；设置中的透明度按 0% 到 100% 生效。</p>
-              <ul><li>可覆盖 Chrome 等应用的全屏窗口</li><li>答案内容超出显示区域时使用键盘 <code>↑</code>/<code>↓</code> 滚动</li><li>切换配置后，答案窗口会同步使用当前配置</li></ul>
+              <p>关闭“静默模式”后，答案窗口会显示在桌面右下角并保持置顶。窗口点击穿透，识别完成后可继续操作原来的应用；可在设置中调整答案透明度；界面允许调到 0%，实际会保留最低 1% 可见度，避免窗口完全不可见。</p>
+              <ul><li>窗口配置为置顶；若在其他应用的全屏模式下不可见，请先退出全屏测试</li><li>答案内容超出显示区域时使用键盘 <code>↑</code>/<code>↓</code> 滚动</li><li>切换配置后，答案窗口会同步使用当前配置</li></ul>
             </div>
           </article>
           <article class="card usage-card">
@@ -704,11 +783,11 @@
         </div>
         <div class="callout warning">
           <span aria-hidden="true">⚠️</span>
-          <div><strong>首次运行与权限</strong>macOS 需要为 ExamPilot 授予“屏幕录制”权限；静默鼠标反馈还需要“辅助功能”权限。若启动后快捷键没有反应，请先查看答案窗口或设置窗口中的快捷键占用提示，并关闭占用相同组合键的软件后重启 ExamPilot。</div>
+          <div><strong>首次运行与权限</strong>macOS 需要为 ExamPilot 授予“屏幕录制”权限；静默鼠标反馈还需要“辅助功能”权限。若启动后快捷键没有反应，请先确认程序仍在运行，暂时关闭占用相同组合键的软件，再退出并重新启动 ExamPilot。当前答案窗口不显示运行状态文字，设置窗口也没有快捷键注册结果列表。</div>
         </div>
         <div class="callout">
           <span aria-hidden="true">↻</span>
-          <div><strong>应用更新</strong>ExamPilot 会在启动后静默检查最新稳定版；也可以在设置窗口的“应用更新”中手动检查。发现更新后，确认下载并重启即可完成安装。取消下载、无网络或校验失败不会影响当前版本、截图功能或已保存的配置。</div>
+          <div><strong>应用更新</strong>ExamPilot 会在启动后静默检查最新稳定版；也可以在设置窗口的“应用更新”中手动检查。发现更新后，确认下载并重启即可完成安装。在更新确认框中选择取消，不会开始下载；当前没有下载过程中的取消按钮。检查、下载或校验失败不会阻止继续使用当前版本，已保存的配置仍会保留。</div>
         </div>
         <div class="callout">
           <span aria-hidden="true">⌘</span>
@@ -716,11 +795,72 @@
         </div>
       </section>
 
+      <section class="section" id="shortcuts">
+        <div class="section-heading">
+          <h2>快捷键详解：插件与桌面端</h2>
+          <p>以下均为默认快捷键。Windows 和 macOS 都使用 Ctrl（Mac 键盘上的 Control / ⌃），不是 Command / ⌘。建议先用主键盘数字行测试。</p>
+        </div>
+        <div class="callout warning">
+          <span aria-hidden="true">⚠️</span>
+          <div><strong>避免两端同时抢占快捷键</strong>插件和桌面应用默认使用相同组合键。若同时安装，请先决定本次使用哪一端：只用插件时从托盘退出桌面应用；只用桌面端时，建议在扩展管理页暂时停用插件，并刷新已打开的题目网页。插件有页面内快捷键兜底，仅修改 Chrome 中的键位不能保证完全避免冲突。不要仅隐藏桌面答案窗，隐藏窗口不会退出程序。</div>
+        </div>
+        <dl class="shortcut-list">
+          <div class="shortcut-row">
+            <dt><kbd>Ctrl + Shift + 1</kbd> 全屏识别</dt>
+            <dd><p><strong>浏览器插件：</strong>切换到题目标签页后按一次，截取该网页当前可见视口并发送给当前模型，不包含整个桌面或网页滚动后才能看到的内容。</p><p><strong>桌面应用：</strong>把鼠标移到题目所在显示器后按一次，截取该显示器整屏。多显示器时由鼠标位置决定，不是由当前窗口焦点决定。</p></dd>
+          </div>
+          <div class="shortcut-row">
+            <dt><kbd>Ctrl + Shift + 2</kbd> 区域识别（两端操作不同）</dt>
+            <dd><p><strong>浏览器插件：</strong>按一次组合键后松开，进入页面选区；按住鼠标左键拖拽框选，松开鼠标发送识别。选区中按 <code>Esc</code> 或 <code>Ctrl+Shift+4</code> 可退出。</p><p><strong>桌面应用：</strong>先把鼠标放到题目一个角，按住 <code>Ctrl+Shift+2</code> 记录起点；保持按住并移动鼠标到对角，再松开组合键记录终点并发送。整个过程不需要按住鼠标左键，也不会显示拖拽遮罩。</p><p>桌面选区限制在起点所在显示器；不要跨显示器框选，也不要只轻点组合键而不移动鼠标，否则无法形成有效区域。</p></dd>
+          </div>
+          <div class="shortcut-row">
+            <dt><kbd>Ctrl + Shift + 3</kbd> 切换到下一个 AI 配置</dt>
+            <dd>两端均按配置列表顺序循环切换，到最后一个后回到第一个。使用前先添加多个有效配置；切换后可在各自设置列表中确认当前选中项。此操作不会自动重新识别，也不会切换普通 / 静默模式，下一次截图使用新配置。</dd>
+          </div>
+          <div class="shortcut-row">
+            <dt><kbd>Ctrl + Shift + 4</kbd> 取消识别或清除结果</dt>
+            <dd><p><strong>浏览器插件：</strong>区域选择中退出选区；请求进行中取消当前请求；空闲时清空结果和静默命中区域。</p><p><strong>桌面应用：</strong>取消当前请求并清空答案和静默命中区域。清除不会删除模型配置、提示词或备份文件；已发送给 API 服务商的请求也不等于撤回，是否计费以服务商规则为准。</p></dd>
+          </div>
+          <div class="shortcut-row">
+            <dt><kbd>Ctrl + Shift + 5</kbd> 显示 / 隐藏答案窗口（仅桌面端）</dt>
+            <dd>仅在桌面普通模式下切换答案窗口显隐；静默模式下不生效。隐藏答案不等于取消识别、清除命中区或退出应用。浏览器插件没有这个默认快捷键，请使用页面空白处双击或面板折叠按钮。</dd>
+          </div>
+          <div class="shortcut-row">
+            <dt><kbd>↑</kbd> <kbd>↓</kbd> 滚动较长答案（仅桌面端）</dt>
+            <dd>普通模式的答案窗口可见且内容超出窗口高度时，直接按方向键向上 / 向下滚动，无需先点击透明窗口。此时方向键会被用于答案滚动；想恢复原应用的方向键操作，可先用 <code>Ctrl+Shift+5</code> 隐藏答案窗，或用 <code>Ctrl+Shift+4</code> 清除结果。</dd>
+          </div>
+        </dl>
+        <article class="card manual-card">
+          <h3>修改插件快捷键与排查冲突</h3>
+          <ol>
+            <li>在 Chrome 地址栏输入 <code>chrome://extensions/shortcuts</code>，找到 ExamPilot。</li>
+            <li>查看全屏截图、区域截图、切换配置、取消 / 清除四项是否已分配组合键；点击编辑并按下想使用的新组合键。此处控制扩展级快捷键；已注入的网页还保留默认 <code>Ctrl+Shift+1～4</code> 的页面内兜底监听，修改或取消扩展级键位不会同步修改该监听。</li>
+            <li>回到普通网页，点击扩展图标并刷新页面后测试；插件不保证能在浏览器内置页面或其他桌面应用中触发。也可以直接使用面板按钮排除键位问题。</li>
+            <li>若桌面应用正在运行，先从托盘退出它，再测试插件；若仍冲突，检查系统快捷键、输入法和其他扩展。</li>
+          </ol>
+          <h4>桌面端快捷键没有反应怎么办？</h4>
+          <p>桌面端当前使用固定的全局组合键，没有快捷键编辑界面，也没有可见的快捷键注册结果列表。请先确认托盘图标存在，暂时停用插件并刷新网页，关闭可能冲突的软件后重启 ExamPilot。macOS 截图还需屏幕录制权限，静默鼠标反馈另需辅助功能权限。Windows 可使用对应的小键盘数字键；小键盘无效时先用主键盘验证。</p>
+          <p>全局快捷键要求 ExamPilot 正在运行，但不要求设置窗口保持打开；关闭设置窗口不会退出应用。若不再使用，请从系统托盘选择“退出”。</p>
+        </article>
+      </section>
+
       <section class="section" id="configure">
         <div class="section-heading">
           <h2>配置视觉模型</h2>
           <p>Chrome 扩展点击面板右下角的 ⚙️；桌面应用从系统托盘选择“打开设置”。添加 API 配置后，选择当前要使用的配置。</p>
         </div>
+        <article class="card manual-card" style="margin-bottom: 20px;">
+          <h3>各字段怎么填？</h3>
+          <ul>
+            <li><strong>配置名称：</strong>自己容易辨认即可，例如“主力视觉模型”“备用接口”，方便在多个配置间切换。</li>
+            <li><strong>API 地址：</strong>填写服务商提供的完整请求接口，不是网站首页。Chat Completions 通常以 <code>/v1/chat/completions</code> 结尾；不要只填域名或 <code>/v1</code>，也不要重复拼接路径。插件和桌面端均要求 HTTPS 地址。</li>
+            <li><strong>模型名称：</strong>填写服务商接口要求的模型 ID，并确认该模型支持图片输入；纯文本模型不能完成截图识别。</li>
+            <li><strong>API Key：</strong>填写该服务商发放的有效密钥，同时检查余额、访问权限和模型权限。使用内置鉴权时直接填写密钥本身，无需手动添加 <code>Bearer </code> 前缀。</li>
+            <li><strong>接口模式：</strong>按服务商实际协议选择，不能仅凭模型品牌判断；同一模型通过不同服务商访问时可能使用不同接口。</li>
+          </ul>
+          <p><strong>保存方式：</strong>插件编辑完成后点击保存，并在列表中选择要使用的配置；桌面端字段修改会自动保存。两端不会实时同步，需要分别配置或通过备份迁移。</p>
+          <p><strong>首次测试：</strong>先用默认普通提示词和一张清晰、完整的题目截图验证请求，成功后再修改高级参数或开启静默模式。没有自备可用 API 时，仅安装应用无法完成 AI 识别。</p>
+        </article>
         <div class="config-layout">
           <article class="card config-card">
             <h3>配置示例</h3>
@@ -734,8 +874,8 @@
           </article>
           <article class="card permission-card">
             <div class="shield">◆</div>
-            <h3>首次访问需要授权</h3>
-            <p>保存配置或开始识别时，ExamPilot 会检查 API 域名权限。静默模式遇到跨域 iframe 时，也会检查该 iframe 域名；未授权时，当前页面会显示授权弹层。</p>
+            <h3>插件首次访问需要授权</h3>
+            <p>普通版插件保存配置或开始识别时，会检查 API 域名权限。静默模式遇到跨域 iframe 时，也会检查该 iframe 域名；未授权时，当前页面会显示授权弹层。</p>
             <div class="permission-button">授权访问该域名</div>
           </article>
         </div>
@@ -784,14 +924,14 @@
             </div>
             <div class="usage-copy">
               <h3>区域识别</h3>
-              <p>扩展点击“区域”，桌面端按住 <code>Ctrl+Shift+2</code> 并移动鼠标；松开后会按两个鼠标位置截取题目和必要上下文。</p>
-              <ul><li>选区限制在起点所在显示器内</li><li>尽量包含完整题干、选项和图表</li></ul>
+              <p>扩展点击“区域”或按一次 <code>Ctrl+Shift+2</code>，然后用鼠标左键拖拽框选；桌面端从起点按住 <code>Ctrl+Shift+2</code>，移到对角后松开组合键截图。</p>
+              <ul><li>插件在当前网页视口框选；桌面选区限制在起点所在显示器内</li><li>尽量包含完整题干、选项和图表</li></ul>
             </div>
           </article>
         </div>
 
         <div class="section-heading" style="margin-top: 36px; margin-bottom: 18px;">
-          <h2 style="font-size: 25px;">面板操作速查</h2>
+          <h3 style="font-size: 25px;">插件面板操作速查</h3>
         </div>
         <div class="button-guide">
           <div class="guide-item"><div class="guide-key">全屏</div><div><strong>识别当前视口</strong><p>适合整页内容简洁、题目已完整显示。</p></div></div>
@@ -800,14 +940,14 @@
           <div class="guide-item"><div class="guide-key">清除</div><div><strong>清空当前结果</strong><p>已有结果时清空答案、静默命中区与调试框。</p></div></div>
           <div class="guide-item"><div class="guide-key">Ctrl+Shift+1/2</div><div><strong>快捷截图</strong><p>Windows 和 macOS 均使用 Ctrl+Shift+1/2。</p></div></div>
           <div class="guide-item"><div class="guide-key">Ctrl+Shift+4</div><div><strong>取消或清除</strong><p>Windows 和 macOS 均使用 Ctrl+Shift+4。</p></div></div>
-          <div class="guide-item"><div class="guide-key">Ctrl+Shift+5</div><div><strong>显示/隐藏答案</strong><p>Windows 和 macOS 均使用 Ctrl+Shift+5，仅普通模式下切换答案窗口。</p></div></div>
+          <div class="guide-item"><div class="guide-key">3</div><div><strong>切换模型配置</strong><p><code>Ctrl+Shift+3</code> 循环切换，下次截图使用新配置。</p></div></div>
           <div class="guide-item"><div class="guide-key">⚙️</div><div><strong>打开设置</strong><p>管理模型、请求模板、配置迁移、提示词、静默模式与透明度。</p></div></div>
           <div class="guide-item"><div class="guide-key">—</div><div><strong>折叠为迷你按钮</strong><p>拖动 ⚡ 按钮可调整面板位置，点击按钮重新展开。</p></div></div>
           <div class="guide-item"><div class="guide-key">双击</div><div><strong>显示或隐藏面板</strong><p>在页面空白区域双击即可切换。</p></div></div>
         </div>
         <div class="callout">
           <span aria-hidden="true">⏱️</span>
-          <div><strong>状态提示</strong>识别过程通常依次显示“截图中 → 裁剪中（区域模式）→ AI 识别中 → 识别完成”。</div>
+          <div><strong>状态提示</strong>插件会显示截图与 AI 识别进度，实际文字随当前步骤而变化。桌面答案窗口只展示答案正文，不显示这些状态文字；桌面请求错误请到设置底部查看。</div>
         </div>
       </section>
 
@@ -816,6 +956,21 @@
           <h2>静默模式</h2>
           <p>静默模式是全局开关，默认关闭。关闭时按普通模式展示答案；开启后会要求 AI 返回结构化 JSON，用于创建悬浮命中区域。</p>
         </div>
+        <article class="card manual-card" style="margin-bottom: 20px;">
+          <h3>从普通模式切换到静默模式</h3>
+          <ol>
+            <li>先确认普通模式已经能正常识别，再进入设置开启“静默模式”。插件使用网页内仿光标，桌面端普通答案窗口会隐藏。</li>
+            <li>第一次测试建议同时开启“显示静默框”（插件）或“显示静默命中框”（桌面端），便于核对模型给出的目标位置。</li>
+            <li>重新截图，让模型根据这一次截图生成结果；开启静默模式不会自动把上一条普通答案转换为命中区。</li>
+            <li>选择题识别后，把鼠标移动到目标选项并短暂停留，观察轻微右移反馈。反馈只用于提示，不会自动点击选项。</li>
+            <li>没有可靠坐标的题目若返回剪切板答案，请在合适的位置使用系统粘贴快捷键查看：Windows 为 <code>Ctrl+V</code>，macOS 为 <code>Command+V</code>；写入答案会覆盖原剪切板内容。</li>
+            <li>切换题目或改变布局后，先清除旧结果并重新截图。调试确认位置正确后，可以关闭红框；不再需要静默模式时，在设置中关闭开关。</li>
+          </ol>
+          <h4>两端的光标反馈不同</h4>
+          <p><strong>插件：</strong>隐藏页面原生光标，移动的是网页中绘制的仿光标，不改变系统鼠标位置；仿光标样式和大小仅影响插件。</p>
+          <p><strong>桌面端：</strong>检测并移动真实系统鼠标，在命中目标内右移后停留，不会自动移回原位置。两端的触发右移量默认 <code>5</code> 像素，可设置为 <code>1–20</code> 的整数；桌面端还会把鼠标限制在命中区内，靠近右边缘时实际位移可能小于设置值。</p>
+          <p><strong>保持截图布局：</strong>命中区来自截图时的位置。插件滚动网页、调整缩放，或桌面端移动题目窗口、切换显示器后，旧坐标可能不再对齐，请重新识别，不要把红框当作模型一定答对的保证。</p>
+        </article>
         <div class="usage-tabs">
           <article class="card usage-card">
             <div class="usage-preview">
@@ -860,7 +1015,7 @@
         </div>
         <div class="callout warning">
           <span aria-hidden="true">🧪</span>
-          <div><strong>自定义模板注意</strong>自定义模板也能配合静默模式，但响应模板最终提取出的文本必须是约定 JSON；解析失败、缺坐标或坐标越界都会显示错误。</div>
+          <div><strong>自定义模板注意</strong>自定义模板也能配合静默模式，但响应模板最终提取出的文本必须是约定 JSON。可解析且有答案、没有坐标的条目会按剪切板答案处理；结构无效、答案字段缺失或坐标越界可能导致解析失败。桌面端可在设置底部查看解析错误。</div>
         </div>
       </section>
 
@@ -879,13 +1034,24 @@
             <p>选择 ExamPilot JSON 备份并确认后，应用会校验内容，再替换当前端的全部配置、提示词、静默模式设置与透明度。桌面端兼容扩展导出的 v1 备份。</p>
           </article>
         </div>
+        <article class="card manual-card">
+          <h3>换设备或从插件迁移到桌面端</h3>
+          <ol>
+            <li>在原来的应用设置中导出 JSON 备份，保存到自己的可信位置。</li>
+            <li>在目标应用中先导出一份现有配置，避免导入替换后丢失原设置。</li>
+            <li>点击“导入配置”，选择备份并确认替换。两端使用相同的 v1 备份格式，可以相互迁移。</li>
+            <li>核对当前选中的模型、接口地址、普通 / 静默模式、提示词和触发右移量，再做一次区域截图测试。</li>
+            <li>权限需在目标环境重新设置：插件按需授权域名，macOS 桌面端按需授予系统权限；插件仿光标外观不会让桌面端变成仿光标。</li>
+          </ol>
+          <p>备份不包含识别结果、模型运行日志或系统权限。它是配置迁移，不是两个应用之间的自动同步。</p>
+        </article>
         <div class="callout warning">
           <span aria-hidden="true">🔑</span>
-          <div><strong>备份包含未加密的 API Key</strong>请只保存在可信设备和私密位置，不要分享、上传到公共网盘链接或提交到代码仓库。导入后首次使用新 API 域名时仍需重新授权。</div>
+          <div><strong>备份包含未加密的 API Key</strong>请只保存在可信设备和私密位置，不要分享、上传到公共网盘链接或提交到代码仓库。普通版插件导入后首次使用新 API 域名时仍需重新授权；桌面端不使用 Chrome 域名权限。</div>
         </div>
         <div class="callout">
           <span aria-hidden="true">📍</span>
-          <div><strong>面板位置单独保存在本机</strong>扩展面板位置和桌面答案窗口位置分别保存在对应设备中，不会写入导出文件；Chrome 的 API 域名授权也不会随配置迁移。</div>
+          <div><strong>位置与权限不会随备份迁移</strong>插件面板位置单独保存在浏览器本地，不写入备份；桌面答案窗口在启动时定位到主显示器右下角，目前没有位置保存设置。Chrome 的 API 域名授权与 macOS 的系统权限也不会随备份迁移。</div>
         </div>
       </section>
 
@@ -919,23 +1085,39 @@
         </article>
         <div class="callout warning">
           <span aria-hidden="true">🛡️</span>
-          <div><strong>检查请求预览</strong>发送前展开“请求预览”，确认 URL、Headers、Body 和图片字段符合服务商文档，尤其不要把 API Key 放进不必要的字段。</div>
+          <div><strong>核对请求格式</strong>两端都可以在配置表单中展开“请求预览”，核对 URL、Headers、Body 和图片字段。预览使用示例图片占位，不是最近一次截图的完整请求；仍需以服务商文档为准。桌面端识别后还可查看“最近一次模型返回 / 错误”。分享预览前请自行检查敏感字段，不要把 API Key 放进不必要的字段。</div>
         </div>
       </section>
 
       <section class="section" id="faq">
         <div class="section-heading">
           <h2>常见问题</h2>
-          <p>优先检查 API 地址、接口模式、模型是否支持图片输入，以及 API 域名是否已授权。</p>
+          <p>优先检查 API 地址、接口模式和模型是否支持图片输入；普通版插件还需检查 API 域名授权，桌面端则按系统要求检查截图与鼠标控制权限。</p>
         </div>
         <div class="faq-list">
+          <details>
+            <summary>为什么按 Ctrl+Shift+2 后没有出现选区框？</summary>
+            <p>先确认使用哪一端。插件按一次组合键后需要鼠标左键拖拽；桌面端采用无拖拽遮罩的两点选区，要在题目一角按住组合键，移动鼠标到对角再松开。桌面端只轻点组合键会得到过小选区。</p>
+          </details>
+          <details>
+            <summary>macOS 应该按 Control 还是 Command？</summary>
+            <p>ExamPilot 的默认截图、切换配置和清除快捷键都使用 Control / ⌃，不是 Command / ⌘。但系统粘贴仍使用 Command+V。插件修改 Chrome 中的快捷键只影响扩展级命令，页面内默认组合键的兜底监听仍然存在。</p>
+          </details>
+          <details>
+            <summary>安装了插件和桌面端，怎么避免重复触发？</summary>
+            <p>两端默认组合键相同，插件还有页面内兜底监听，不能保证只修改 Chrome 快捷键就消除冲突。只使用插件时从托盘退出桌面端；只使用桌面端时，在 chrome://extensions 暂时停用插件并刷新已打开的题目网页。</p>
+          </details>
+          <details>
+            <summary>静默命中框位置不对或没有鼠标反馈</summary>
+            <p>先开启调试框确认是否收到有效坐标，并保持网页滚动、缩放、窗口位置与截图时一致。插件检查跨域 iframe 授权并刷新网页；macOS 桌面端检查辅助功能权限。模型坐标可能不准确，恢复默认静默提示词后重新区域截图测试；桌面端还可在设置底部查看解析错误与命中框数量。</p>
+          </details>
           <details>
             <summary>桌面应用启动后在哪里打开设置？</summary>
             <p>在 Windows 通知区域或 macOS 菜单栏找到 ExamPilot 托盘图标，打开菜单后选择“打开设置”。退出应用也需要使用托盘菜单中的“退出”。</p>
           </details>
           <details>
             <summary>桌面端全局快捷键没有反应</summary>
-            <p>先查看答案窗口或设置窗口是否提示“快捷键被占用”。关闭占用 <code>Ctrl+Shift+1/2/3/4/5</code> 的其他软件后重启 ExamPilot；macOS 还需确认已授予屏幕录制权限。</p>
+            <p>当前界面没有快捷键占用诊断列表。先确认托盘中 ExamPilot 正在运行，使用主键盘和 Control 而非 Command；暂时停用插件并刷新网页，关闭占用 <code>Ctrl+Shift+1/2/3/4/5</code> 的其他软件后重启 ExamPilot。macOS 若按键后无法截图，还需检查屏幕录制权限。</p>
           </details>
           <details>
             <summary>桌面端区域截图没有显示框选提示</summary>
@@ -963,11 +1145,11 @@
           </details>
           <details>
             <summary>接口返回 401、403 或模型不存在</summary>
-            <p>401 通常表示 API Key 无效，403 可能是权限或区域限制，模型不存在则需要核对模型名称。请使用请求预览与服务商文档逐项对照。</p>
+            <p>401 通常表示 API Key 无效，403 可能是权限或区域限制，模型不存在则需要核对模型名称。两端均可使用请求预览与服务商文档逐项对照；桌面端还可查看设置底部的最近一次模型返回与错误。</p>
           </details>
           <details>
             <summary>提示 CORS 或网络请求失败</summary>
-            <p>确认 API URL 使用 HTTPS、域名已授权，并且服务商允许浏览器扩展访问。部分仅面向服务器端的接口即使授权后仍可能拒绝浏览器请求。</p>
+            <p>两端都先检查 HTTPS 地址、网络连通性与服务商状态。普通版插件还需确认域名已授权；桌面端由 Rust 发起请求，不受 WebView CORS 限制，不需要 Chrome 域名授权。若服务商按来源或客户端策略限制访问，仍可能拒绝请求。</p>
           </details>
           <details>
             <summary>答案不完整或没有识别到题目</summary>
@@ -999,13 +1181,30 @@
           </details>
           <details>
             <summary>导入配置后为什么仍然提示域名授权？</summary>
-            <p>导出文件只包含模型配置、提示词和透明度，不包含 Chrome 授予扩展的 API 域名权限。换设备或浏览器后，首次使用每个 API 域名时需要重新授权。</p>
+            <p>导出文件包含模型配置、提示词、静默模式设置和透明度等，不包含 Chrome 授予扩展的 API 域名权限。换设备或浏览器后，首次使用每个 API 域名时需要重新授权。</p>
           </details>
           <details>
             <summary>导出的配置文件可以分享吗？</summary>
             <p>不建议。备份是可读的 JSON，其中包含 API Key 以及自定义请求内容。请把它当作密码文件保管；如发生泄露，请立即在 API 服务商处撤销或轮换密钥。</p>
           </details>
         </div>
+      </section>
+
+      <section class="section" id="feedback" aria-labelledby="feedback-title">
+        <div class="section-heading">
+          <h2 id="feedback-title">问题反馈</h2>
+          <p>使用过程中遇到问题，请前往 <a href="https://github.com/1521620063/exampilot/issues" target="_blank" rel="noopener noreferrer">GitHub Issues 问题反馈页面</a> 提交反馈。提交前可以先搜索是否已有相同问题。</p>
+        </div>
+        <article class="card manual-card">
+          <h3>反馈时建议提供</h3>
+          <ul>
+            <li>使用的是 Chrome 插件普通版 / Full Access 版，还是桌面应用，以及应用版本号。</li>
+            <li>操作系统、浏览器版本、普通 / 静默模式；涉及截图或坐标时补充显示器数量、缩放比例等信息。</li>
+            <li>操作步骤、预期结果、实际表现，以及脱敏后的错误提示或截图。</li>
+            <li>桌面端可以在设置底部复制“最近一次模型返回 / 错误”，检查并删除敏感内容后再附上。</li>
+          </ul>
+          <p>GitHub Issues 是公开页面。请勿上传 API Key、完整配置备份、带鉴权信息的请求头，或包含个人隐私的截图。</p>
+        </article>
       </section>
 
       <section class="final-cta" aria-label="获取 ExamPilot">
